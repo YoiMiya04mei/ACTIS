@@ -1,0 +1,179 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String   @id @default(uuid())
+  nama          String
+  email         String   @unique
+  password_hash String?
+  role          String   @default("noc_engineer") // admin, noc_engineer, field_engineer, sales_corporate
+  created_at    DateTime @default(now())
+
+  orders_created PopSiteOrder[]     @relation("OrderCreator")
+  progress_logs  OrderProgressLog[]
+  test_results   TestResult[]
+
+  @@map("users")
+}
+
+model PopSiteOrder {
+  id                 String    @id @default(uuid())
+  ticket_number      String    @unique // ACT-YYYYMMDD-XXXX
+
+  // Category & Sub-service
+  kategori_layanan   String    @default("POP Site") // "POP Site" | "Enterprise"
+  sub_layanan        String?   // "LocalLoop" | "Collocation Rack" | "Dark Fiber" | "Content" | null
+
+  // General Customer & PIC
+  nama_pic           String
+  kontak_pic         String    // JSON string array: ["0812...", "0857..."]
+  nama_perusahaan    String?
+  email_pic          String?
+  alamat_instalasi   String?
+
+  // Network & Specs
+  ip_public          String?
+  ip_private         String?
+  vlan               Int?
+  layanan_dedicated  String?
+  server             String?
+  infrastruktur      String?   // Fiber Optic, Wireless PTP, VSAT, Metro Cross-Connect
+  media_koneksi      String?   // Metro Telkom, Direct Fiber ISP, Radio Ubiquiti, etc.
+  sn_ont             String?
+
+  // Enterprise specific fields
+  kapasitas_layanan  String?   // e.g. "100 Mbps", "1 Gbps"
+  interkoneksi       String?   // e.g. "Meet-Me Room DC", "Patch Panel F/O", "OpenIXP"
+  port_media         String?   // Port Media Koneksi
+  tipe_layanan_collo String?   // e.g. "Full Rack 42U", "Half Rack 21U", "1U Rackmount"
+  nama_perangkat     String?   // e.g. "Server Dell PowerEdge R740"
+  sn_perangkat       String?   // Serial Number perangkat collo
+  prefix_advertise   String?   // JSON string array: ["103.xxx/24"]
+  as_number          String?   // e.g. "AS13335"
+  
+  // Metro Telkom conditional fields
+  sid                String?
+  ao                 String?
+  nomor_order        String?
+
+  waktu_aktivasi     DateTime?
+  catatan_tambahan   String?
+  status             String    @default("Antrian Aktivasi") // Antrian Aktivasi, In Progress, Pending Issue, Completed, Terminated
+  tipe_order         String    @default("Aktivasi Baru") // Aktivasi Baru, Upgrade, Downgrade, Isolir, Terminate
+  
+  pop_site_id        String?
+  pop_site           PopSite?  @relation(fields: [pop_site_id], references: [id], onDelete: SetNull)
+
+  created_by         String
+  creator            User      @relation("OrderCreator", fields: [created_by], references: [id])
+  created_at         DateTime  @default(now())
+  completed_at       DateTime?
+
+  progress_logs      OrderProgressLog[]
+  test_results       TestResult[]
+
+  @@map("pop_site_orders")
+}
+
+model PopSite {
+  id                 String         @id @default(uuid())
+  site_id            String         @unique // e.g. POP-202611-0001
+  initial_ticket     String
+
+  // Category & Sub-service
+  kategori_layanan   String         @default("POP Site") // "POP Site" | "Enterprise"
+  sub_layanan        String?        // "LocalLoop" | "Collocation Rack" | "Dark Fiber" | "Content" | null
+
+  nama_pic           String
+  kontak_pic         String         // JSON string array
+  nama_perusahaan    String?
+  email_pic          String?
+  alamat_instalasi   String?
+
+  ip_public          String?
+  ip_private         String?
+  vlan               Int?
+  layanan_dedicated  String?
+  server             String?
+  infrastruktur      String?
+  media_koneksi      String?
+  sn_ont             String?
+
+  // Enterprise specific fields
+  kapasitas_layanan  String?
+  interkoneksi       String?
+  port_media         String?
+  tipe_layanan_collo String?
+  nama_perangkat     String?
+  sn_perangkat       String?
+  prefix_advertise   String?
+  as_number          String?
+
+  sid                String?
+  ao                 String?
+  nomor_order        String?
+  status_layanan     String         @default("Active") // Active, Isolir, Terminated, Maintenance
+  waktu_go_live      DateTime       @default(now())
+  created_at         DateTime       @default(now())
+  updated_at         DateTime       @default(now()) @updatedAt
+
+  orders             PopSiteOrder[]
+
+  @@map("pop_sites")
+}
+
+model OrderProgressLog {
+  id               String       @id @default(uuid())
+  order_id         String
+  order            PopSiteOrder @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  user_id          String
+  user             User         @relation(fields: [user_id], references: [id])
+  action_type      String       // Status Change, Progress Note, Config Pushed, Test Uploaded
+  status_sebelum   String?
+  status_sesudah   String?
+  catatan_progress String
+  created_at       DateTime     @default(now())
+
+  @@map("order_progress_logs")
+}
+
+model TestResult {
+  id          String       @id @default(uuid())
+  order_id    String
+  order       PopSiteOrder @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  file_url    String
+  file_name   String
+  file_type   String       // image/jpeg, image/png, pdf, etc.
+  uploaded_by String
+  uploader    User         @relation(fields: [uploaded_by], references: [id])
+  uploaded_at DateTime     @default(now())
+
+  @@map("test_results")
+}
+
+model SheetsSyncLog {
+  id               String   @id @default(uuid())
+  order_id         String?
+  event            String
+  payload          String
+  status           String   // SUCCESS, FAILED, PENDING
+  response_message String?
+  created_at       DateTime @default(now())
+
+  @@map("sheets_sync_logs")
+}
+
+model SystemSetting {
+  key        String   @id
+  value      String
+  updated_at DateTime @default(now()) @updatedAt
+
+  @@map("system_settings")
+}
+

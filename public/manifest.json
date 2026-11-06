@@ -1,0 +1,17 @@
+{
+  "name": "ACTIS - ISP Provisioning System",
+  "short_name": "ACTIS",
+  "description": "Activation, Configuration, & Termination ISP System",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#1b6ee9",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
+

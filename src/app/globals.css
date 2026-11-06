@@ -1,0 +1,301 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light dark;
+  --foreground-rgb: 15, 23, 42;
+  --background-start-rgb: 248, 250, 252;
+  --background-end-rgb: 241, 245, 249;
+}
+
+html.dark {
+  color-scheme: dark;
+  --foreground-rgb: 248, 250, 252;
+  --background-start-rgb: 2, 6, 23;
+  --background-end-rgb: 15, 23, 42;
+}
+
+html {
+  height: 100%;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: #f8fafc;
+  min-height: 100%;
+  width: 100%;
+  overflow-x: hidden;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+html.dark body {
+  background: #020617;
+  color: #f8fafc;
+}
+
+/* Modern Web Guidance: Validate input after interaction */
+input:user-invalid,
+textarea:user-invalid,
+select:user-invalid {
+  border-color: #ef4444 !important;
+  background-color: #fef2f2 !important;
+}
+
+html.dark input:user-invalid,
+html.dark textarea:user-invalid,
+html.dark select:user-invalid {
+  border-color: #ef4444 !important;
+  background-color: rgba(239, 68, 68, 0.15) !important;
+}
+
+input:user-valid:not(:placeholder-shown),
+textarea:user-valid:not(:placeholder-shown) {
+  border-color: #10b981;
+}
+
+/* Smooth transitions */
+.transition-card {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Custom ISP NOC scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Dark Mode Scrollbars */
+.dark ::-webkit-scrollbar-track {
+  background: #090d16;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Dark Mode Form Inputs & Selects Global Adaptation */
+html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+html.dark textarea,
+html.dark select {
+  background-color: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b;
+}
+
+/* ========================================================================== */
+/* DARK MODE TYPOGRAPHY & CONTRAST CALIBRATION (WCAG AA COMPLIANT)            */
+/* ========================================================================== */
+
+/* High-contrast Slate Text Calibration */
+html.dark .text-slate-950:not([class*="dark:text-"]) { color: #ffffff; }
+html.dark .text-slate-900:not([class*="dark:text-"]) { color: #f8fafc; }
+html.dark .text-slate-800:not([class*="dark:text-"]) { color: #f1f5f9; }
+html.dark .text-slate-700:not([class*="dark:text-"]) { color: #e2e8f0; }
+html.dark .text-slate-600:not([class*="dark:text-"]) { color: #cbd5e1; }
+html.dark .text-slate-500:not([class*="dark:text-"]) { color: #94a3b8; }
+html.dark .text-slate-400:not([class*="dark:text-"]) { color: #94a3b8; }
+
+/* Gray / Neutral Text Calibration */
+html.dark .text-gray-950:not([class*="dark:text-"]) { color: #ffffff; }
+html.dark .text-gray-900:not([class*="dark:text-"]) { color: #f8fafc; }
+html.dark .text-gray-800:not([class*="dark:text-"]) { color: #f1f5f9; }
+html.dark .text-gray-700:not([class*="dark:text-"]) { color: #e2e8f0; }
+html.dark .text-gray-600:not([class*="dark:text-"]) { color: #cbd5e1; }
+html.dark .text-gray-500:not([class*="dark:text-"]) { color: #94a3b8; }
+html.dark .text-gray-400:not([class*="dark:text-"]) { color: #94a3b8; }
+
+/* Vivid Colored Text Calibration (Badges, Alerts, Statuses) */
+html.dark .text-blue-950:not([class*="dark:text-"]),
+html.dark .text-blue-900:not([class*="dark:text-"]),
+html.dark .text-blue-800:not([class*="dark:text-"]),
+html.dark .text-blue-700:not([class*="dark:text-"]) {
+  color: #93c5fd; /* blue-300 */
+}
+
+html.dark .text-emerald-950:not([class*="dark:text-"]),
+html.dark .text-emerald-900:not([class*="dark:text-"]),
+html.dark .text-emerald-800:not([class*="dark:text-"]),
+html.dark .text-emerald-700:not([class*="dark:text-"]) {
+  color: #6ee7b7; /* emerald-300 */
+}
+
+html.dark .text-purple-950:not([class*="dark:text-"]),
+html.dark .text-purple-900:not([class*="dark:text-"]),
+html.dark .text-purple-800:not([class*="dark:text-"]),
+html.dark .text-purple-700:not([class*="dark:text-"]) {
+  color: #d8b4fe; /* purple-300 */
+}
+
+html.dark .text-amber-950:not([class*="dark:text-"]),
+html.dark .text-amber-900:not([class*="dark:text-"]),
+html.dark .text-amber-800:not([class*="dark:text-"]),
+html.dark .text-amber-700:not([class*="dark:text-"]) {
+  color: #fde68a; /* amber-200 */
+}
+
+html.dark .text-rose-950:not([class*="dark:text-"]),
+html.dark .text-rose-900:not([class*="dark:text-"]),
+html.dark .text-rose-800:not([class*="dark:text-"]),
+html.dark .text-rose-700:not([class*="dark:text-"]) {
+  color: #fca5a5; /* rose-300 */
+}
+
+html.dark .text-indigo-950:not([class*="dark:text-"]),
+html.dark .text-indigo-900:not([class*="dark:text-"]),
+html.dark .text-indigo-800:not([class*="dark:text-"]),
+html.dark .text-indigo-700:not([class*="dark:text-"]) {
+  color: #a5b4fc; /* indigo-300 */
+}
+
+html.dark .text-sky-950:not([class*="dark:text-"]),
+html.dark .text-sky-900:not([class*="dark:text-"]),
+html.dark .text-sky-800:not([class*="dark:text-"]),
+html.dark .text-sky-700:not([class*="dark:text-"]) {
+  color: #7dd3fc; /* sky-300 */
+}
+
+html.dark .text-teal-950:not([class*="dark:text-"]),
+html.dark .text-teal-900:not([class*="dark:text-"]),
+html.dark .text-teal-800:not([class*="dark:text-"]),
+html.dark .text-teal-700:not([class*="dark:text-"]) {
+  color: #5eead4; /* teal-300 */
+}
+
+/* Hover typography calibration */
+html.dark .hover\:text-slate-900:hover:not([class*="dark:hover:text-"]),
+html.dark .hover\:text-slate-800:hover:not([class*="dark:hover:text-"]) {
+  color: #ffffff;
+}
+html.dark .hover\:text-slate-700:hover:not([class*="dark:hover:text-"]) {
+  color: #f1f5f9;
+}
+
+/* Badge & Card Backgrounds in Dark Mode */
+html.dark .bg-white:not([class*="dark:bg-"]) {
+  background-color: #0f172a;
+}
+html.dark .bg-slate-50:not([class*="dark:bg-"]),
+html.dark .bg-slate-100:not([class*="dark:bg-"]),
+html.dark .bg-gray-50:not([class*="dark:bg-"]),
+html.dark .bg-gray-100:not([class*="dark:bg-"]) {
+  background-color: #1e293b;
+}
+html.dark .bg-slate-200:not([class*="dark:bg-"]) {
+  background-color: #334155;
+}
+
+/* Borders & Separators in Dark Mode */
+html.dark .border-slate-100:not([class*="dark:border-"]),
+html.dark .border-slate-200:not([class*="dark:border-"]),
+html.dark .border-slate-300:not([class*="dark:border-"]),
+html.dark .border-gray-100:not([class*="dark:border-"]),
+html.dark .border-gray-200:not([class*="dark:border-"]) {
+  border-color: #334155;
+}
+html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #334155;
+}
+
+/* Translucent Glowing Badge Backgrounds */
+html.dark .bg-blue-50:not([class*="dark:bg-"]),
+html.dark .bg-blue-100:not([class*="dark:bg-"]) {
+  background-color: rgba(30, 58, 138, 0.45);
+}
+html.dark .border-blue-200:not([class*="dark:border-"]),
+html.dark .border-blue-300:not([class*="dark:border-"]) {
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+html.dark .bg-emerald-50:not([class*="dark:bg-"]),
+html.dark .bg-emerald-100:not([class*="dark:bg-"]) {
+  background-color: rgba(6, 78, 59, 0.45);
+}
+html.dark .border-emerald-200:not([class*="dark:border-"]),
+html.dark .border-emerald-300:not([class*="dark:border-"]) {
+  border-color: rgba(16, 185, 129, 0.5);
+}
+
+html.dark .bg-purple-50:not([class*="dark:bg-"]),
+html.dark .bg-purple-100:not([class*="dark:bg-"]) {
+  background-color: rgba(88, 28, 135, 0.45);
+}
+html.dark .border-purple-200:not([class*="dark:border-"]),
+html.dark .border-purple-300:not([class*="dark:border-"]) {
+  border-color: rgba(168, 85, 247, 0.5);
+}
+
+html.dark .bg-amber-50:not([class*="dark:bg-"]),
+html.dark .bg-amber-100:not([class*="dark:bg-"]) {
+  background-color: rgba(120, 53, 15, 0.45);
+}
+html.dark .border-amber-200:not([class*="dark:border-"]),
+html.dark .border-amber-300:not([class*="dark:border-"]) {
+  border-color: rgba(245, 158, 11, 0.5);
+}
+
+html.dark .bg-rose-50:not([class*="dark:bg-"]),
+html.dark .bg-rose-100:not([class*="dark:bg-"]) {
+  background-color: rgba(136, 19, 55, 0.45);
+}
+html.dark .border-rose-200:not([class*="dark:border-"]),
+html.dark .border-rose-300:not([class*="dark:border-"]) {
+  border-color: rgba(244, 63, 94, 0.5);
+}
+
+html.dark .bg-indigo-50:not([class*="dark:bg-"]),
+html.dark .bg-indigo-100:not([class*="dark:bg-"]) {
+  background-color: rgba(49, 46, 129, 0.45);
+}
+html.dark .border-indigo-200:not([class*="dark:border-"]),
+html.dark .border-indigo-300:not([class*="dark:border-"]) {
+  border-color: rgba(99, 102, 241, 0.5);
+}
+
+html.dark .bg-sky-50:not([class*="dark:bg-"]),
+html.dark .bg-sky-100:not([class*="dark:bg-"]) {
+  background-color: rgba(12, 74, 110, 0.45);
+}
+html.dark .border-sky-200:not([class*="dark:border-"]),
+html.dark .border-sky-300:not([class*="dark:border-"]) {
+  border-color: rgba(14, 165, 233, 0.5);
+}
+
+html.dark .bg-teal-50:not([class*="dark:bg-"]),
+html.dark .bg-teal-100:not([class*="dark:bg-"]) {
+  background-color: rgba(19, 78, 74, 0.45);
+}
+html.dark .border-teal-200:not([class*="dark:border-"]),
+html.dark .border-teal-300:not([class*="dark:border-"]) {
+  border-color: rgba(20, 184, 166, 0.5);
+}
+
+/* Interactive Table Row Hover */
+html.dark .hover\:bg-slate-50:hover:not([class*="dark:hover:bg-"]),
+html.dark .hover\:bg-slate-100:hover:not([class*="dark:hover:bg-"]) {
+  background-color: rgba(51, 65, 85, 0.4);
+}
+
+

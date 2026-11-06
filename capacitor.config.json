@@ -1,0 +1,10 @@
+{
+  "appId": "com.enterprise.actis",
+  "appName": "ACTIS",
+  "webDir": "out",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}
+
