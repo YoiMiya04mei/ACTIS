@@ -357,6 +357,24 @@ export default function EnterpriseSiteDetailPage({
     kontakArr = [site.kontak_pic];
   }
 
+  const isMetronexia = Boolean(
+    site.infrastruktur?.toLowerCase().includes("metronexia") ||
+    site.media_koneksi?.toLowerCase().includes("metronexia")
+  );
+  const isTelkom = Boolean(
+    site.infrastruktur?.toLowerCase().includes("telkom") ||
+    site.media_koneksi?.toLowerCase().includes("telkom")
+  );
+  const hasCircuitParams = Boolean(
+    site.sid || site.ao || site.nomor_order || isMetronexia || isTelkom
+  );
+
+  const initialOrder = site.orders.find(
+    (ord) =>
+      ord.ticket_number === site.initial_ticket ||
+      ord.tipe_order === "Aktivasi Baru"
+  ) || site.orders[site.orders.length - 1];
+
   // Filter history items by tab
   const filteredHistory = site.orders.filter((ord) => {
     if (historyTab === "Semua") return true;
@@ -500,198 +518,185 @@ export default function EnterpriseSiteDetailPage({
         {/* SISI KIRI: DATA-DATA ADMINISTRASI SEPERTI KETIKA DI AKTIVASI */}
         {/* ======================================================== */}
         <div className="lg:col-span-5 space-y-5 lg:sticky lg:top-20">
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <h2 className="text-sm font-black text-slate-900 uppercase tracking-wider flex items-center">
-                <Network className="w-4 h-4 mr-2 text-purple-600" />
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm p-6 space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <h2 className="text-sm font-black text-slate-900 dark:text-slate-100 uppercase tracking-wider flex items-center">
+                <Network className="w-4 h-4 mr-2 text-purple-600 dark:text-purple-400" />
                 Data Administrasi Enterprise
               </h2>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 uppercase">
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 uppercase">
                 Active Master Asset
               </span>
             </div>
 
             {/* Section 1: Data PIC & Lokasi */}
             <div className="space-y-2">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+              <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-400 block tracking-wider">
                 1. Data Perusahaan & Kontak PIC
               </span>
-              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-100 space-y-2 text-xs">
-                {site.nama_perusahaan && (
-                  <div>
-                    <span className="text-slate-400 text-[11px] block">Perusahaan:</span>
-                    <span className="font-bold text-slate-900 text-sm">{site.nama_perusahaan}</span>
-                  </div>
-                )}
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-100 dark:border-slate-700/60 space-y-2.5 text-xs">
                 <div>
-                  <span className="text-slate-400 text-[11px] block">Nama PIC:</span>
-                  <span className="font-bold text-slate-800">{site.nama_pic}</span>
+                  <span className="text-slate-400 dark:text-slate-400 text-[11px] block">Perusahaan / Entitas:</span>
+                  <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
+                    {site.nama_perusahaan ? site.nama_perusahaan : <span className="text-slate-400 dark:text-slate-400 font-normal italic">- (Perorangan)</span>}
+                  </span>
                 </div>
-                {site.email_pic && (
-                  <div>
-                    <span className="text-slate-400 text-[11px] block">Email PIC:</span>
+                <div>
+                  <span className="text-slate-400 dark:text-slate-400 text-[11px] block">Nama PIC:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{site.nama_pic || "-"}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 dark:text-slate-400 text-[11px] block">Email PIC:</span>
+                  {site.email_pic ? (
                     <a
                       href={`mailto:${site.email_pic}`}
-                      className="font-medium text-blue-600 hover:underline"
+                      className="font-medium text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center"
                     >
                       {site.email_pic}
                     </a>
-                  </div>
-                )}
+                  ) : (
+                    <span className="text-slate-400 dark:text-slate-400 italic">-</span>
+                  )}
+                </div>
                 <div>
-                  <span className="text-slate-400 text-[11px] block">Kontak PIC / WhatsApp:</span>
+                  <span className="text-slate-400 dark:text-slate-400 text-[11px] block">Kontak PIC / WhatsApp:</span>
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {kontakArr.map((k, idx) => (
-                      <a
-                        key={idx}
-                        href={`https://wa.me/${k.replace(/[^0-9]/g, "").replace(/^0/, "62")}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center px-2 py-0.5 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded-md font-mono text-xs font-semibold"
-                      >
-                        <Phone className="w-3 h-3 mr-1" />
-                        {k}
-                      </a>
-                    ))}
+                    {kontakArr.length > 0 ? (
+                      kontakArr.map((k, idx) => (
+                        <a
+                          key={idx}
+                          href={`https://wa.me/${k.replace(/[^0-9]/g, "").replace(/^0/, "62")}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center px-2 py-0.5 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/50 border border-purple-200 dark:border-purple-800 rounded-md font-mono text-xs font-semibold transition"
+                        >
+                          <Phone className="w-3 h-3 mr-1" />
+                          {k}
+                        </a>
+                      ))
+                    ) : (
+                      <span className="text-slate-400 dark:text-slate-400 italic">-</span>
+                    )}
                   </div>
                 </div>
-                {site.alamat_instalasi && (
-                  <div>
-                    <span className="text-slate-400 text-[11px] block">Alamat Fisik / Instalasi:</span>
-                    <span className="text-slate-700 font-medium leading-relaxed block mt-0.5">
-                      {site.alamat_instalasi}
-                    </span>
-                  </div>
-                )}
+                <div>
+                  <span className="text-slate-400 dark:text-slate-400 text-[11px] block">Alamat Fisik / Instalasi:</span>
+                  <span className="text-slate-700 dark:text-slate-300 font-medium leading-relaxed block mt-0.5">
+                    {site.alamat_instalasi || <span className="text-slate-400 dark:text-slate-400 italic">-</span>}
+                  </span>
+                </div>
               </div>
             </div>
 
             {/* Section 2: Spesifikasi Teknis Layanan Dinamis */}
             <div className="space-y-2">
-              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+              <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-400 block tracking-wider">
                 2. Parameter Spesifikasi Teknis ({site.sub_layanan})
               </span>
 
               {site.sub_layanan === "LocalLoop" && (
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 col-span-2">
-                    <span className="text-[10px] text-slate-400 font-bold block">Layanan LocalLoop</span>
-                    <span className="font-bold text-slate-900 text-sm">{site.layanan_dedicated || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 col-span-2">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Layanan LocalLoop</span>
+                    <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">{site.layanan_dedicated || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">Kapasitas Layanan</span>
-                    <span className="font-semibold text-slate-800">{site.kapasitas_layanan || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Kapasitas Layanan</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">{site.kapasitas_layanan || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">Interkoneksi</span>
-                    <span className="font-semibold text-slate-800">{site.interkoneksi || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Interkoneksi</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">{site.interkoneksi || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">Infrastruktur</span>
-                    <span className="font-semibold text-slate-800">{site.infrastruktur || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Infrastruktur</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">{site.infrastruktur || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">Port Interkoneksi</span>
-                    <span className="font-semibold text-slate-800">{site.port_media || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Port Interkoneksi</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">{site.port_media || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 col-span-2">
-                    <span className="text-[10px] text-slate-400 font-bold block">SN ONT</span>
-                    <span className="font-mono text-slate-800 font-semibold">{site.sn_ont || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 col-span-2">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">SN ONT</span>
+                    <span className="font-mono text-slate-800 dark:text-slate-200 font-semibold">{site.sn_ont || "-"}</span>
                   </div>
-                  {site.sid && (
-                    <div className={`p-3 rounded-xl col-span-2 space-y-1 font-mono text-[11px] ${
-                      site.infrastruktur?.toLowerCase().includes("metronexia")
-                        ? "bg-emerald-50/80 border border-emerald-200/90"
-                        : "bg-amber-50/80 border border-amber-200/90"
-                    }`}>
-                      <span className={`font-sans font-bold block ${
-                        site.infrastruktur?.toLowerCase().includes("metronexia") ? "text-emerald-900" : "text-amber-800"
-                      }`}>
-                        {site.infrastruktur?.toLowerCase().includes("metronexia")
-                          ? "Parameter Integrasi Metronexia:"
-                          : "Parameter Metro Telkom:"}
-                      </span>
-                      <p>SID: <strong>{site.sid}</strong> | AO: <strong>{site.ao || "-"}</strong></p>
-                      <p>No. Order: <strong>{site.nomor_order || "-"}</strong></p>
-                    </div>
-                  )}
                 </div>
               )}
 
               {site.sub_layanan === "Collocation Rack" && (
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 col-span-2">
-                    <span className="text-[10px] text-slate-400 font-bold block">Tipe Layanan Collocation</span>
-                    <span className="font-bold text-slate-900 text-sm">{site.tipe_layanan_collo || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 col-span-2">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Tipe Layanan Collocation</span>
+                    <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">{site.tipe_layanan_collo || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">Nama Perangkat</span>
-                    <span className="font-semibold text-slate-800">{site.nama_perangkat || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Nama Perangkat</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">{site.nama_perangkat || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">Serial Number (SN)</span>
-                    <span className="font-mono text-slate-800 font-semibold">{site.sn_perangkat || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Serial Number (SN)</span>
+                    <span className="font-mono text-slate-800 dark:text-slate-200 font-semibold">{site.sn_perangkat || "-"}</span>
                   </div>
                 </div>
               )}
 
               {site.sub_layanan === "Dark Fiber" && (
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 col-span-2">
-                    <span className="text-[10px] text-slate-400 font-bold block">Layanan Dark Fiber</span>
-                    <span className="font-bold text-slate-900 text-sm">{site.layanan_dedicated || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 col-span-2">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Layanan Dark Fiber</span>
+                    <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">{site.layanan_dedicated || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 col-span-2">
-                    <span className="text-[10px] text-slate-400 font-bold block">Server / Rute Core</span>
-                    <span className="font-medium text-slate-800">{site.server || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 col-span-2">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Server / Rute Core</span>
+                    <span className="font-medium text-slate-800 dark:text-slate-200">{site.server || "-"}</span>
                   </div>
                 </div>
               )}
 
               {site.sub_layanan === "Content" && (
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 col-span-2">
-                    <span className="text-[10px] text-slate-400 font-bold block">Layanan Content</span>
-                    <span className="font-bold text-slate-900 text-sm">{site.layanan_dedicated || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 col-span-2">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Layanan Content</span>
+                    <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">{site.layanan_dedicated || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">VLAN</span>
-                    <span className="font-mono font-black text-blue-700 text-base">{site.vlan || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">VLAN</span>
+                    <span className="font-mono font-black text-blue-700 dark:text-blue-400 text-base">{site.vlan || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">AS Number</span>
-                    <span className="font-mono font-bold text-purple-700">{site.as_number || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">AS Number</span>
+                    <span className="font-mono font-bold text-purple-700 dark:text-purple-400">{site.as_number || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">IP Private</span>
-                    <span className="font-mono text-slate-800">{site.ip_private || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">IP Private</span>
+                    <span className="font-mono text-slate-800 dark:text-slate-200">{site.ip_private || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">Interkoneksi</span>
-                    <span className="font-semibold text-slate-800">{site.interkoneksi || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Interkoneksi</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">{site.interkoneksi || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">Server</span>
-                    <span className="font-medium text-slate-800">{site.server || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Server</span>
+                    <span className="font-medium text-slate-800 dark:text-slate-200">{site.server || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">Media Koneksi</span>
-                    <span className="font-semibold text-slate-800">{site.media_koneksi || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Media Koneksi</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">{site.media_koneksi || "-"}</span>
                   </div>
                   {site.prefix_advertise && (
-                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 col-span-2">
-                      <span className="text-[10px] text-slate-400 font-bold block">Prefix Advertise</span>
+                    <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 col-span-2">
+                      <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Prefix Advertise</span>
                       <div className="flex flex-wrap gap-1 mt-1 font-mono text-[11px]">
                         {(() => {
                           try {
                             const p = JSON.parse(site.prefix_advertise);
                             return Array.isArray(p) ? p.map((pref, idx) => (
-                              <span key={idx} className="bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded">
+                              <span key={idx} className="bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 px-2 py-0.5 rounded">
                                 {pref}
                               </span>
                             )) : site.prefix_advertise;
                           } catch {
-                            return <span className="text-slate-700">{site.prefix_advertise}</span>;
+                            return <span className="text-slate-700 dark:text-slate-300">{site.prefix_advertise}</span>;
                           }
                         })()}
                       </div>
@@ -702,57 +707,143 @@ export default function EnterpriseSiteDetailPage({
 
               {site.sub_layanan === "Enterprise Dedicated" && (
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 col-span-2">
-                    <span className="text-[10px] text-slate-400 font-bold block">Layanan Dedicated</span>
-                    <span className="font-bold text-slate-900 text-sm">{site.layanan_dedicated || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 col-span-2">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Layanan Dedicated</span>
+                    <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">{site.layanan_dedicated || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">VLAN ID</span>
-                    <span className="font-mono font-black text-blue-700 text-sm">{site.vlan ?? "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">VLAN ID</span>
+                    <span className="font-mono font-black text-blue-700 dark:text-blue-400 text-sm">{site.vlan ?? "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">Infrastruktur</span>
-                    <span className="font-semibold text-slate-800">{site.infrastruktur || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Infrastruktur</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">{site.infrastruktur || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">Media Koneksi</span>
-                    <span className="font-semibold text-slate-800">{site.media_koneksi || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Media Koneksi</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">{site.media_koneksi || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">Server / BRAS</span>
-                    <span className="font-medium text-slate-800">{site.server || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Server / BRAS</span>
+                    <span className="font-medium text-slate-800 dark:text-slate-200">{site.server || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">IP Public</span>
-                    <span className="font-mono text-slate-800 font-semibold">{site.ip_public || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">IP Public</span>
+                    <span className="font-mono text-slate-800 dark:text-slate-200 font-semibold">{site.ip_public || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-[10px] text-slate-400 font-bold block">IP Private</span>
-                    <span className="font-mono text-slate-800 font-semibold">{site.ip_private || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">IP Private</span>
+                    <span className="font-mono text-slate-800 dark:text-slate-200 font-semibold">{site.ip_private || "-"}</span>
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 col-span-2">
-                    <span className="text-[10px] text-slate-400 font-bold block">SN ONT / Modem CPE</span>
-                    <span className="font-mono text-slate-800 font-semibold">{site.sn_ont || "-"}</span>
+                  <div className="bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/60 col-span-2">
+                    <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">SN ONT / Modem CPE</span>
+                    <span className="font-mono text-slate-800 dark:text-slate-200 font-semibold">{site.sn_ont || "-"}</span>
                   </div>
-                  {site.sid && (
-                    <div className={`p-3 rounded-xl col-span-2 space-y-1 font-mono text-[11px] ${
-                      site.infrastruktur?.toLowerCase().includes("metronexia")
-                        ? "bg-indigo-50/80 border border-indigo-200/90"
-                        : "bg-amber-50/80 border border-amber-200/90"
-                    }`}>
-                      <span className={`font-sans font-bold block ${
-                        site.infrastruktur?.toLowerCase().includes("metronexia") ? "text-indigo-900" : "text-amber-800"
-                      }`}>
-                        {site.infrastruktur?.toLowerCase().includes("metronexia")
-                          ? "Parameter Integrasi Metronexia:"
-                          : "Parameter Metro Telkom:"}
-                      </span>
-                      <p>SID: <strong>{site.sid}</strong> | AO: <strong>{site.ao || "-"}</strong></p>
-                      <p>No. Order: <strong>{site.nomor_order || "-"}</strong></p>
-                    </div>
-                  )}
                 </div>
               )}
+            </div>
+
+            {/* Section 3: Integrasi Carrier & Parameter Sirkuit */}
+            {hasCircuitParams && (
+              <div
+                className={`p-3.5 rounded-xl border space-y-2.5 text-xs ${
+                  isMetronexia
+                    ? "bg-indigo-50/80 dark:bg-indigo-950/30 border-indigo-200/90 dark:border-indigo-800/60 text-indigo-950 dark:text-indigo-200"
+                    : isTelkom
+                    ? "bg-amber-50/80 dark:bg-amber-950/30 border-amber-200/90 dark:border-amber-800/60 text-amber-950 dark:text-amber-200"
+                    : "bg-blue-50/80 dark:bg-blue-950/30 border-blue-200/90 dark:border-blue-800/60 text-blue-950 dark:text-blue-200"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-1.5 font-bold">
+                    <Radio
+                      className={`w-3.5 h-3.5 ${
+                        isMetronexia
+                          ? "text-indigo-600 dark:text-indigo-400"
+                          : isTelkom
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-blue-600 dark:text-blue-400"
+                      }`}
+                    />
+                    <span>
+                      3. {isMetronexia
+                        ? "Parameter Sirkuit METRONEXIA"
+                        : isTelkom
+                        ? "Parameter Metro Telkom"
+                        : "Parameter Identifikasi Sirkuit"}
+                    </span>
+                  </div>
+                  <span
+                    className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border uppercase ${
+                      isMetronexia
+                        ? "bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-300 border-indigo-300 dark:border-indigo-700"
+                        : isTelkom
+                        ? "bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700"
+                        : "bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-700"
+                    }`}
+                  >
+                    {isMetronexia ? "METRONEXIA" : isTelkom ? "TELKOM METRO" : site.infrastruktur || "PROVIDER"}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-1.5 font-mono">
+                  <div className="flex items-center justify-between bg-white/80 dark:bg-slate-900/60 px-3 py-2 rounded-lg border border-slate-200/70 dark:border-slate-800">
+                    <span className="font-sans text-[11px] text-slate-500 dark:text-slate-400 font-medium">Circuit ID (SID):</span>
+                    <span className="font-bold text-slate-900 dark:text-slate-100">{site.sid || "-"}</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-white/80 dark:bg-slate-900/60 px-3 py-2 rounded-lg border border-slate-200/70 dark:border-slate-800">
+                    <span className="font-sans text-[11px] text-slate-500 dark:text-slate-400 font-medium">Account Order (AO):</span>
+                    <span className="font-bold text-slate-900 dark:text-slate-100">{site.ao || "-"}</span>
+                  </div>
+                  <div className="flex items-center justify-between bg-white/80 dark:bg-slate-900/60 px-3 py-2 rounded-lg border border-slate-200/70 dark:border-slate-800">
+                    <span className="font-sans text-[11px] text-slate-500 dark:text-slate-400 font-medium">No. Order Provider:</span>
+                    <span className="font-bold text-slate-900 dark:text-slate-100">{site.nomor_order || "-"}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Section 4: Audit & Catatan Aktivasi Awal */}
+            <div className="space-y-2">
+              <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-400 block tracking-wider">
+                4. Audit & Catatan Aktivasi Awal
+              </span>
+              <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-100 dark:border-slate-700/60 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 dark:text-slate-400 text-[11px]">No. Ref Tiket:</span>
+                  <Link
+                    href={`/orders/${site.initial_ticket}`}
+                    className="font-mono font-bold text-purple-600 dark:text-purple-400 hover:underline inline-flex items-center"
+                  >
+                    {site.initial_ticket}
+                    <ExternalLink className="w-3 h-3 ml-1" />
+                  </Link>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 dark:text-slate-400 text-[11px]">Waktu Go-Live:</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-300">
+                    {new Date(site.waktu_go_live).toLocaleString("id-ID", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    })} WIB
+                  </span>
+                </div>
+                {initialOrder?.creator && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400 dark:text-slate-400 text-[11px]">Pendaftar Aktivasi:</span>
+                    <span className="font-medium text-slate-800 dark:text-slate-200">
+                      {initialOrder.creator.nama}
+                      <span className="text-slate-400 text-[10px] ml-1 uppercase">({initialOrder.creator.role})</span>
+                    </span>
+                  </div>
+                )}
+                <div>
+                  <span className="text-slate-400 dark:text-slate-400 text-[11px] block">Catatan Tambahan Saat Aktivasi:</span>
+                  <div className="mt-1 p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 italic text-[11px] leading-relaxed">
+                    {initialOrder?.catatan_tambahan ? `"${initialOrder.catatan_tambahan}"` : <span className="text-slate-400 not-italic">- Tidak ada catatan tambahan -</span>}
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Section 3: Lifecycle Action Buttons */}
