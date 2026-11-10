@@ -1,5 +1,5 @@
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -15,9 +15,10 @@ model User {
   role          String   @default("noc_engineer") // admin, noc_engineer, field_engineer, sales_corporate
   created_at    DateTime @default(now())
 
-  orders_created PopSiteOrder[]     @relation("OrderCreator")
-  progress_logs  OrderProgressLog[]
-  test_results   TestResult[]
+  orders_created   PopSiteOrder[]      @relation("OrderCreator")
+  progress_logs    OrderProgressLog[]
+  test_results     TestResult[]
+  data_change_logs SiteDataChangeLog[]
 
   @@map("users")
 }
@@ -124,8 +125,58 @@ model PopSite {
   updated_at         DateTime       @default(now()) @updatedAt
 
   orders             PopSiteOrder[]
+  data_change_logs   SiteDataChangeLog[]
+  icmp_monitor       IcmpMonitor?
 
   @@map("pop_sites")
+}
+
+model IcmpMonitor {
+  id              String          @id @default(uuid())
+  pop_site_id     String          @unique
+  name            String
+  ip_address      String
+  kategori        String
+  status          String          @default("PENDING") // UP, DOWN, PENDING
+  latency_ms      Float?
+  uptime_pct      Float           @default(100.0)
+  last_checked_at DateTime?
+  interval_sec    Int             @default(60)
+  is_active       Boolean         @default(true)
+  created_at      DateTime        @default(now())
+  updated_at      DateTime        @default(now()) @updatedAt
+
+  heartbeats      IcmpHeartbeat[]
+  pop_site        PopSite?        @relation(fields: [pop_site_id], references: [id], onDelete: Cascade)
+
+  @@map("icmp_monitors")
+}
+
+model IcmpHeartbeat {
+  id          String      @id @default(uuid())
+  monitor_id  String
+  monitor     IcmpMonitor @relation(fields: [monitor_id], references: [id], onDelete: Cascade)
+  status      String      // UP, DOWN
+  latency_ms  Float?
+  msg         String?
+  created_at  DateTime    @default(now())
+
+  @@index([monitor_id, created_at])
+  @@index([created_at])
+  @@map("icmp_heartbeats")
+}
+
+model SiteDataChangeLog {
+  id           String   @id @default(uuid())
+  pop_site_id  String
+  pop_site     PopSite  @relation(fields: [pop_site_id], references: [id], onDelete: Cascade)
+  user_id      String
+  user         User     @relation(fields: [user_id], references: [id])
+  changes      String   // JSON string: array of { field: string, label: string, old_value: string | null, new_value: string | null }
+  catatan      String?  // Alasan / catatan perubahan data
+  created_at   DateTime @default(now())
+
+  @@map("site_data_change_logs")
 }
 
 model OrderProgressLog {
@@ -175,5 +226,22 @@ model SystemSetting {
   updated_at DateTime @default(now()) @updatedAt
 
   @@map("system_settings")
+}
+
+model AppActivityLog {
+  id           String   @id @default(uuid())
+  nama_lengkap String
+  email        String?
+  ip_address   String   @default("127.0.0.1")
+  tipe         String   @default("INFO") // LOGIN_SUCCESS, LOGIN_FAILED, LOGOUT, CREATE_TICKET, UPDATE_DATA, DELETE_DATA, SYSTEM
+  aktifitas    String
+  detail       String?
+  user_agent   String?
+  created_at   DateTime @default(now())
+
+  @@index([created_at])
+  @@index([nama_lengkap])
+  @@index([tipe])
+  @@map("app_activity_logs")
 }
 

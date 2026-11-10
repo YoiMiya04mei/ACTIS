@@ -1,0 +1,211 @@
+[
+  {
+    "id": "log-1794322435207-0pmwv",
+    "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
+    "email": "admin.noc@isp-enterprise.net",
+    "ip_address": "::1",
+    "tipe": "UPDATE_SITE",
+    "aktifitas": "Mengubah data layanan POP-202611-0009 (SIAPA AJA)",
+    "detail": "[{\"field\":\"ip_public\",\"label\":\"IP Public\",\"old_value\":\"103.155.196.4\",\"new_value\":\"103.155.196.5\"}]",
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-10T14:53:55.207Z"
+  },
+  {
+    "id": "log-1794322369920-5ijt3",
+    "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
+    "email": "admin.noc@isp-enterprise.net",
+    "ip_address": "::1",
+    "tipe": "UPDATE_ORDER",
+    "aktifitas": "Mengubah status tiket ACT-20261110-0005 menjadi Completed",
+    "detail": "Aktivasi layanan selesai dan diverifikasi oleh Ahmad Fauzi (Head of NOC). Layanan berstatus Completed (Go-Live).",
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-10T14:52:49.920Z"
+  },
+  {
+    "id": "log-1794322362876-2376s",
+    "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
+    "email": "admin.noc@isp-enterprise.net",
+    "ip_address": "::1",
+    "tipe": "UPDATE_ORDER",
+    "aktifitas": "Mengunggah hasil uji jaringan untuk tiket ACT-20261110-0005 (133853936603813676.jpg)",
+    "detail": "Hasil uji jaringan diunggah: \"133853936603813676.jpg\" oleh Ahmad Fauzi (Head of NOC). Waktu laporan aktivasi tercatat. Syarat Completion terpenuhi.",
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-10T14:52:42.876Z"
+  },
+  {
+    "id": "log-1794322342251-ssig6",
+    "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
+    "email": null,
+    "ip_address": "::1",
+    "tipe": "UPDATE_ORDER",
+    "aktifitas": "Menambahkan catatan progress pada tiket ACT-20261110-0005 (Progress Note)",
+    "detail": "masih pelurusan vlan",
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-10T14:52:22.251Z"
+  },
+  {
+    "id": "log-1794314238375-86fom",
+    "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
+    "email": "admin.noc@isp-enterprise.net",
+    "ip_address": "::1",
+    "tipe": "CREATE_TICKET",
+    "aktifitas": "Membuat tiket dengan nomor ACT-20261110-0005",
+    "detail": "{\"kategori_layanan\":\"POP Site\"}",
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-10T12:37:18.375Z"
+  },
+  {
+    "id": "log-1794299498362-she1d",
+    "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
+    "email": "admin.noc@isp-enterprise.net",
+    "ip_address": "::1",
+    "tipe": "LOGIN_SUCCESS",
+    "aktifitas": "Berhasil login ke aplikasi",
+    "detail": null,
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-10T08:31:38.362Z"
+  },
+  {
+    "id": "log-1794299498207-g7oy6",
+    "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
+    "email": "admin.noc@isp-enterprise.net",
+    "ip_address": "::1",
+    "tipe": "LOGIN_SUCCESS",
+    "aktifitas": "Berhasil login ke aplikasi — Ahmad Fauzi (Head of NOC)",
+    "detail": null,
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-10T08:31:38.207Z"
+  },
+  {
+    "id": "log-1794299498029-5c5qd",
+    "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
+    "email": "admin.noc@isp-enterprise.net",
+    "ip_address": "::1",
+    "tipe": "LOGIN_SUCCESS",
+    "aktifitas": "Berhasil login ke aplikasi — Chrome 157 · Windows",
+    "detail": null,
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-10T08:31:38.029Z"
+  },
+  {
+    "id": "log-1794299491799-fhun8",
+    "nama_lengkap": "Budi Santoso (NOC Engineer)",
+    "email": "budi.santoso@isp-enterprise.net",
+    "ip_address": "::1",
+    "tipe": "LOGOUT",
+    "aktifitas": "Sesi ditutup — logout dari aplikasi — Chrome 157 · Windows",
+    "detail": null,
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-10T08:31:31.799Z"
+  },
+  {
+    "id": "log-1794299491608-ofqxn",
+    "nama_lengkap": "Budi Santoso (NOC Engineer)",
+    "email": "budi.santoso@isp-enterprise.net",
+    "ip_address": "::1",
+    "tipe": "LOGOUT",
+    "aktifitas": "Sesi ditutup — logout dari aplikasi",
+    "detail": null,
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-10T08:31:31.608Z"
+  },
+  {
+    "id": "log-1794299461125-4fs7w",
+    "nama_lengkap": "Budi Santoso (NOC Engineer)",
+    "email": "budi.santoso@isp-enterprise.net",
+    "ip_address": "::1",
+    "tipe": "LOGIN_SUCCESS",
+    "aktifitas": "Berhasil login ke aplikasi",
+    "detail": null,
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-10T08:31:01.125Z"
+  },
+  {
+    "id": "log-1794299458516-gwtac",
+    "nama_lengkap": "Budi Santoso (NOC Engineer)",
+    "email": "budi.santoso@isp-enterprise.net",
+    "ip_address": "::1",
+    "tipe": "LOGIN_SUCCESS",
+    "aktifitas": "Berhasil login ke aplikasi — Budi Santoso (NOC Engineer)",
+    "detail": null,
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-10T08:30:58.516Z"
+  },
+  {
+    "id": "log-1794299458324-wb9pw",
+    "nama_lengkap": "Budi Santoso (NOC Engineer)",
+    "email": "budi.santoso@isp-enterprise.net",
+    "ip_address": "::1",
+    "tipe": "LOGIN_SUCCESS",
+    "aktifitas": "Berhasil login ke aplikasi — Chrome 157 · Windows",
+    "detail": null,
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-10T08:30:58.324Z"
+  },
+  {
+    "id": "log-1794299437510-plvyp",
+    "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
+    "email": "admin.noc@isp-enterprise.net",
+    "ip_address": "::1",
+    "tipe": "LOGOUT",
+    "aktifitas": "Sesi ditutup — logout dari aplikasi",
+    "detail": null,
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-10T08:30:37.510Z"
+  },
+  {
+    "id": "log-1794287625739-cpwq8",
+    "nama_lengkap": "Dimas Kurniawan (Field Engineer)",
+    "email": "dimas.k@isp-enterprise.net",
+    "ip_address": "::ffff:192.168.98.41",
+    "tipe": "LOGIN_SUCCESS",
+    "aktifitas": "Berhasil login ke aplikasi",
+    "detail": null,
+    "user_agent": "Chrome 156 · Windows",
+    "created_at": "2026-11-10T05:13:45.739Z"
+  },
+  {
+    "id": "log-1794287625553-ifarq",
+    "nama_lengkap": "Dimas Kurniawan (Field Engineer)",
+    "email": "dimas.k@isp-enterprise.net",
+    "ip_address": "::ffff:192.168.98.41",
+    "tipe": "LOGIN_SUCCESS",
+    "aktifitas": "Berhasil login ke aplikasi — Dimas Kurniawan (Field Engineer)",
+    "detail": null,
+    "user_agent": "Chrome 156 · Windows",
+    "created_at": "2026-11-10T05:13:45.553Z"
+  },
+  {
+    "id": "log-1794287625241-bpvf5",
+    "nama_lengkap": "Dimas Kurniawan (Field Engineer)",
+    "email": "dimas.k@isp-enterprise.net",
+    "ip_address": "::ffff:192.168.98.41",
+    "tipe": "LOGIN_SUCCESS",
+    "aktifitas": "Berhasil login ke aplikasi — Chrome 156 · Windows",
+    "detail": null,
+    "user_agent": "Chrome 156 · Windows",
+    "created_at": "2026-11-10T05:13:45.241Z"
+  },
+  {
+    "id": "log-1794287599574-w31u4",
+    "nama_lengkap": "Budi Santoso (NOC Engineer)",
+    "email": "budi.santoso@isp-enterprise.net",
+    "ip_address": "::ffff:192.168.98.41",
+    "tipe": "LOGOUT",
+    "aktifitas": "Sesi ditutup — logout dari aplikasi — Chrome 156 · Windows",
+    "detail": null,
+    "user_agent": "Chrome 156 · Windows",
+    "created_at": "2026-11-10T05:13:19.574Z"
+  },
+  {
+    "id": "log-1794287599163-lq88h",
+    "nama_lengkap": "Budi Santoso (NOC Engineer)",
+    "email": "budi.santoso@isp-enterprise.net",
+    "ip_address": "::ffff:192.168.98.41",
+    "tipe": "LOGOUT",
+    "aktifitas": "Sesi ditutup — logout dari aplikasi",
+    "detail": null,
+    "user_agent": "Chrome 156 · Windows",
+    "created_at": "2026-11-10T05:13:19.163Z"
+  }
+]

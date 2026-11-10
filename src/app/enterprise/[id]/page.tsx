@@ -7,6 +7,7 @@ import { useCurrentUser } from "@/context/UserContext";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LightboxModal } from "@/components/LightboxModal";
 import { SearchableSelect } from "@/components/SearchableSelect";
+import { IcmpMonitorWidget } from "@/components/IcmpMonitorWidget";
 import {
   generateNocCoordinationText,
   DEDICATED_SERVICE_OPTIONS,
@@ -30,6 +31,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   PowerOff,
+  RotateCcw,
   Copy,
   Check,
   RefreshCw,
@@ -45,6 +47,12 @@ import {
   Globe,
   HardDrive,
   Cpu,
+  Edit3,
+  Lock,
+  Plus,
+  Trash2,
+  X,
+  Save,
 } from "lucide-react";
 
 interface TestItem {
@@ -93,6 +101,28 @@ interface OrderHistoryItem {
   };
 }
 
+interface DataChangeDiff {
+  field: string;
+  label: string;
+  old_value: string;
+  new_value: string;
+}
+
+interface DataChangeLogItem {
+  id: string;
+  pop_site_id: string;
+  user_id: string;
+  user?: {
+    id: string;
+    nama: string;
+    role: string;
+    email: string;
+  } | null;
+  changes: string; // JSON string of DataChangeDiff[]
+  catatan?: string | null;
+  created_at: string;
+}
+
 interface EnterpriseSiteDetail {
   id: string;
   site_id: string;
@@ -128,7 +158,32 @@ interface EnterpriseSiteDetail {
   created_at: string;
   updated_at: string;
   orders: OrderHistoryItem[];
+  data_change_logs?: DataChangeLogItem[];
 }
+
+const DEFAULT_SERVER_OPTIONS = [
+  "JAKARTA P1",
+  "JAKARTA P2",
+  "BANDUNG (BBU)",
+  "CIANJUR (GEKBRONG)",
+  "PELABUHAN RATU",
+  "SUKABUMI",
+  "CIKIDANG",
+  "SURABAYA",
+  "POP MARGA'ASIH (FERIHANZANI)",
+];
+
+const DEFAULT_INFRASTRUCTURE_OPTIONS = [
+  "JDP",
+  "MITRA (jemput)",
+  "METRO E LINTAS ARTHA",
+  "METRO E ION (HSP)",
+  "METRO E IFORTE",
+  "METRONEXIA",
+  "FIBERSTAR",
+];
+
+const DEFAULT_MEDIA_OPTIONS = ["SFP", "ONT", "RJ45", "Metro Telkom", "Radio Ubiquiti", "Patchcord Fiber"];
 
 export default function EnterpriseSiteDetailPage({
   params,
@@ -145,6 +200,38 @@ export default function EnterpriseSiteDetailPage({
 
   // History classification tab on the right
   const [historyTab, setHistoryTab] = useState("Semua");
+  const [activeMainTab, setActiveMainTab] = useState<"lifecycle" | "data_changes">("lifecycle");
+
+  // Edit Data Modal State
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSuccess, setEditSuccess] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    nama_pic: "",
+    nama_perusahaan: "",
+    email_pic: "",
+    kontak_pic: [""] as string[],
+    alamat_instalasi: "",
+    vlan: "",
+    infrastruktur: "",
+    media_koneksi: "",
+    ip_public: "",
+    ip_private: "",
+    server: "",
+    sn_ont: "",
+    interkoneksi: "",
+    port_media: "",
+    tipe_layanan_collo: "",
+    nama_perangkat: "",
+    sn_perangkat: "",
+    prefix_advertise: "",
+    as_number: "",
+    sid: "",
+    ao: "",
+    nomor_order: "",
+    catatan: "",
+  });
 
   // Copy feedback
   const [copiedConfig, setCopiedConfig] = useState(false);
@@ -155,7 +242,7 @@ export default function EnterpriseSiteDetailPage({
   const [lightboxTitle, setLightboxTitle] = useState("");
 
   // Action Modal State
-  const [actionType, setActionType] = useState<"Upgrade" | "Downgrade" | "Isolir" | "Unisolir" | "Terminate" | null>(null);
+  const [actionType, setActionType] = useState<"Upgrade" | "Downgrade" | "Isolir" | "Unisolir" | "Terminate" | "Unterminated" | null>(null);
   const [newLayanan, setNewLayanan] = useState("");
   const [newVlan, setNewVlan] = useState("");
   const [actionAlasan, setActionAlasan] = useState("");
@@ -248,7 +335,7 @@ export default function EnterpriseSiteDetailPage({
     return DEDICATED_SERVICE_OPTIONS;
   }, [site, actionType]);
 
-  const openActionModal = (type: "Upgrade" | "Downgrade" | "Isolir" | "Unisolir" | "Terminate") => {
+  const openActionModal = (type: "Upgrade" | "Downgrade" | "Isolir" | "Unisolir" | "Terminate" | "Unterminated") => {
     if (!site) return;
     setActionType(type);
     const currentLayanan = site.layanan_dedicated || site.kapasitas_layanan || "";
@@ -325,6 +412,141 @@ export default function EnterpriseSiteDetailPage({
     }
   };
 
+  const openEditModal = () => {
+    if (!site) return;
+    let parsedContacts: string[] = [];
+    try {
+      parsedContacts = JSON.parse(site.kontak_pic);
+      if (!Array.isArray(parsedContacts)) parsedContacts = [site.kontak_pic];
+    } catch {
+      parsedContacts = site.kontak_pic ? [site.kontak_pic] : [""];
+    }
+    if (parsedContacts.length === 0) parsedContacts = [""];
+
+    setEditForm({
+      nama_pic: site.nama_pic || "",
+      nama_perusahaan: site.nama_perusahaan || "",
+      email_pic: site.email_pic || "",
+      kontak_pic: parsedContacts,
+      alamat_instalasi: site.alamat_instalasi || "",
+      vlan: site.vlan !== null && site.vlan !== undefined ? String(site.vlan) : "",
+      infrastruktur: site.infrastruktur || "",
+      media_koneksi: site.media_koneksi || "",
+      ip_public: site.ip_public || "",
+      ip_private: site.ip_private || "",
+      server: site.server || "",
+      sn_ont: site.sn_ont || "",
+      interkoneksi: site.interkoneksi || "",
+      port_media: site.port_media || "",
+      tipe_layanan_collo: site.tipe_layanan_collo || "",
+      nama_perangkat: site.nama_perangkat || "",
+      sn_perangkat: site.sn_perangkat || "",
+      prefix_advertise: site.prefix_advertise || "",
+      as_number: site.as_number || "",
+      sid: site.sid || "",
+      ao: site.ao || "",
+      nomor_order: site.nomor_order || "",
+      catatan: "",
+    });
+    setEditError(null);
+    setEditSuccess(null);
+    setEditModalOpen(true);
+  };
+
+  const handleAddContact = () => {
+    setEditForm((prev) => ({
+      ...prev,
+      kontak_pic: [...prev.kontak_pic, ""],
+    }));
+  };
+
+  const handleRemoveContact = (index: number) => {
+    setEditForm((prev) => {
+      const updated = prev.kontak_pic.filter((_, i) => i !== index);
+      return {
+        ...prev,
+        kontak_pic: updated.length > 0 ? updated : [""],
+      };
+    });
+  };
+
+  const handleContactChange = (index: number, value: string) => {
+    setEditForm((prev) => {
+      const updated = [...prev.kontak_pic];
+      updated[index] = value;
+      return { ...prev, kontak_pic: updated };
+    });
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!site) return;
+
+    if (!editForm.nama_pic.trim()) {
+      setEditError("Nama PIC wajib diisi.");
+      return;
+    }
+
+    const validContacts = editForm.kontak_pic.map((k) => k.trim()).filter((k) => k.length > 0);
+    if (validContacts.length === 0) {
+      setEditError("Minimal cantumkan 1 nomor kontak PIC / WhatsApp.");
+      return;
+    }
+
+    setIsSubmittingEdit(true);
+    setEditError(null);
+
+    try {
+      const res = await fetch(`/api/pop-sites/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: currentUser?.id,
+          nama_pic: editForm.nama_pic.trim(),
+          nama_perusahaan: editForm.nama_perusahaan.trim() || null,
+          email_pic: editForm.email_pic.trim() || null,
+          kontak_pic: validContacts,
+          alamat_instalasi: editForm.alamat_instalasi.trim() || null,
+          vlan: editForm.vlan.trim() ? parseInt(editForm.vlan.trim(), 10) : null,
+          infrastruktur: editForm.infrastruktur.trim() || null,
+          media_koneksi: editForm.media_koneksi.trim() || null,
+          ip_public: editForm.ip_public.trim() || null,
+          ip_private: editForm.ip_private.trim() || null,
+          server: editForm.server.trim() || null,
+          sn_ont: editForm.sn_ont.trim() || null,
+          interkoneksi: editForm.interkoneksi.trim() || null,
+          port_media: editForm.port_media.trim() || null,
+          tipe_layanan_collo: editForm.tipe_layanan_collo.trim() || null,
+          nama_perangkat: editForm.nama_perangkat.trim() || null,
+          sn_perangkat: editForm.sn_perangkat.trim() || null,
+          prefix_advertise: editForm.prefix_advertise.trim() || null,
+          as_number: editForm.as_number.trim() || null,
+          sid: editForm.sid.trim() || null,
+          ao: editForm.ao.trim() || null,
+          nomor_order: editForm.nomor_order.trim() || null,
+          catatan: editForm.catatan.trim() || "Perubahan Data Administrasi Enterprise",
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menyimpan perubahan data.");
+      }
+
+      setSite(data.data);
+      setEditSuccess(data.message || "Data administrasi enterprise berhasil diperbarui!");
+      setTimeout(() => {
+        setEditModalOpen(false);
+        setEditSuccess(null);
+        setActiveMainTab("data_changes");
+      }, 1000);
+    } catch (err: any) {
+      setEditError(err.message || "Terjadi kesalahan saat menyimpan perubahan.");
+    } finally {
+      setIsSubmittingEdit(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="py-24 text-center">
@@ -379,6 +601,7 @@ export default function EnterpriseSiteDetailPage({
   const filteredHistory = site.orders.filter((ord) => {
     if (historyTab === "Semua") return true;
     if (historyTab === "Aktivasi") return ord.tipe_order === "Aktivasi Baru";
+    if (historyTab === "Unterminated") return ord.tipe_order === "Unterminated" || ord.tipe_order === "Unterminate";
     return ord.tipe_order === historyTab;
   });
 
@@ -473,6 +696,16 @@ export default function EnterpriseSiteDetailPage({
               </button>
             )}
 
+            {site.status_layanan === "Terminated" && (
+              <button
+                onClick={() => openActionModal("Unterminated")}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-xs flex items-center shadow-emerald-500/20"
+              >
+                <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                Unterminated (Buka Terminasi)
+              </button>
+            )}
+
             <button
               onClick={() => openActionModal("Upgrade")}
               disabled={site.status_layanan === "Terminated" || site.status_layanan === "Isolir"}
@@ -524,9 +757,19 @@ export default function EnterpriseSiteDetailPage({
                 <Network className="w-4 h-4 mr-2 text-purple-600 dark:text-purple-400" />
                 Data Administrasi Enterprise
               </h2>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 uppercase">
-                Active Master Asset
-              </span>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={openEditModal}
+                  className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-slate-900 transition shadow-xs cursor-pointer"
+                >
+                  <Edit3 className="w-3 h-3 mr-1 text-purple-400 dark:text-purple-600" />
+                  Edit Data
+                </button>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 uppercase">
+                  Active Master Asset
+                </span>
+              </div>
             </div>
 
             {/* Section 1: Data PIC & Lokasi */}
@@ -743,6 +986,11 @@ export default function EnterpriseSiteDetailPage({
               )}
             </div>
 
+            {/* ICMP Ping Monitoring Widget (Specifically for Enterprise Dedicated) */}
+            {site.sub_layanan === "Enterprise Dedicated" && (
+              <IcmpMonitorWidget popSiteId={site.id} currentIpPublic={site.ip_public} />
+            )}
+
             {/* Section 3: Integrasi Carrier & Parameter Sirkuit */}
             {hasCircuitParams && (
               <div
@@ -861,6 +1109,15 @@ export default function EnterpriseSiteDetailPage({
                     <ShieldCheck className="w-4 h-4 mr-1.5" />
                     Ajukan Unisolir (Buka Isolir)
                   </button>
+                ) : site.status_layanan === "Terminated" ? (
+                  <button
+                    type="button"
+                    onClick={() => openActionModal("Unterminated")}
+                    className="col-span-2 px-3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center transition shadow-sm"
+                  >
+                    <RotateCcw className="w-4 h-4 mr-1.5" />
+                    Ajukan Unterminated (Reaktivasi)
+                  </button>
                 ) : (
                   <button
                     type="button"
@@ -908,167 +1165,311 @@ export default function EnterpriseSiteDetailPage({
         </div>
 
         {/* ======================================================== */}
-        {/* SISI KANAN: SEMUA HISTORY LIFECYCLE ENTERPRISE */}
+        {/* SISI KANAN: SEMUA HISTORY (TERPISAH ANTARA LIFECYCLE & PERUBAHAN DATA) */}
         {/* ======================================================== */}
         <div className="lg:col-span-7 space-y-4">
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
-              <div>
-                <h2 className="text-base font-bold text-slate-900 flex items-center">
-                  <History className="w-5 h-5 mr-2 text-purple-600" />
-                  Semua Riwayat Lifecycle Sirkuit Enterprise
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Daftar seluruh aktivitas: Aktivasi Awal, Upgrade, Downgrade, Isolir, Unisolir, dan Terminasi.
-                </p>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm p-6 space-y-5">
+            {/* Top-Level Menu Switcher: Lifecycle vs Perubahan Data */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center space-x-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setActiveMainTab("lifecycle")}
+                  className={`flex items-center px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    activeMainTab === "lifecycle"
+                      ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <History className="w-3.5 h-3.5 mr-1.5 text-purple-600 dark:text-purple-400" />
+                  Riwayat Lifecycle Sirkuit
+                  <span className="ml-2 px-1.5 py-0.2 rounded-full text-[10px] bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-mono">
+                    {site.orders.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveMainTab("data_changes")}
+                  className={`flex items-center px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    activeMainTab === "data_changes"
+                      ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5 mr-1.5 text-indigo-600 dark:text-indigo-400" />
+                  Riwayat Perubahan Data
+                  <span className="ml-2 px-1.5 py-0.2 rounded-full text-[10px] bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 font-mono">
+                    {site.data_change_logs?.length || 0}
+                  </span>
+                </button>
               </div>
 
-              {/* Classification filter for history */}
-              <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl overflow-x-auto text-xs">
-                {["Semua", "Aktivasi", "Upgrade", "Downgrade", "Isolir", "Unisolir", "Terminate"].map((tab) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => setHistoryTab(tab)}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
-                      historyTab === tab
-                        ? "bg-white text-slate-900 shadow-sm"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
+              {activeMainTab === "lifecycle" && (
+                /* Classification filter for lifecycle history */
+                <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl overflow-x-auto text-xs">
+                  {["Semua", "Aktivasi", "Upgrade", "Downgrade", "Isolir", "Unisolir", "Terminate", "Unterminated"].map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setHistoryTab(tab)}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap cursor-pointer ${
+                        historyTab === tab
+                          ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Chronological Timeline History */}
-            {filteredHistory.length === 0 ? (
-              <div className="py-12 text-center text-xs text-slate-400 space-y-1">
-                <History className="w-8 h-8 mx-auto text-slate-300" />
-                <p>Tidak ada riwayat untuk kategori &ldquo;{historyTab}&rdquo;.</p>
+            {/* TAB 1: RIWAYAT LIFECYCLE SIRKUIT */}
+            {activeMainTab === "lifecycle" && (
+              <div>
+                {/* Chronological Timeline History */}
+                {filteredHistory.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-slate-400 space-y-1">
+                    <History className="w-8 h-8 mx-auto text-slate-300" />
+                    <p>Tidak ada riwayat untuk kategori &ldquo;{historyTab}&rdquo;.</p>
+                  </div>
+                ) : (
+                  <div className="relative pl-6 space-y-6 before:content-[''] before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
+                    {filteredHistory.map((item) => {
+                      let badgeTipeStyle = "bg-blue-100 text-blue-800 border-blue-200";
+                      if (item.tipe_order === "Upgrade") badgeTipeStyle = "bg-emerald-100 text-emerald-800 border-emerald-200";
+                      if (item.tipe_order === "Downgrade") badgeTipeStyle = "bg-sky-100 text-sky-800 border-sky-200";
+                      if (item.tipe_order === "Isolir") badgeTipeStyle = "bg-amber-100 text-amber-800 border-amber-200";
+                      if (item.tipe_order === "Unisolir") badgeTipeStyle = "bg-teal-100 text-teal-800 border-teal-200";
+                      if (item.tipe_order === "Terminate") badgeTipeStyle = "bg-rose-100 text-rose-800 border-rose-200";
+                      if (item.tipe_order === "Unterminated" || item.tipe_order === "Unterminate") badgeTipeStyle = "bg-emerald-100 text-emerald-800 border-emerald-200";
+
+                      return (
+                        <div key={item.id} className="relative group">
+                          {/* Timeline Node Marker */}
+                          <div className="absolute -left-[27px] top-1.5 w-4 h-4 rounded-full bg-purple-600 border-2 border-white shadow-sm ring-2 ring-purple-100" />
+
+                          <div className="bg-slate-50 group-hover:bg-slate-100/70 p-4 rounded-2xl border border-slate-200 transition space-y-3">
+                            {/* Event Card Header */}
+                            <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200/80">
+                              <div className="flex items-center space-x-2 flex-wrap">
+                                <span className="font-mono text-xs font-bold text-slate-900">
+                                  {item.ticket_number}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase border ${badgeTipeStyle}`}>
+                                  {item.tipe_order}
+                                </span>
+                                <StatusBadge status={item.status} size="sm" />
+                              </div>
+
+                              <span className="text-[11px] text-slate-500 font-medium">
+                                {new Date(item.created_at).toLocaleString("id-ID", {
+                                  dateStyle: "medium",
+                                  timeStyle: "short",
+                                })} WIB
+                              </span>
+                            </div>
+
+                            {/* Event Details */}
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div>
+                                <span className="text-slate-400 text-[10px] block">Layanan / Kapasitas:</span>
+                                <span className="font-bold text-slate-800">{item.layanan_dedicated || item.sub_layanan || "-"}</span>
+                              </div>
+                              <div>
+                                <span className="text-slate-400 text-[10px] block">VLAN / Media:</span>
+                                <span className="font-mono font-bold text-purple-700">
+                                  {item.vlan ? `VLAN ${item.vlan}` : item.media_koneksi || "-"}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Event Note / Alasan */}
+                            {item.catatan_tambahan && (
+                              <div className="p-2.5 bg-white rounded-xl border border-slate-200/80 text-xs text-slate-700">
+                                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Catatan / Alasan:</span>
+                                <p className="italic leading-relaxed">&ldquo;{item.catatan_tambahan}&rdquo;</p>
+                              </div>
+                            )}
+
+                            {/* NOC Progress Logs Audit Stream */}
+                            {item.progress_logs && item.progress_logs.length > 0 && (
+                              <div className="space-y-1.5 pt-1">
+                                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                                  Log Eksekusi Engineer ({item.progress_logs.length}):
+                                </span>
+                                <div className="space-y-1">
+                                  {item.progress_logs.map((log) => (
+                                    <div key={log.id} className="p-2 rounded-lg bg-slate-900 text-slate-200 text-xs">
+                                      <div className="flex items-center justify-between text-[10px] text-slate-400 mb-0.5">
+                                        <span className="font-semibold text-purple-400">{log.user?.nama || "NOC"}</span>
+                                        <span>{new Date(log.created_at).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WIB</span>
+                                      </div>
+                                      <p className="text-slate-300 font-normal leading-relaxed">{log.catatan_progress}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Test Results Files (Speedtest, OPM) */}
+                            {item.test_results && item.test_results.length > 0 && (
+                              <div className="pt-2 border-t border-slate-200/80">
+                                <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+                                  Dokumentasi & Bukti Uji Jaringan ({item.test_results.length}):
+                                </span>
+                                <div className="flex flex-wrap gap-2">
+                                  {item.test_results.map((t) => (
+                                    <button
+                                      key={t.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setLightboxImage(t.file_url);
+                                        setLightboxTitle(t.file_name);
+                                        setLightboxOpen(true);
+                                      }}
+                                      className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-semibold text-purple-700 flex items-center shadow-xs"
+                                    >
+                                      <FileCheck2 className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                                      <span className="max-w-[140px] truncate">{t.file_name}</span>
+                                      <Eye className="w-3 h-3 ml-1 text-slate-400" />
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Footer Link */}
+                            <div className="pt-2 flex items-center justify-between text-xs">
+                              <span className="text-[11px] text-slate-400">
+                                Operator: {item.creator?.nama || "Sales / NOC"}
+                              </span>
+                              <Link
+                                href={`/orders/${item.id}/progress`}
+                                className="text-purple-600 hover:text-purple-800 font-bold flex items-center hover:underline"
+                              >
+                                Buka Detail Tiket &rarr;
+                              </Link>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="relative pl-6 space-y-6 before:content-[''] before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
-                {filteredHistory.map((item) => {
-                  let badgeTipeStyle = "bg-blue-100 text-blue-800 border-blue-200";
-                  if (item.tipe_order === "Upgrade") badgeTipeStyle = "bg-emerald-100 text-emerald-800 border-emerald-200";
-                  if (item.tipe_order === "Downgrade") badgeTipeStyle = "bg-sky-100 text-sky-800 border-sky-200";
-                  if (item.tipe_order === "Isolir") badgeTipeStyle = "bg-amber-100 text-amber-800 border-amber-200";
-                  if (item.tipe_order === "Unisolir") badgeTipeStyle = "bg-teal-100 text-teal-800 border-teal-200";
-                  if (item.tipe_order === "Terminate") badgeTipeStyle = "bg-rose-100 text-rose-800 border-rose-200";
+            )}
 
-                  return (
-                    <div key={item.id} className="relative group">
-                      {/* Timeline Node Marker */}
-                      <div className="absolute -left-[27px] top-1.5 w-4 h-4 rounded-full bg-purple-600 border-2 border-white shadow-sm ring-2 ring-purple-100" />
+            {/* TAB 2: RIWAYAT PERUBAHAN DATA (AUDIT LOG TERPISAH) */}
+            {activeMainTab === "data_changes" && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                      Audit Log Perubahan Data Administrasi Enterprise
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Histori penyuntingan data master, dicatat otomatis berdasarkan akun yang melakukan perubahan.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openEditModal}
+                    className="inline-flex items-center px-3 py-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white shadow-xs transition cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 mr-1" />
+                    Ubah Data Sekarang
+                  </button>
+                </div>
 
-                      <div className="bg-slate-50 group-hover:bg-slate-100/70 p-4 rounded-2xl border border-slate-200 transition space-y-3">
-                        {/* Event Card Header */}
-                        <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200/80">
-                          <div className="flex items-center space-x-2 flex-wrap">
-                            <span className="font-mono text-xs font-bold text-slate-900">
-                              {item.ticket_number}
+                {!site.data_change_logs || site.data_change_logs.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-slate-400 space-y-2">
+                    <FileText className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-700" />
+                    <p className="font-semibold text-slate-600 dark:text-slate-300 text-sm">Belum Ada Riwayat Perubahan Data</p>
+                    <p className="text-slate-400">Data administrasi & spesifikasi sirkuit masih sesuai dokumen aktivasi awal.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {site.data_change_logs.map((log) => {
+                      let diffList: Array<{ field: string; label: string; old_value: string; new_value: string }> = [];
+                      try {
+                        diffList = JSON.parse(log.changes);
+                      } catch {
+                        diffList = [];
+                      }
+
+                      return (
+                        <div
+                          key={log.id}
+                          className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/60 space-y-3"
+                        >
+                          {/* Log Header */}
+                          <div className="flex items-center justify-between flex-wrap gap-2 pb-2.5 border-b border-slate-200/80 dark:border-slate-700/80">
+                            <div className="flex items-center space-x-2.5">
+                              <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 flex items-center justify-center font-bold text-xs">
+                                {log.user?.nama ? log.user.nama.charAt(0).toUpperCase() : "U"}
+                              </div>
+                              <div>
+                                <div className="flex items-center space-x-2">
+                                  <span className="font-bold text-slate-900 dark:text-slate-100 text-xs">
+                                    {log.user?.nama || "User"}
+                                  </span>
+                                  <span className="text-[10px] uppercase font-bold px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                    {log.user?.role || "Staff"}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] text-slate-400 dark:text-slate-400">
+                                  {log.user?.email || ""}
+                                </span>
+                              </div>
+                            </div>
+                            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center">
+                              <Clock className="w-3.5 h-3.5 mr-1" />
+                              {new Date(log.created_at).toLocaleString("id-ID", {
+                                dateStyle: "medium",
+                                timeStyle: "short",
+                              })} WIB
                             </span>
-                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase border ${badgeTipeStyle}`}>
-                              {item.tipe_order}
-                            </span>
-                            <StatusBadge status={item.status} size="sm" />
                           </div>
 
-                          <span className="text-[11px] text-slate-500 font-medium">
-                            {new Date(item.created_at).toLocaleString("id-ID", {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                            })} WIB
-                          </span>
-                        </div>
+                          {/* Catatan Perubahan */}
+                          {log.catatan && (
+                            <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 italic">
+                              &ldquo;{log.catatan}&rdquo;
+                            </div>
+                          )}
 
-                        {/* Event Details */}
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div>
-                            <span className="text-slate-400 text-[10px] block">Layanan / Kapasitas:</span>
-                            <span className="font-bold text-slate-800">{item.layanan_dedicated || item.sub_layanan || "-"}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400 text-[10px] block">VLAN / Media:</span>
-                            <span className="font-mono font-bold text-purple-700">
-                              {item.vlan ? `VLAN ${item.vlan}` : item.media_koneksi || "-"}
+                          {/* Diff Table */}
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                              Rincian Data yang Diubah ({diffList.length}):
                             </span>
-                          </div>
-                        </div>
-
-                        {/* Event Note / Alasan */}
-                        {item.catatan_tambahan && (
-                          <div className="p-2.5 bg-white rounded-xl border border-slate-200/80 text-xs text-slate-700">
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Catatan / Alasan:</span>
-                            <p className="italic leading-relaxed">&ldquo;{item.catatan_tambahan}&rdquo;</p>
-                          </div>
-                        )}
-
-                        {/* NOC Progress Logs Audit Stream */}
-                        {item.progress_logs && item.progress_logs.length > 0 && (
-                          <div className="space-y-1.5 pt-1">
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
-                              Log Eksekusi Engineer ({item.progress_logs.length}):
-                            </span>
-                            <div className="space-y-1">
-                              {item.progress_logs.map((log) => (
-                                <div key={log.id} className="p-2 rounded-lg bg-slate-900 text-slate-200 text-xs">
-                                  <div className="flex items-center justify-between text-[10px] text-slate-400 mb-0.5">
-                                    <span className="font-semibold text-purple-400">{log.user?.nama || "NOC"}</span>
-                                    <span>{new Date(log.created_at).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })} WIB</span>
+                            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 text-xs overflow-hidden">
+                              {diffList.map((d, dIdx) => (
+                                <div key={dIdx} className="p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                                  <span className="font-bold text-slate-700 dark:text-slate-300 sm:w-1/3">
+                                    {d.label}
+                                  </span>
+                                  <div className="flex items-center space-x-2 text-xs font-mono flex-1 sm:justify-end flex-wrap">
+                                    <span className="text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-800 line-through">
+                                      {d.old_value}
+                                    </span>
+                                    <ArrowRight className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                                    <span className="text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 font-bold">
+                                      {d.new_value}
+                                    </span>
                                   </div>
-                                  <p className="text-slate-300 font-normal leading-relaxed">{log.catatan_progress}</p>
                                 </div>
                               ))}
                             </div>
                           </div>
-                        )}
-
-                        {/* Test Results Files (Speedtest, OPM) */}
-                        {item.test_results && item.test_results.length > 0 && (
-                          <div className="pt-2 border-t border-slate-200/80">
-                            <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
-                              Dokumentasi & Bukti Uji Jaringan ({item.test_results.length}):
-                            </span>
-                            <div className="flex flex-wrap gap-2">
-                              {item.test_results.map((t) => (
-                                <button
-                                  key={t.id}
-                                  type="button"
-                                  onClick={() => {
-                                    setLightboxImage(t.file_url);
-                                    setLightboxTitle(t.file_name);
-                                    setLightboxOpen(true);
-                                  }}
-                                  className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-semibold text-purple-700 flex items-center shadow-xs"
-                                >
-                                  <FileCheck2 className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-                                  <span className="max-w-[140px] truncate">{t.file_name}</span>
-                                  <Eye className="w-3 h-3 ml-1 text-slate-400" />
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Footer Link */}
-                        <div className="pt-2 flex items-center justify-between text-xs">
-                          <span className="text-[11px] text-slate-400">
-                            Operator: {item.creator?.nama || "Sales / NOC"}
-                          </span>
-                          <Link
-                            href={`/orders/${item.id}/progress`}
-                            className="text-purple-600 hover:text-purple-800 font-bold flex items-center hover:underline"
-                          >
-                            Buka Detail Tiket &rarr;
-                          </Link>
                         </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1235,6 +1636,485 @@ export default function EnterpriseSiteDetailPage({
                 </div>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* EDIT DATA ADMINISTRASI ENTERPRISE MODAL */}
+      {editModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-scaleUp">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-slate-900 dark:bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/30">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold flex items-center gap-2">
+                    Edit Data Administrasi Enterprise
+                    <span className="font-mono text-xs px-2 py-0.5 rounded bg-purple-950/70 text-purple-300 border border-purple-800">
+                      {site.site_id}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Perubahan data akan otomatis dicatat di Audit Log atas nama akun <strong>{currentUser?.nama || "Staff"}</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setEditModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body: Form */}
+            <form onSubmit={handleSaveEdit} className="flex-1 overflow-y-auto p-6 space-y-6 text-xs">
+              {editError && (
+                <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 flex items-start space-x-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  <span>{editError}</span>
+                </div>
+              )}
+
+              {editSuccess && (
+                <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 flex items-start space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  <span>{editSuccess}</span>
+                </div>
+              )}
+
+              {/* Group 1: Data Pelanggan & PIC */}
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2 pb-1.5 border-b border-slate-100 dark:border-slate-800">
+                  <Building2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                  <h4 className="font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 text-[11px]">
+                    1. Data Pelanggan & Kontak PIC
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Nama PIC <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editForm.nama_pic}
+                      onChange={(e) => setEditForm({ ...editForm, nama_pic: e.target.value })}
+                      placeholder="Nama lengkap PIC"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Perusahaan / Entitas
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.nama_perusahaan}
+                      onChange={(e) => setEditForm({ ...editForm, nama_perusahaan: e.target.value })}
+                      placeholder="Nama PT / Instansi / Korporasi"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Email PIC
+                    </label>
+                    <input
+                      type="email"
+                      value={editForm.email_pic}
+                      onChange={(e) => setEditForm({ ...editForm, email_pic: e.target.value })}
+                      placeholder="email.pic@perusahaan.com"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Multi-Contact PIC */}
+                  <div className="sm:col-span-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-slate-700 dark:text-slate-300 font-bold">
+                        Nomor Kontak PIC / WhatsApp <span className="text-rose-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleAddContact}
+                        className="inline-flex items-center px-2 py-1 rounded-lg text-[11px] font-bold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 transition"
+                      >
+                        <Plus className="w-3 h-3 mr-1" /> Tambah Nomor
+                      </button>
+                    </div>
+
+                    {editForm.kontak_pic.map((contact, idx) => (
+                      <div key={idx} className="flex items-center space-x-2">
+                        <div className="relative flex-1">
+                          <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                          <input
+                            type="text"
+                            value={contact}
+                            onChange={(e) => handleContactChange(idx, e.target.value)}
+                            placeholder="08123456789 atau 628..."
+                            className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono text-xs focus:ring-2 focus:ring-purple-500 outline-none"
+                          />
+                        </div>
+                        {editForm.kontak_pic.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveContact(idx)}
+                            className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Alamat Fisik Instalasi
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={editForm.alamat_instalasi}
+                      onChange={(e) => setEditForm({ ...editForm, alamat_instalasi: e.target.value })}
+                      placeholder="Gedung, lantai, ruang server / data center, nama jalan..."
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 2: Spesifikasi Teknis Layanan */}
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2 pb-1.5 border-b border-slate-100 dark:border-slate-800">
+                  <Network className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                  <h4 className="font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 text-[11px]">
+                    2. Spesifikasi Teknis Layanan Enterprise
+                  </h4>
+                </div>
+
+                {/* Locked Layanan & Bandwidth Notice */}
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 flex items-start space-x-3">
+                  <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 mt-0.5">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <div className="space-y-0.5 flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-amber-900 dark:text-amber-200">
+                        Layanan / Kapasitas Aktif: {site.layanan_dedicated || site.kapasitas_layanan || "-"}
+                      </span>
+                      <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-amber-200/80 dark:bg-amber-900 text-amber-900 dark:text-amber-200 font-bold">
+                        Terkunci / Read-Only
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-amber-800 dark:text-amber-400 leading-relaxed">
+                      Sesuai SOP pengoperasian jaringan, perubahan kapasitas layanan atau bandwidth tidak dapat diedit langsung. Gunakan menu <strong>Upgrade</strong> atau <strong>Downgrade</strong> untuk menerbitkan tiket kerja NOC resmi.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      VLAN ID
+                    </label>
+                    <input
+                      type="number"
+                      value={editForm.vlan}
+                      onChange={(e) => setEditForm({ ...editForm, vlan: e.target.value })}
+                      placeholder="Contoh: 3005"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-purple-600 dark:text-purple-400 font-mono font-bold focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Infrastruktur
+                    </label>
+                    <input
+                      type="text"
+                      list="infrastruktur-ent-list"
+                      value={editForm.infrastruktur}
+                      onChange={(e) => setEditForm({ ...editForm, infrastruktur: e.target.value })}
+                      placeholder="Pilih atau ketik infrastruktur..."
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                    <datalist id="infrastruktur-ent-list">
+                      {DEFAULT_INFRASTRUCTURE_OPTIONS.map((item) => (
+                        <option key={item} value={item} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Media Koneksi Transmisi
+                    </label>
+                    <input
+                      type="text"
+                      list="media-ent-list"
+                      value={editForm.media_koneksi}
+                      onChange={(e) => setEditForm({ ...editForm, media_koneksi: e.target.value })}
+                      placeholder="Pilih atau ketik media (SFP, ONT, RJ45)..."
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                    <datalist id="media-ent-list">
+                      {DEFAULT_MEDIA_OPTIONS.map((item) => (
+                        <option key={item} value={item} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Server / BRAS Aggregator
+                    </label>
+                    <input
+                      type="text"
+                      list="server-ent-list"
+                      value={editForm.server}
+                      onChange={(e) => setEditForm({ ...editForm, server: e.target.value })}
+                      placeholder="Pilih atau ketik nama server / BRAS..."
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                    <datalist id="server-ent-list">
+                      {DEFAULT_SERVER_OPTIONS.map((item) => (
+                        <option key={item} value={item} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      IP Public
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.ip_public}
+                      onChange={(e) => setEditForm({ ...editForm, ip_public: e.target.value })}
+                      placeholder="Contoh: 103.97.111.1/30"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      IP Private
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.ip_private}
+                      onChange={(e) => setEditForm({ ...editForm, ip_private: e.target.value })}
+                      placeholder="Contoh: 192.168.1.1/30"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      SN ONT / Modem CPE
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.sn_ont}
+                      onChange={(e) => setEditForm({ ...editForm, sn_ont: e.target.value })}
+                      placeholder="Contoh: ZTEGC1234567"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Enterprise Specific Parameter */}
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Interkoneksi / Cross Connect
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.interkoneksi}
+                      onChange={(e) => setEditForm({ ...editForm, interkoneksi: e.target.value })}
+                      placeholder="Contoh: MMR Room Rack A-12 to B-05"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Port Interkoneksi / Media
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.port_media}
+                      onChange={(e) => setEditForm({ ...editForm, port_media: e.target.value })}
+                      placeholder="Contoh: Port Te1/0/1 - SFP+ 10G LR"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Tipe Layanan Collocation / Rack
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.tipe_layanan_collo}
+                      onChange={(e) => setEditForm({ ...editForm, tipe_layanan_collo: e.target.value })}
+                      placeholder="Contoh: Full Rack 42U / Half Rack 21U"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Nama Perangkat
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.nama_perangkat}
+                      onChange={(e) => setEditForm({ ...editForm, nama_perangkat: e.target.value })}
+                      placeholder="Contoh: Cisco ASR 1001-X / Juniper MX204"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Serial Number Perangkat
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.sn_perangkat}
+                      onChange={(e) => setEditForm({ ...editForm, sn_perangkat: e.target.value })}
+                      placeholder="Contoh: FOC223401AB"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      AS Number (BGP)
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.as_number}
+                      onChange={(e) => setEditForm({ ...editForm, as_number: e.target.value })}
+                      placeholder="Contoh: AS136052"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Prefix Advertise (BGP / Transit)
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.prefix_advertise}
+                      onChange={(e) => setEditForm({ ...editForm, prefix_advertise: e.target.value })}
+                      placeholder="Contoh: 103.97.111.0/24"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 3: Parameter Sirkuit Provider */}
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2 pb-1.5 border-b border-slate-100 dark:border-slate-800">
+                  <Radio className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                  <h4 className="font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 text-[11px]">
+                    3. Parameter Sirkuit Partner / Provider (Opsional)
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Circuit ID (SID)
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.sid}
+                      onChange={(e) => setEditForm({ ...editForm, sid: e.target.value })}
+                      placeholder="TELKOM-METRO-9812"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Account Order (AO)
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.ao}
+                      onChange={(e) => setEditForm({ ...editForm, ao: e.target.value })}
+                      placeholder="AO-2026-JKT-8821"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Nomor Order Provider
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.nomor_order}
+                      onChange={(e) => setEditForm({ ...editForm, nomor_order: e.target.value })}
+                      placeholder="ORD-TLK-771290"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:ring-2 focus:ring-purple-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 4: Alasan & Catatan Perubahan (Audit Log) */}
+              <div className="space-y-2 p-3.5 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60">
+                <label className="block text-purple-900 dark:text-purple-200 font-bold">
+                  Catatan / Alasan Perubahan Data <span className="text-purple-600">*</span>
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  value={editForm.catatan}
+                  onChange={(e) => setEditForm({ ...editForm, catatan: e.target.value })}
+                  placeholder="Contoh: Update nomor telepon PIC baru, perbaikan konfigurasi port media, update IP publik..."
+                  className="w-full px-3 py-2 rounded-xl border border-purple-200 dark:border-purple-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+                <p className="text-[10px] text-purple-700 dark:text-purple-300">
+                  Catatan ini akan disimpan ke dalam <strong>Riwayat Perubahan Data</strong> secara permanen bersama tanggal dan nama akun penyunting.
+                </p>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-xl font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  Batal
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isSubmittingEdit}
+                  className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                >
+                  <Save className="w-4 h-4 mr-1.5" />
+                  {isSubmittingEdit ? "Menyimpan Perubahan..." : "Simpan Perubahan Data"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

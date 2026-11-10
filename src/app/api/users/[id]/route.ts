@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifySessionToken, hashPassword } from "@/lib/auth";
+import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 
 export async function PUT(
   request: NextRequest,
@@ -107,6 +108,19 @@ export async function PUT(
       },
     });
 
+    // Catat ke Log Aplikasi
+    const actorName = sessionUser?.nama || "Administrator";
+    const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
+    const userAgent = parseUserAgent(request.headers.get("user-agent"));
+    recordActivity({
+      nama_lengkap: actorName,
+      ip_address: clientIp,
+      tipe: "UPDATE_USER",
+      aktifitas: `Memperbarui data pengguna: ${updatedUser.nama} (${updatedUser.email}) - Role: ${updatedUser.role}`,
+      detail: password ? "Data profil & kata sandi diperbarui oleh Administrator" : "Data profil diperbarui",
+      user_agent: userAgent,
+    }).catch(() => {});
+
     return NextResponse.json({
       success: true,
       message: `Data pengguna '${updatedUser.nama}' berhasil diperbarui.`,
@@ -189,6 +203,19 @@ export async function DELETE(
     await prisma.user.delete({
       where: { id },
     });
+
+    // Catat ke Log Aplikasi
+    const actorName = sessionUser?.nama || "Administrator";
+    const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
+    const userAgent = parseUserAgent(request.headers.get("user-agent"));
+    recordActivity({
+      nama_lengkap: actorName,
+      ip_address: clientIp,
+      tipe: "DELETE_USER",
+      aktifitas: `Menghapus akun pengguna: ${targetUser.nama} (${targetUser.email})`,
+      detail: `Role sebelumnya: ${targetUser.role}`,
+      user_agent: userAgent,
+    }).catch(() => {});
 
     return NextResponse.json({
       success: true,

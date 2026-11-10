@@ -1,22 +1,20 @@
 #!/bin/sh
 set -e
 
-echo "==> [ACTIS] Initializing Application Environment..."
+echo "==> [ACTIS] Initializing Application Environment with PostgreSQL..."
 
-# Pastikan folder uploads dan prisma tersedia
+# Pastikan folder uploads tersedia
 mkdir -p /app/public/uploads
-mkdir -p /app/prisma
 
-# Jalankan sinkronisasi database SQLite via Prisma
-echo "==> [ACTIS] Synchronizing SQLite Database Schema..."
+# Sinkronisasi skema database PostgreSQL via Prisma
+echo "==> [ACTIS] Synchronizing PostgreSQL Database Schema via Prisma..."
 npx prisma db push --skip-generate
 
-# Jika database baru dan variabel INITIAL_SEED=true diaktifkan, jalankan seed
-if [ "$INITIAL_SEED" = "true" ] && [ ! -f "/app/prisma/dev.db" ]; then
-  echo "==> [ACTIS] Running Initial Database Seed..."
+# Jika variabel INITIAL_SEED=true diaktifkan, jalankan initial seed
+if [ "$INITIAL_SEED" = "true" ]; then
+  echo "==> [ACTIS] Running Initial Database Seed for PostgreSQL..."
   node prisma/seed.js || true
 fi
 
-echo "==> [ACTIS] Server is ready! Starting Next.js..."
+echo "==> [ACTIS] Database synchronized! Starting Next.js Production Server..."
 exec "$@"
-

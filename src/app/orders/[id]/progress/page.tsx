@@ -31,6 +31,9 @@ import {
   RefreshCw,
   Eye,
   FileText,
+  Ban,
+  X,
+  AlertCircle,
 } from "lucide-react";
 
 interface OrderDetail {
@@ -137,6 +140,12 @@ export default function NocWorkspacePage({
   const [lightboxImage, setLightboxImage] = useState("");
   const [lightboxTitle, setLightboxTitle] = useState("");
   const [lightboxSubtitle, setLightboxSubtitle] = useState("");
+
+  // Cancel Ticket Modal State
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelAlasan, setCancelAlasan] = useState("");
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const fetchOrderDetail = useCallback(async () => {
     try {
@@ -305,6 +314,42 @@ export default function NocWorkspacePage({
     }
   };
 
+  const handleConfirmCancel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order) return;
+
+    if (!cancelAlasan.trim()) {
+      setCancelError("Alasan pembatalan tiket wajib diisi.");
+      return;
+    }
+
+    setIsCancelling(true);
+    setCancelError(null);
+
+    try {
+      const res = await fetch(`/api/orders/${order.id}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: currentUser?.id,
+          alasan: cancelAlasan.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal membatalkan tiket.");
+      }
+
+      setCancelModalOpen(false);
+      fetchOrderDetail();
+    } catch (err: any) {
+      setCancelError(err.message || "Terjadi kesalahan saat membatalkan tiket.");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="py-24 text-center">
@@ -334,7 +379,8 @@ export default function NocWorkspacePage({
   const isMetronexia = order.infrastruktur?.toLowerCase().includes("metronexia") || order.media_koneksi?.toLowerCase().includes("metronexia");
   const hasTestResults = order.test_results.length > 0;
   const isAlreadyCompleted = order.status === "Completed";
-  const canStartTicket = order.status === "Antrian Aktivasi" || order.status === "Pending Issue";
+  const isCancelled = order.status === "Cancelled";
+  const canStartTicket = !isCancelled && !isAlreadyCompleted && (order.status === "Antrian Aktivasi" || order.status === "Pending Issue");
 
   let kontakArr: string[] = [];
   try {
@@ -398,6 +444,22 @@ export default function NocWorkspacePage({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {!isAlreadyCompleted && !isCancelled && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCancelAlasan("");
+                  setCancelError(null);
+                  setCancelModalOpen(true);
+                }}
+                className="inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm border bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 cursor-pointer"
+                title="Batalkan tiket kerja ini"
+              >
+                <Ban className="w-3.5 h-3.5 mr-1.5 text-rose-600 dark:text-rose-400" />
+                Batalkan Tiket
+              </button>
+            )}
+
             <button
               onClick={handleCopyConfig}
               className={`inline-flex items-center px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm border ${
@@ -422,7 +484,7 @@ export default function NocWorkspacePage({
 
             <button
               onClick={() => fetchOrderDetail()}
-              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+              className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
               title="Refresh"
             >
               <RefreshCw className="w-4 h-4" />
@@ -430,6 +492,19 @@ export default function NocWorkspacePage({
           </div>
         </div>
       </div>
+
+      {/* Cancelled Banner */}
+      {isCancelled && (
+        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border-2 border-rose-300 dark:border-rose-800 text-rose-900 dark:text-rose-200 text-sm flex items-start space-x-3">
+          <Ban className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-bold text-rose-950 dark:text-rose-100 text-base">TIKET TELAH DIBATALKAN (CANCELLED)</p>
+            <p className="text-xs text-rose-800 dark:text-rose-300 mt-0.5">
+              Tiket ini telah dibatalkan dari antrean kerja. Seluruh aktivitas konfigurasi dan provisioning dihentikan. Riwayat pembatalan tercatat pada chronological timeline log.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Completion Barrier Warning Banner */}
       {barrierError && (
@@ -825,6 +900,7 @@ export default function NocWorkspacePage({
                 if (log.action_type === "Config Pushed") badgeColor = "bg-purple-100 text-purple-800";
                 if (log.action_type === "Test Uploaded") badgeColor = "bg-emerald-100 text-emerald-800";
                 if (log.action_type === "Status Change") badgeColor = "bg-amber-100 text-amber-800";
+                if (log.action_type === "Cancel Ticket") badgeColor = "bg-rose-100 text-rose-800";
 
                 return (
                   <div key={log.id} className="relative group">
@@ -876,68 +952,74 @@ export default function NocWorkspacePage({
             </div>
 
             {/* New Update Input Area */}
-            <form onSubmit={handleSendProgress} className="pt-4 border-t border-slate-200 space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center">
-                  <MessageSquare className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
-                  Kirim Log Progres NOC
-                </label>
-                <div className="flex items-center space-x-2">
-                  <span className="text-[11px] text-slate-500 font-medium">Tipe:</span>
-                  <select
-                    value={actionType}
-                    onChange={(e) => setActionType(e.target.value)}
-                    className="text-xs px-2 py-1 rounded-lg border border-slate-300 bg-white font-medium"
-                  >
-                    <option value="Progress Note">Progress Note</option>
-                    <option value="Config Pushed">Config Pushed</option>
-                    <option value="Status Change">Status Change</option>
-                  </select>
+            {isCancelled ? (
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-center text-xs text-slate-500 dark:text-slate-400">
+                Pembaruan log progres dinonaktifkan karena tiket ini telah dibatalkan (Cancelled).
+              </div>
+            ) : (
+              <form onSubmit={handleSendProgress} className="pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center">
+                    <MessageSquare className="w-3.5 h-3.5 mr-1.5 text-blue-600 dark:text-blue-400" />
+                    Kirim Log Progres NOC
+                  </label>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Tipe:</span>
+                    <select
+                      value={actionType}
+                      onChange={(e) => setActionType(e.target.value)}
+                      className="text-xs px-2 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium"
+                    >
+                      <option value="Progress Note">Progress Note</option>
+                      <option value="Config Pushed">Config Pushed</option>
+                      <option value="Status Change">Status Change</option>
+                    </select>
+                  </div>
                 </div>
-              </div>
 
-              {/* Quick Template Tag Chips */}
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  "VLAN Binding Port OK",
-                  "OPM Redaman Normal (-18dBm)",
-                  "BGP Peer Established",
-                  "Ping & Latency Stabil < 5ms",
-                  "Testing with Customer OK",
-                ].map((chip) => (
+                {/* Quick Template Tag Chips */}
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    "VLAN Binding Port OK",
+                    "OPM Redaman Normal (-18dBm)",
+                    "BGP Peer Established",
+                    "Ping & Latency Stabil < 5ms",
+                    "Testing with Customer OK",
+                  ].map((chip) => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => handleApplyTemplate(chip)}
+                      className="text-[11px] font-medium bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-lg transition"
+                    >
+                      + {chip}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="relative">
+                  <textarea
+                    required
+                    rows={3}
+                    value={progressInput}
+                    onChange={(e) => setProgressInput(e.target.value)}
+                    placeholder="Masukkan catatan teknis aktivitas (contoh: VLAN 1420 di-binding ke port GE0/0/2, ONT redaman -18 dBm, stabil)..."
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition shadow-sm outline-none"
+                  />
+                </div>
+
+                <div className="flex justify-end">
                   <button
-                    key={chip}
-                    type="button"
-                    onClick={() => handleApplyTemplate(chip)}
-                    className="text-[11px] font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg transition"
+                    type="submit"
+                    disabled={isSubmittingLog || !progressInput.trim()}
+                    className="inline-flex items-center px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition disabled:opacity-50"
                   >
-                    + {chip}
+                    <Send className="w-3.5 h-3.5 mr-1.5" />
+                    {isSubmittingLog ? "Mengirim..." : "Kirim Update Log"}
                   </button>
-                ))}
-              </div>
-
-              <div className="relative">
-                <textarea
-                  required
-                  rows={3}
-                  value={progressInput}
-                  onChange={(e) => setProgressInput(e.target.value)}
-                  placeholder="Masukkan catatan teknis aktivitas (contoh: VLAN 1420 di-binding ke port GE0/0/2, ONT redaman -18 dBm, stabil)..."
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition shadow-sm outline-none"
-                />
-              </div>
-
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  disabled={isSubmittingLog || !progressInput.trim()}
-                  className="inline-flex items-center px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition disabled:opacity-50"
-                >
-                  <Send className="w-3.5 h-3.5 mr-1.5" />
-                  {isSubmittingLog ? "Mengirim..." : "Kirim Update Log"}
-                </button>
-              </div>
-            </form>
+                </div>
+              </form>
+            )}
           </div>
 
           {/* Section Hasil Test (Dropzone & Lightbox Modal) */}
@@ -964,45 +1046,51 @@ export default function NocWorkspacePage({
             </div>
 
             {/* Drag & Drop Dropzone */}
-            <div
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOver(true);
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOver(false);
-                handleFileUpload(e.dataTransfer.files);
-              }}
-              className={`p-6 border-2 border-dashed rounded-2xl text-center transition ${
-                dragOver
-                  ? "border-blue-500 bg-blue-50/60"
-                  : "border-slate-300 hover:border-blue-400 bg-slate-50/50"
-              }`}
-            >
-              <UploadCloud className="w-8 h-8 mx-auto text-blue-500 mb-2" />
-              <p className="text-xs font-bold text-slate-700">
-                Drag and drop file hasil uji di sini, atau klik untuk memilih file
-              </p>
-              <p className="text-[11px] text-slate-400 mt-1">
-                Format didukung: PNG, JPG, JPEG, PDF (Speedtest, OPM Power Meter, Ping Latency, ONT)
-              </p>
+            {isCancelled ? (
+              <div className="p-6 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 text-center text-xs text-slate-500 dark:text-slate-400">
+                Upload hasil test dinonaktifkan karena tiket telah dibatalkan (Cancelled).
+              </div>
+            ) : (
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  handleFileUpload(e.dataTransfer.files);
+                }}
+                className={`p-6 border-2 border-dashed rounded-2xl text-center transition ${
+                  dragOver
+                    ? "border-blue-500 bg-blue-50/60"
+                    : "border-slate-300 hover:border-blue-400 bg-slate-50/50"
+                }`}
+              >
+                <UploadCloud className="w-8 h-8 mx-auto text-blue-500 mb-2" />
+                <p className="text-xs font-bold text-slate-700">
+                  Drag and drop file hasil uji di sini, atau klik untuk memilih file
+                </p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Format didukung: PNG, JPG, JPEG, PDF (Speedtest, OPM Power Meter, Ping Latency, ONT)
+                </p>
 
-              <label className="mt-3 inline-block">
-                <span className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 shadow-sm cursor-pointer transition">
-                  {isUploading ? "Mengunggah..." : "Pilih File dari Perangkat"}
-                </span>
-                <input
-                  type="file"
-                  multiple
-                  accept="image/png,image/jpeg,image/jpg,application/pdf"
-                  onChange={(e) => handleFileUpload(e.target.files)}
-                  disabled={isUploading}
-                  className="hidden"
-                />
-              </label>
-            </div>
+                <label className="mt-3 inline-block">
+                  <span className="px-4 py-2 bg-white hover:bg-slate-100 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 shadow-sm cursor-pointer transition">
+                    {isUploading ? "Mengunggah..." : "Pilih File dari Perangkat"}
+                  </span>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/png,image/jpeg,image/jpg,application/pdf"
+                    onChange={(e) => handleFileUpload(e.target.files)}
+                    disabled={isUploading}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            )}
 
             {/* Test Results Thumbnails Grid */}
             {order.test_results.length > 0 && (
@@ -1082,10 +1170,15 @@ export default function NocWorkspacePage({
                     Buka {order.kategori_layanan === "Enterprise" ? "List Enterprise" : "List POP Site"} &rarr;
                   </Link>
                 </div>
+              ) : isCancelled ? (
+                <span className="px-3 py-1 rounded-full bg-rose-100 dark:bg-rose-950/70 text-rose-800 dark:text-rose-300 text-xs font-bold border border-rose-300 dark:border-rose-800 flex items-center">
+                  <Ban className="w-3.5 h-3.5 mr-1" />
+                  Tiket Dibatalkan
+                </span>
               ) : null}
             </div>
 
-            {!hasTestResults && !isAlreadyCompleted && (
+            {!hasTestResults && !isAlreadyCompleted && !isCancelled && (
               <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center space-x-2">
                 <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                 <span>
@@ -1094,7 +1187,7 @@ export default function NocWorkspacePage({
               </div>
             )}
 
-            {!isAlreadyCompleted && (
+            {!isAlreadyCompleted && !isCancelled && (
               <button
                 type="button"
                 onClick={handleCompleteOrder}
@@ -1112,6 +1205,94 @@ export default function NocWorkspacePage({
           </div>
         </div>
       </div>
+
+      {/* CANCEL TICKET MODAL */}
+      {cancelModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-scaleUp">
+            {/* Header */}
+            <div className="px-6 py-4 bg-rose-600 text-white flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-white/20 text-white flex items-center justify-center">
+                  <Ban className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold">Batalkan Tiket Ini</h3>
+                  <p className="text-xs text-rose-100 font-mono">
+                    {order.ticket_number} &bull; {order.tipe_order || "Aktivasi Baru"}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCancelModalOpen(false)}
+                className="text-rose-100 hover:text-white p-1 rounded-lg hover:bg-rose-700 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <form onSubmit={handleConfirmCancel} className="p-6 space-y-4 text-xs">
+              {cancelError && (
+                <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 flex items-start space-x-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  <span>{cancelError}</span>
+                </div>
+              )}
+
+              <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 space-y-1">
+                <p className="font-bold flex items-center">
+                  <AlertTriangle className="w-4 h-4 mr-1 text-amber-600 dark:text-amber-400" />
+                  Peringatan Pembatalan Tiket
+                </p>
+                <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
+                  Setelah dibatalkan, tiket ini tidak dapat diproses lagi oleh tim NOC. Alasan pembatalan akan dicatat ke dalam audit trail log secara permanen.
+                </p>
+              </div>
+
+              {/* Input Alasan */}
+              <div className="space-y-1.5">
+                <label className="block text-slate-700 dark:text-slate-200 font-bold">
+                  Alasan Pembatalan Tiket <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={cancelAlasan}
+                  onChange={(e) => setCancelAlasan(e.target.value)}
+                  placeholder="Contoh: Permintaan pembatalan dari pelanggan, duplikasi order, salah input paket..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-rose-500 outline-none"
+                />
+                <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                  Alasan pembatalan akan dicatat atas nama akun <strong>{currentUser?.nama || "Staff"}</strong>.
+                </p>
+              </div>
+
+              {/* Footer */}
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setCancelModalOpen(false)}
+                  className="px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-xl font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  Kembali
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isCancelling || !cancelAlasan.trim()}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                >
+                  <Ban className="w-4 h-4 mr-1.5" />
+                  {isCancelling ? "Membatalkan Tiket..." : "Konfirmasi Batalkan Tiket"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

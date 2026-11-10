@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { buildPayloadForOrder, dispatchSheetsSync } from "@/lib/sheetsSync";
+import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 
 export async function POST(
   request: NextRequest,
@@ -93,6 +94,16 @@ export async function POST(
         user: { select: { id: true, nama: true, role: true } },
       },
     });
+
+    // Record application-wide activity log
+    recordActivity({
+      nama_lengkap: newLog.user?.nama || "NOC Engineer",
+      ip_address: request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63",
+      tipe: "UPDATE_ORDER",
+      aktifitas: `Menambahkan catatan progress pada tiket ${order.ticket_number} (${action_type})`,
+      detail: catatan_progress.trim(),
+      user_agent: parseUserAgent(request.headers.get("user-agent")),
+    }).catch(() => {});
 
     // Trigger async sync to Google Spreadsheet (non-blocking)
     const eventType =

@@ -114,9 +114,25 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   }, [fetchUsers]);
 
   const handleSetUser = (user: AppUser) => {
+    const prev = currentUser;
     setCurrentUserState(user);
     setIsAuthenticated(true);
     localStorage.setItem("actis_active_user", JSON.stringify(user));
+
+    if (prev && prev.id !== user.id) {
+      try {
+        fetch("/api/logs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nama_lengkap: user.nama,
+            email: user.email,
+            tipe: "LOGIN_SUCCESS",
+            aktifitas: `Berhasil login ke aplikasi — ${user.nama}`,
+          }),
+        }).catch(() => {});
+      } catch {}
+    }
   };
 
   const login = async (email: string, password: string) => {
@@ -128,11 +144,37 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
+        try {
+          fetch("/api/logs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              nama_lengkap: email.split("@")[0] || email,
+              email,
+              tipe: "LOGIN_FAILED",
+              aktifitas: `Login gagal — username ${email.split("@")[0] || email}`,
+            }),
+          }).catch(() => {});
+        } catch {}
         return { success: false, error: data.error || "Login gagal. Periksa email dan password Anda." };
       }
 
       handleSetUser(data.user);
       await fetchUsers();
+
+      try {
+        fetch("/api/logs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nama_lengkap: data.user.nama,
+            email: data.user.email,
+            tipe: "LOGIN_SUCCESS",
+            aktifitas: `Berhasil login ke aplikasi`,
+          }),
+        }).catch(() => {});
+      } catch {}
+
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message || "Terjadi kesalahan koneksi server." };
@@ -141,6 +183,18 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
+      if (currentUser) {
+        fetch("/api/logs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nama_lengkap: currentUser.nama,
+            email: currentUser.email,
+            tipe: "LOGOUT",
+            aktifitas: `Sesi ditutup — logout dari aplikasi`,
+          }),
+        }).catch(() => {});
+      }
       await fetch("/api/auth/logout", { method: "POST" });
     } catch (e) {
       console.error("Logout error", e);

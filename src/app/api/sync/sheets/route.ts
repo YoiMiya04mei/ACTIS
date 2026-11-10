@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { forceSyncAllOrdersToSheets, getWebhookUrl } from "@/lib/sheetsSync";
+import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { verifySessionToken } from "@/lib/auth";
 
 export async function GET() {
   try {
@@ -45,6 +47,22 @@ export async function POST(request: NextRequest) {
     const triggeredBy = body.triggered_by || "Admin";
 
     const result = await forceSyncAllOrdersToSheets(triggeredBy);
+
+    // Catat ke Log Aplikasi
+    const sessionCookie = request.cookies.get("actis_session")?.value;
+    const sessionUser = verifySessionToken(sessionCookie);
+    const actorName = sessionUser?.nama || triggeredBy || "Administrator";
+    const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
+    const userAgent = parseUserAgent(request.headers.get("user-agent"));
+    const failedCount = result.total - result.synced;
+    recordActivity({
+      nama_lengkap: actorName,
+      ip_address: clientIp,
+      tipe: "SHEETS_SYNC",
+      aktifitas: `Melakukan sinkronisasi manual Google Sheets (${result.synced}/${result.total} order)`,
+      detail: `Berhasil: ${result.synced}, Gagal: ${failedCount}, Total: ${result.total}`,
+      user_agent: userAgent,
+    }).catch(() => {});
 
     return NextResponse.json({
       success: true,

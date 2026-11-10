@@ -38,6 +38,7 @@ import {
   PlusCircle,
   FileCheck2,
   Info,
+  RotateCcw,
   ChevronRight,
   Clock,
   Radio,
@@ -49,6 +50,8 @@ import {
   HardDrive,
   Globe,
   Cpu,
+  CheckSquare,
+  X,
 } from "lucide-react";
 
 interface TestItem {
@@ -156,6 +159,7 @@ export default function EnterpriseListPage() {
     isolir: 0,
     unisolir: 0,
     terminate: 0,
+    unterminate: 0,
   });
 
   const [subLayananCounts, setSubLayananCounts] = useState<{
@@ -176,7 +180,7 @@ export default function EnterpriseListPage() {
 
   // Action Modal State
   const [selectedSite, setSelectedSite] = useState<EnterpriseSiteItem | null>(null);
-  const [actionType, setActionType] = useState<"Upgrade" | "Downgrade" | "Isolir" | "Unisolir" | "Terminate" | null>(null);
+  const [actionType, setActionType] = useState<"Upgrade" | "Downgrade" | "Isolir" | "Unisolir" | "Terminate" | "Unterminated" | null>(null);
   const [newLayanan, setNewLayanan] = useState("");
   const [newVlan, setNewVlan] = useState("");
   const [actionAlasan, setActionAlasan] = useState("");
@@ -192,6 +196,24 @@ export default function EnterpriseListPage() {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState("");
   const [lightboxTitle, setLightboxTitle] = useState("");
+
+  // Multi-Select State
+  const [selectedSiteIds, setSelectedSiteIds] = useState<string[]>([]);
+  const [copiedSiteIds, setCopiedSiteIds] = useState(false);
+
+  // Bulk Action State
+  const [bulkActionType, setBulkActionType] = useState<"Upgrade" | "Downgrade" | "Isolir" | "Terminate" | null>(null);
+  const [bulkNewLayanan, setBulkNewLayanan] = useState("");
+  const [bulkAlasan, setBulkAlasan] = useState("");
+  const [bulkCatatan, setBulkCatatan] = useState("");
+  const [isSubmittingBulkAction, setIsSubmittingBulkAction] = useState(false);
+  const [bulkActionSuccess, setBulkActionSuccess] = useState<{
+    message: string;
+    created_count: number;
+    skipped_count: number;
+    tickets: Array<{ id: string; ticket_number: string; site_id: string; nama_pic: string }>;
+    skipped: Array<{ site_id: string; reason: string }>;
+  } | null>(null);
 
   const fetchSites = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -242,6 +264,123 @@ export default function EnterpriseListPage() {
     return sites.slice(start, start + pageSize);
   }, [sites, currentPage, pageSize]);
 
+  // Multi-Select Helpers
+  const isAllCurrentPageSelected = useMemo(() => {
+    if (paginatedSites.length === 0) return false;
+    return paginatedSites.every((s) => selectedSiteIds.includes(s.id));
+  }, [paginatedSites, selectedSiteIds]);
+
+  const isSomeCurrentPageSelected = useMemo(() => {
+    return paginatedSites.some((s) => selectedSiteIds.includes(s.id));
+  }, [paginatedSites, selectedSiteIds]);
+
+  const handleToggleSelectSite = (id: string) => {
+    setSelectedSiteIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSelectAllCurrentPage = () => {
+    if (isAllCurrentPageSelected) {
+      const pageIds = new Set(paginatedSites.map((s) => s.id));
+      setSelectedSiteIds((prev) => prev.filter((id) => !pageIds.has(id)));
+    } else {
+      const pageIds = paginatedSites.map((s) => s.id);
+      setSelectedSiteIds((prev) => Array.from(new Set([...prev, ...pageIds])));
+    }
+  };
+
+  const handleSelectAllFiltered = () => {
+    setSelectedSiteIds(sites.map((s) => s.id));
+  };
+
+  const selectedSites = useMemo(() => {
+    return sites.filter((s) => selectedSiteIds.includes(s.id));
+  }, [sites, selectedSiteIds]);
+
+  // Validasi otomatis: jika ada pilihan berstatus Isolir atau Terminated, Upgrade dan Downgrade massal dinonaktifkan
+  const hasIsolirOrTerminatedSelected = useMemo(() => {
+    return selectedSites.some(
+      (s) => s.status_layanan === "Isolir" || s.status_layanan === "Terminated"
+    );
+  }, [selectedSites]);
+
+  const handleOpenBulkAction = (type: "Upgrade" | "Downgrade" | "Isolir" | "Terminate") => {
+    if ((type === "Upgrade" || type === "Downgrade") && hasIsolirOrTerminatedSelected) {
+      alert("Upgrade dan Downgrade massal tidak dapat dilakukan karena terdapat sirkuit dengan status Isolir atau Terminated yang dipilih. Pastikan seluruh sirkuit terpilih berstatus Active.");
+      return;
+    }
+    setBulkActionType(type);
+    setBulkAlasan("");
+    setBulkCatatan("");
+    setBulkActionSuccess(null);
+    if (type === "Upgrade") {
+      setBulkNewLayanan("500Mbps");
+    } else if (type === "Downgrade") {
+      setBulkNewLayanan("50Mbps");
+    } else {
+      setBulkNewLayanan("");
+    }
+  };
+
+  const handleExecuteBulkAction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bulkActionType || selectedSiteIds.length === 0) return;
+
+    if ((bulkActionType === "Upgrade" || bulkActionType === "Downgrade") && !bulkNewLayanan) {
+      alert("Silakan tentukan paket / kapasitas layanan baru.");
+      return;
+    }
+    if (!bulkAlasan.trim()) {
+      alert(`Silakan isi alasan pengajuan ${bulkActionType}.`);
+      return;
+    }
+
+    setIsSubmittingBulkAction(true);
+    try {
+      const res = await fetch("/api/pop-sites/bulk-actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site_ids: selectedSiteIds,
+          action_type: bulkActionType,
+          layanan_dedicated: bulkNewLayanan,
+          alasan: bulkAlasan.trim(),
+          catatan: bulkCatatan.trim(),
+          user_id: currentUser?.id,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal memproses aksi massal.");
+      }
+
+      setBulkActionSuccess({
+        message: data.message,
+        created_count: data.data.created_count,
+        skipped_count: data.data.skipped_count,
+        tickets: data.data.created,
+        skipped: data.data.skipped,
+      });
+      fetchSites(true);
+    } catch (err: any) {
+      alert(err.message || "Terjadi kesalahan saat memproses aksi massal.");
+    } finally {
+      setIsSubmittingBulkAction(false);
+    }
+  };
+
+  const handleCopySelectedSiteIds = () => {
+    const selectedSites = sites
+      .filter((s) => selectedSiteIds.includes(s.id))
+      .map((s) => s.site_id);
+    if (selectedSites.length === 0) return;
+    navigator.clipboard.writeText(selectedSites.join(", "));
+    setCopiedSiteIds(true);
+    setTimeout(() => setCopiedSiteIds(false), 2000);
+  };
+
   const isBandwidthService = useMemo(() => {
     if (!selectedSite) return false;
     const currentVal = selectedSite.layanan_dedicated || selectedSite.kapasitas_layanan || "";
@@ -260,7 +399,7 @@ export default function EnterpriseListPage() {
     return DEDICATED_SERVICE_OPTIONS;
   }, [selectedSite, actionType]);
 
-  const openActionModal = (site: EnterpriseSiteItem, type: "Upgrade" | "Downgrade" | "Isolir" | "Unisolir" | "Terminate") => {
+  const openActionModal = (site: EnterpriseSiteItem, type: "Upgrade" | "Downgrade" | "Isolir" | "Unisolir" | "Terminate" | "Unterminated") => {
     setSelectedSite(site);
     setActionType(type);
     const currentLayanan = site.layanan_dedicated || site.kapasitas_layanan || "";
@@ -422,6 +561,7 @@ export default function EnterpriseListPage() {
               { label: "Isolir (Suspended)", value: "Isolir", count: historyCounts.isolir, icon: <ShieldAlert className="w-3.5 h-3.5 text-amber-500" /> },
               { label: "Unisolir (Buka Isolir)", value: "Unisolir", count: historyCounts.unisolir, icon: <ShieldCheck className="w-3.5 h-3.5 text-teal-500" /> },
               { label: "Terminasi (Tutup)", value: "Terminate", count: historyCounts.terminate, icon: <PowerOff className="w-3.5 h-3.5 text-rose-500" /> },
+              { label: "Unterminated", value: "Unterminated", count: (historyCounts as any).unterminated || (historyCounts as any).unterminate || 0, icon: <RotateCcw className="w-3.5 h-3.5 text-emerald-500" /> },
             ].map((item) => {
               const isActive = selectedTipe === item.value;
               return (
@@ -581,10 +721,143 @@ export default function EnterpriseListPage() {
         ) : (
           /* Table View */
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm overflow-hidden">
+            {/* Multi-Select Action Toolbar */}
+            {selectedSiteIds.length > 0 && (
+              <div className="bg-purple-50/90 dark:bg-purple-950/80 border-b border-purple-200 dark:border-purple-900 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs text-purple-950 dark:text-purple-100 animate-fadeIn">
+                <div className="flex items-center space-x-3">
+                  <span className="font-bold flex items-center text-purple-900 dark:text-purple-200">
+                    <CheckSquare className="w-4 h-4 mr-1.5 text-purple-600 dark:text-purple-400" />
+                    {selectedSiteIds.length} Layanan Enterprise dipilih
+                  </span>
+                  <span className="text-purple-300 dark:text-purple-700">&bull;</span>
+                  <button
+                    type="button"
+                    onClick={handleToggleSelectAllCurrentPage}
+                    className="text-purple-700 dark:text-purple-300 hover:text-purple-900 dark:hover:text-purple-100 font-semibold underline underline-offset-2 transition cursor-pointer"
+                  >
+                    {isAllCurrentPageSelected ? "Batal Pilih Halaman Ini" : `Pilih Semua di Halaman (${paginatedSites.length})`}
+                  </button>
+                  {sites.length > paginatedSites.length && (
+                    <>
+                      <span className="text-purple-300 dark:text-purple-700">&bull;</span>
+                      <button
+                        type="button"
+                        onClick={handleSelectAllFiltered}
+                        className="text-purple-700 dark:text-purple-300 hover:text-purple-900 dark:hover:text-purple-100 font-semibold underline underline-offset-2 transition cursor-pointer"
+                      >
+                        Pilih Semua Hasil Filter ({sites.length})
+                      </button>
+                    </>
+                  )}
+                </div>
+
+                <div className="flex items-center space-x-2 flex-wrap gap-y-1">
+                  {/* Indikator Peringatan jika ada Isolir / Terminated */}
+                  {hasIsolirOrTerminatedSelected && (
+                    <span
+                      className="inline-flex items-center px-2 py-1 rounded-lg text-[11px] font-bold bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700"
+                      title="Ada sirkuit berstatus Isolir atau Terminated yang dipilih. Upgrade & Downgrade massal dinonaktifkan otomatis."
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 mr-1 text-amber-600 dark:text-amber-400 shrink-0" />
+                      Ada Isolir / Terminated
+                    </span>
+                  )}
+
+                  {/* Aksi Massal / Bulk Actions */}
+                  <button
+                    type="button"
+                    disabled={hasIsolirOrTerminatedSelected}
+                    onClick={() => handleOpenBulkAction("Upgrade")}
+                    className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-emerald-600 text-white shadow-2xs transition"
+                    title={
+                      hasIsolirOrTerminatedSelected
+                        ? "Upgrade massal tidak dapat dilakukan karena ada sirkuit berstatus Isolir atau Terminated yang dipilih"
+                        : "Buat tiket Upgrade sekaligus untuk seluruh sirkuit terpilih"
+                    }
+                  >
+                    <TrendingUp className="w-3.5 h-3.5 mr-1" />
+                    Upgrade
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={hasIsolirOrTerminatedSelected}
+                    onClick={() => handleOpenBulkAction("Downgrade")}
+                    className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-blue-600 text-white shadow-2xs transition"
+                    title={
+                      hasIsolirOrTerminatedSelected
+                        ? "Downgrade massal tidak dapat dilakukan karena ada sirkuit berstatus Isolir atau Terminated yang dipilih"
+                        : "Buat tiket Downgrade sekaligus untuk seluruh sirkuit terpilih"
+                    }
+                  >
+                    <TrendingDown className="w-3.5 h-3.5 mr-1" />
+                    Down
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenBulkAction("Isolir")}
+                    className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-2xs transition cursor-pointer"
+                    title="Buat tiket Isolir sekaligus untuk seluruh sirkuit terpilih"
+                  >
+                    <ShieldAlert className="w-3.5 h-3.5 mr-1" />
+                    Isolir
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleOpenBulkAction("Terminate")}
+                    className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-2xs transition cursor-pointer"
+                    title="Buat tiket Terminate sekaligus untuk seluruh sirkuit terpilih"
+                  >
+                    <PowerOff className="w-3.5 h-3.5 mr-1" />
+                    Terminate
+                  </button>
+
+                  <span className="text-purple-300 dark:text-purple-700">&bull;</span>
+
+                  {/* Salin Site ID */}
+                  <button
+                    type="button"
+                    onClick={handleCopySelectedSiteIds}
+                    className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition shadow-2xs cursor-pointer"
+                  >
+                    <Copy className="w-3.5 h-3.5 mr-1 text-slate-500 dark:text-slate-400" />
+                    {copiedSiteIds ? "Tersalin!" : "Salin Site ID"}
+                  </button>
+
+                  {/* Reset / Deselect All */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSiteIds([])}
+                    className="inline-flex items-center px-2 py-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-purple-100/60 dark:hover:bg-purple-900/40 transition cursor-pointer"
+                    title="Batal pilih semua"
+                  >
+                    <X className="w-4 h-4 mr-0.5" />
+                    Batal Pilih
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-900 dark:bg-slate-950 text-white font-semibold uppercase tracking-wider text-[11px]">
+                    <th className="py-3.5 pl-4 pr-2 w-10 text-center">
+                      <div className="flex items-center justify-center">
+                        <input
+                          type="checkbox"
+                          checked={isAllCurrentPageSelected}
+                          ref={(el) => {
+                            if (el) el.indeterminate = isSomeCurrentPageSelected && !isAllCurrentPageSelected;
+                          }}
+                          onChange={handleToggleSelectAllCurrentPage}
+                          title="Pilih semua di halaman ini"
+                          className="w-4 h-4 rounded border-slate-400 dark:border-slate-600 text-purple-600 focus:ring-purple-500 dark:focus:ring-purple-400 focus:ring-2 cursor-pointer transition-colors accent-purple-600"
+                        />
+                      </div>
+                    </th>
                     <th className="py-3.5 px-4">Site ID</th>
                     <th className="py-3.5 px-4">Status</th>
                     <th className="py-3.5 px-4">Perusahaan / PIC</th>
@@ -596,8 +869,28 @@ export default function EnterpriseListPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-medium text-slate-700 dark:text-slate-300">
-                  {paginatedSites.map((site) => (
-                    <tr key={site.id} className="hover:bg-slate-50/90 dark:hover:bg-slate-800/50 transition-colors">
+                  {paginatedSites.map((site) => {
+                    const isSelected = selectedSiteIds.includes(site.id);
+                    return (
+                    <tr
+                      key={site.id}
+                      className={`transition-colors ${
+                        isSelected
+                          ? "bg-purple-50/80 dark:bg-purple-950/40 hover:bg-purple-100/70 dark:hover:bg-purple-900/50"
+                          : "hover:bg-slate-50/90 dark:hover:bg-slate-800/50"
+                      }`}
+                    >
+                      <td className="py-3.5 pl-4 pr-2 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSelectSite(site.id)}
+                            title={`Pilih ${site.site_id}`}
+                            className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-purple-600 focus:ring-purple-500 dark:focus:ring-purple-400 focus:ring-2 cursor-pointer transition-colors accent-purple-600"
+                          />
+                        </div>
+                      </td>
                       <td className="py-3.5 px-4 font-mono font-bold whitespace-nowrap">
                         <Link
                           href={`/enterprise/${site.id}`}
@@ -709,6 +1002,17 @@ export default function EnterpriseListPage() {
                               Term
                             </button>
                           </div>
+                        ) : site.status_layanan === "Terminated" ? (
+                          <div className="inline-flex items-center space-x-1.5">
+                            <button
+                              onClick={() => openActionModal(site, "Unterminated")}
+                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center transition shadow-xs"
+                              title="Buka Terminasi (Unterminated / Reaktivasi Sirkuit)"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                              Unterminated
+                            </button>
+                          </div>
                         ) : (
                           <div className="inline-flex items-center space-x-1">
                             <button
@@ -747,7 +1051,8 @@ export default function EnterpriseListPage() {
                         )}
                       </td>
                     </tr>
-                  ))}
+                  );
+                })}
                 </tbody>
               </table>
             </div>
@@ -924,6 +1229,255 @@ export default function EnterpriseListPage() {
                     className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold shadow-md shadow-purple-500/20 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
                   >
                     {isSubmittingAction ? "Memproses..." : `Kirim ke Antrean ${actionType}`}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+      {/* BULK ACTION MODAL (Buat Tiket Sekaligus) */}
+      {bulkActionType && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-scaleUp">
+            {/* Modal Header */}
+            <div
+              className={`px-6 py-4 flex items-center justify-between border-b text-white shrink-0 ${
+                bulkActionType === "Upgrade"
+                  ? "bg-emerald-600 border-emerald-700"
+                  : bulkActionType === "Downgrade"
+                  ? "bg-blue-600 border-blue-700"
+                  : bulkActionType === "Isolir"
+                  ? "bg-amber-600 border-amber-700"
+                  : "bg-rose-600 border-rose-700"
+              }`}
+            >
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center">
+                  {bulkActionType === "Upgrade" && <TrendingUp className="w-5 h-5 text-white" />}
+                  {bulkActionType === "Downgrade" && <TrendingDown className="w-5 h-5 text-white" />}
+                  {bulkActionType === "Isolir" && <ShieldAlert className="w-5 h-5 text-white" />}
+                  {bulkActionType === "Terminate" && <PowerOff className="w-5 h-5 text-white" />}
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    Buat Tiket {bulkActionType} Sekaligus
+                  </h3>
+                  <p className="text-xs text-white/80">
+                    Menerbitkan tiket kerja antrean untuk <strong>{selectedSites.length} Sirkuit Enterprise</strong> terpilih.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setBulkActionType(null)}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {bulkActionSuccess ? (
+              <div className="p-6 space-y-4 overflow-y-auto">
+                <div className="text-center space-y-2">
+                  <CheckCircle2 className="w-12 h-12 mx-auto text-emerald-600 animate-bounce" />
+                  <h4 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                    {bulkActionSuccess.created_count} Tiket Berhasil Dibuat!
+                  </h4>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    {bulkActionSuccess.message}
+                  </p>
+                </div>
+
+                {/* List created tickets */}
+                <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3 border border-slate-200 dark:border-slate-700 space-y-2 max-h-48 overflow-y-auto">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">
+                    Daftar Tiket Antrean Terbit:
+                  </span>
+                  {bulkActionSuccess.tickets.map((t) => (
+                    <div
+                      key={t.id}
+                      className="flex items-center justify-between text-xs py-1.5 border-b border-slate-200/60 dark:border-slate-700/60 last:border-0"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <span className="font-mono font-bold text-slate-900 dark:text-slate-100">{t.ticket_number}</span>
+                        <span className="text-slate-400">&bull;</span>
+                        <span className="font-mono font-semibold text-emerald-700 dark:text-emerald-400">{t.site_id}</span>
+                        <span className="text-slate-500 dark:text-slate-400">({t.nama_pic})</span>
+                      </div>
+                      <Link
+                        href={`/orders/${t.id}/progress`}
+                        className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-bold"
+                      >
+                        Buka Tiket &rarr;
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+
+                {/* List skipped (if any) */}
+                {bulkActionSuccess.skipped && bulkActionSuccess.skipped.length > 0 && (
+                  <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-xs space-y-1">
+                    <span className="font-bold text-amber-800 dark:text-amber-300 flex items-center">
+                      <AlertTriangle className="w-3.5 h-3.5 mr-1" />
+                      {bulkActionSuccess.skipped.length} Sirkuit Dilewati:
+                    </span>
+                    {bulkActionSuccess.skipped.map((s, idx) => (
+                      <p key={idx} className="text-amber-700 dark:text-amber-400 text-[11px]">
+                        <strong>{s.site_id}</strong>: {s.reason}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                <div className="pt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBulkActionType(null);
+                      setSelectedSiteIds([]);
+                    }}
+                    className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold"
+                  >
+                    Selesai & Bersihkan Pilihan
+                  </button>
+                  <Link
+                    href="/queue"
+                    className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-md shadow-purple-500/20"
+                  >
+                    Buka Board Antrean &rarr;
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleExecuteBulkAction} className="p-6 space-y-4 overflow-y-auto text-xs">
+                {/* Selected Sites Preview */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                      Sirkuit yang Dipilih ({selectedSites.length})
+                    </label>
+                    <span className="text-[10px] text-slate-400">
+                      Seluruh sirkuit ini akan diajukan ke tiket {bulkActionType}
+                    </span>
+                  </div>
+                  <div className="max-h-36 overflow-y-auto space-y-1.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                    {selectedSites.map((site) => (
+                      <div
+                        key={site.id}
+                        className="flex items-center justify-between py-1 px-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700/80"
+                      >
+                        <div className="flex items-center space-x-2">
+                          <span className="font-mono font-bold text-slate-900 dark:text-slate-100">{site.site_id}</span>
+                          <span className="text-slate-600 dark:text-slate-300 font-medium">({site.nama_perusahaan || site.nama_pic})</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <span className="font-semibold text-slate-500 dark:text-slate-400 text-[11px]">
+                            {site.layanan_dedicated || site.kapasitas_layanan || "-"}
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                              site.status_layanan === "Active"
+                                ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                                : site.status_layanan === "Isolir"
+                                ? "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                                : "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300"
+                            }`}
+                          >
+                            {site.status_layanan}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* If Upgrade / Downgrade: Target Bandwidth */}
+                {(bulkActionType === "Upgrade" || bulkActionType === "Downgrade") && (
+                  <div className="space-y-2 p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                    <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                      Paket / Kapasitas Baru Bersama <span className="text-rose-500">*</span>
+                    </label>
+                    <SearchableSelect
+                      value={bulkNewLayanan}
+                      onChange={setBulkNewLayanan}
+                      options={DEDICATED_SERVICE_OPTIONS}
+                      placeholder={`Pilih kapasitas baru untuk ${bulkActionType} (misal: 250Mbps, 500Mbps, 1G)...`}
+                      required
+                    />
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                      Nilai kapasitas ini akan diterapkan ke seluruh tiket {bulkActionType} yang dibuat.
+                    </p>
+                  </div>
+                )}
+
+                {/* Input Alasan */}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                    Alasan Pengajuan {bulkActionType} Sekaligus <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={bulkAlasan}
+                    onChange={(e) => setBulkAlasan(e.target.value)}
+                    placeholder={
+                      bulkActionType === "Upgrade"
+                        ? "Penambahan kapasitas bandwidth regional kuartal baru"
+                        : bulkActionType === "Downgrade"
+                        ? "Penyesuaian kebutuhan paket pelanggan korporat"
+                        : bulkActionType === "Isolir"
+                        ? "Tunggakan invoice tagihan operasional / suspend sementara"
+                        : "Penutupan sirkuit massal / migrasi layanan"
+                    }
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-purple-500 outline-none text-xs font-medium"
+                  />
+                </div>
+
+                {/* Input Catatan */}
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+                    Catatan Teknis untuk NOC Engineer (Opsional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={bulkCatatan}
+                    onChange={(e) => setBulkCatatan(e.target.value)}
+                    placeholder="Instruksi pengerjaan batch NOC, jadwal eksekusi, dsb..."
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-purple-500 outline-none text-xs"
+                  />
+                </div>
+
+                {/* Footer Buttons */}
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => setBulkActionType(null)}
+                    className="px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-xl font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    Batal
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={
+                      isSubmittingBulkAction ||
+                      ((bulkActionType === "Upgrade" || bulkActionType === "Downgrade") && !bulkNewLayanan)
+                    }
+                    className={`px-5 py-2.5 rounded-xl text-white font-bold shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center ${
+                      bulkActionType === "Upgrade"
+                        ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-500/20"
+                        : bulkActionType === "Downgrade"
+                        ? "bg-blue-600 hover:bg-blue-700 shadow-blue-500/20"
+                        : bulkActionType === "Isolir"
+                        ? "bg-amber-600 hover:bg-amber-700 shadow-amber-500/20"
+                        : "bg-rose-600 hover:bg-rose-700 shadow-rose-500/20"
+                    }`}
+                  >
+                    {isSubmittingBulkAction
+                      ? "Memproses Tiket Massal..."
+                      : `Buat ${selectedSites.length} Tiket ${bulkActionType} Sekaligus`}
                   </button>
                 </div>
               </form>

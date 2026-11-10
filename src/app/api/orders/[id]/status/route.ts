@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { buildPayloadForOrder, dispatchSheetsSync } from "@/lib/sheetsSync";
 import { generateSiteCode } from "@/lib/ticketUtils";
+import { ensureIcmpMonitorForSite } from "@/lib/icmpMonitorService";
+import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 
 export async function POST(
   request: NextRequest,
@@ -18,6 +20,7 @@ export async function POST(
       "Pending Issue",
       "Completed",
       "Terminated",
+      "Cancelled",
     ];
 
     if (!status || !validStatuses.includes(status)) {
@@ -133,7 +136,7 @@ export async function POST(
             where: { id: targetPopSiteId },
             data: { status_layanan: "Isolir" },
           });
-        } else if (order.tipe_order === "Unisolir") {
+        } else if (order.tipe_order === "Unisolir" || order.tipe_order === "Unterminate" || order.tipe_order === "Unterminated") {
           await prisma.popSite.update({
             where: { id: targetPopSiteId },
             data: { status_layanan: "Active" },
@@ -158,6 +161,13 @@ export async function POST(
       },
     });
 
+    // AUTO-CREATE / SYNC ICMP MONITOR UPON ACTIVATION COMPLETION (POP Site & Enterprise Dedicated)
+    if (status === "Completed" && targetPopSiteId) {
+      ensureIcmpMonitorForSite(targetPopSiteId).catch((err) => {
+        console.error("Auto-create ICMP monitor error upon completion:", err);
+      });
+    }
+
     // Formulate default note
     let progressNote = note;
     if (!progressNote) {
@@ -181,6 +191,17 @@ export async function POST(
         catatan_progress: progressNote,
       },
     });
+
+    // Record application-wide activity log
+    recordActivity({
+      nama_lengkap: userName,
+      email: user?.email || null,
+      ip_address: request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63",
+      tipe: "UPDATE_ORDER",
+      aktifitas: `Mengubah status tiket ${order.ticket_number} menjadi ${status}`,
+      detail: progressNote,
+      user_agent: parseUserAgent(request.headers.get("user-agent")),
+    }).catch(() => {});
 
     // Trigger async sync to Google Sheets
     buildPayloadForOrder(orderId, "STATUS_CHANGE", {

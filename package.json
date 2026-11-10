@@ -4,20 +4,27 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:clean": "node -e \"try { require('fs').rmSync('.next', { recursive: true, force: true }); } catch (e) {}\" && next dev",
+    "clean": "node -e \"try { require('fs').rmSync('.next', { recursive: true, force: true }); } catch (e) {}\"",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "test": "node test-e2e.js",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
-    "db:seed": "node prisma/seed.js"
+    "db:seed": "node prisma/seed.js",
+    "db:migrate-from-sqlite": "node scripts/migrate-sqlite-to-postgres.js"
   },
   "dependencies": {
     "@prisma/client": "^6.4.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "html2canvas-pro": "^2.6.3",
+    "jspdf": "^4.2.1",
+    "jszip": "^3.10.2",
     "lucide-react": "^1.16.0",
     "next": "^15.2.1",
+    "pdfjs-dist": "^6.5.438",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwind-merge": "^3.0.2"

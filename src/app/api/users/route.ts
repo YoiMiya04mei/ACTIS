@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifySessionToken, hashPassword } from "@/lib/auth";
+import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 
 export async function GET() {
   try {
@@ -96,6 +97,19 @@ export async function POST(request: NextRequest) {
         created_at: true,
       },
     });
+
+    // Catat ke Log Aplikasi
+    const actorName = sessionUser?.nama || "Administrator";
+    const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
+    const userAgent = parseUserAgent(request.headers.get("user-agent"));
+    recordActivity({
+      nama_lengkap: actorName,
+      ip_address: clientIp,
+      tipe: "CREATE_USER",
+      aktifitas: `Menambahkan pengguna baru: ${newUser.nama} (${newUser.email}) - Role: ${newUser.role}`,
+      detail: `ID: ${newUser.id}`,
+      user_agent: userAgent,
+    }).catch(() => {});
 
     return NextResponse.json(
       {

@@ -7,6 +7,7 @@ import { useCurrentUser } from "@/context/UserContext";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LightboxModal } from "@/components/LightboxModal";
 import { SearchableSelect } from "@/components/SearchableSelect";
+import { IcmpMonitorWidget } from "@/components/IcmpMonitorWidget";
 import {
   generateNocCoordinationText,
   DEDICATED_SERVICE_OPTIONS,
@@ -30,6 +31,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   PowerOff,
+  RotateCcw,
   Copy,
   Check,
   RefreshCw,
@@ -47,6 +49,12 @@ import {
   Globe,
   HardDrive,
   Cpu,
+  Edit3,
+  Lock,
+  Plus,
+  Trash2,
+  X,
+  Save,
 } from "lucide-react";
 
 interface TestItem {
@@ -95,6 +103,28 @@ interface OrderHistoryItem {
   };
 }
 
+interface DataChangeDiff {
+  field: string;
+  label: string;
+  old_value: string;
+  new_value: string;
+}
+
+interface DataChangeLogItem {
+  id: string;
+  pop_site_id: string;
+  user_id: string;
+  user?: {
+    id: string;
+    nama: string;
+    role: string;
+    email: string;
+  } | null;
+  changes: string; // JSON string of DataChangeDiff[]
+  catatan?: string | null;
+  created_at: string;
+}
+
 interface PopSiteDetail {
   id: string;
   site_id: string;
@@ -130,7 +160,32 @@ interface PopSiteDetail {
   created_at: string;
   updated_at: string;
   orders: OrderHistoryItem[];
+  data_change_logs?: DataChangeLogItem[];
 }
+
+const DEFAULT_SERVER_OPTIONS = [
+  "JAKARTA P1",
+  "JAKARTA P2",
+  "BANDUNG (BBU)",
+  "CIANJUR (GEKBRONG)",
+  "PELABUHAN RATU",
+  "SUKABUMI",
+  "CIKIDANG",
+  "SURABAYA",
+  "POP MARGA'ASIH (FERIHANZANI)",
+];
+
+const DEFAULT_INFRASTRUCTURE_OPTIONS = [
+  "JDP",
+  "MITRA (jemput)",
+  "METRO E LINTAS ARTHA",
+  "METRO E ION (HSP)",
+  "METRO E IFORTE",
+  "METRONEXIA",
+  "FIBERSTAR",
+];
+
+const DEFAULT_MEDIA_OPTIONS = ["SFP", "ONT", "RJ45", "Metro Telkom", "Radio Ubiquiti"];
 
 export default function PopSiteDetailPage({
   params,
@@ -147,6 +202,31 @@ export default function PopSiteDetailPage({
 
   // History classification tab on the right
   const [historyTab, setHistoryTab] = useState("Semua");
+  const [activeMainTab, setActiveMainTab] = useState<"lifecycle" | "data_changes">("lifecycle");
+
+  // Edit Data Modal State
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editSuccess, setEditSuccess] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    nama_pic: "",
+    nama_perusahaan: "",
+    email_pic: "",
+    kontak_pic: [""] as string[],
+    alamat_instalasi: "",
+    vlan: "",
+    infrastruktur: "",
+    media_koneksi: "",
+    ip_public: "",
+    ip_private: "",
+    server: "",
+    sn_ont: "",
+    sid: "",
+    ao: "",
+    nomor_order: "",
+    catatan: "",
+  });
 
   // Copy feedback
   const [copiedConfig, setCopiedConfig] = useState(false);
@@ -157,8 +237,13 @@ export default function PopSiteDetailPage({
   const [lightboxImage, setLightboxImage] = useState("");
   const [lightboxTitle, setLightboxTitle] = useState("");
 
+  // Role check & Delete Site State
+  const isSuperAdmin = currentUser?.role === "admin" || currentUser?.role === "superadmin";
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   // Action Modal State
-  const [actionType, setActionType] = useState<"Upgrade" | "Downgrade" | "Isolir" | "Unisolir" | "Terminate" | null>(null);
+  const [actionType, setActionType] = useState<"Upgrade" | "Downgrade" | "Isolir" | "Unisolir" | "Terminate" | "Unterminated" | null>(null);
   const [newLayanan, setNewLayanan] = useState("");
   const [newVlan, setNewVlan] = useState("");
   const [actionAlasan, setActionAlasan] = useState("");
@@ -193,6 +278,38 @@ export default function PopSiteDetailPage({
   useEffect(() => {
     fetchSiteDetail();
   }, [fetchSiteDetail]);
+
+  const handleDeleteSite = async () => {
+    if (!site) return;
+    if (!isSuperAdmin) {
+      alert("Akses ditolak: Hanya akun level Super Admin yang dapat menghapus POP Site.");
+      return;
+    }
+    if (site.status_layanan !== "Terminated") {
+      alert(`Hanya POP Site berstatus Terminated yang dapat dihapus. Status saat ini: ${site.status_layanan}`);
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/pop-sites/${site.id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: currentUser?.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menghapus POP Site.");
+      }
+      alert(`POP Site [${site.site_id}] berhasil dihapus secara permanen.`);
+      router.push("/pop-sites");
+    } catch (err: any) {
+      alert(err.message || "Gagal menghapus POP Site");
+    } finally {
+      setIsDeleting(false);
+      setDeleteModalOpen(false);
+    }
+  };
 
   const handleCopyCoordination = () => {
     if (!site) return;
@@ -245,7 +362,7 @@ export default function PopSiteDetailPage({
     return DEDICATED_SERVICE_OPTIONS;
   }, [site, actionType]);
 
-  const openActionModal = (type: "Upgrade" | "Downgrade" | "Isolir" | "Unisolir" | "Terminate") => {
+  const openActionModal = (type: "Upgrade" | "Downgrade" | "Isolir" | "Unisolir" | "Terminate" | "Unterminated") => {
     if (!site) return;
     setActionType(type);
     const currentLayanan = site.layanan_dedicated || site.kapasitas_layanan || "";
@@ -318,6 +435,127 @@ export default function PopSiteDetailPage({
       alert(err.message || "Terjadi kesalahan");
     } finally {
       setIsSubmittingAction(false);
+    }
+  };
+
+  const openEditModal = () => {
+    if (!site) return;
+    let parsedContacts: string[] = [];
+    try {
+      parsedContacts = JSON.parse(site.kontak_pic);
+      if (!Array.isArray(parsedContacts)) parsedContacts = [site.kontak_pic];
+    } catch {
+      parsedContacts = site.kontak_pic ? [site.kontak_pic] : [""];
+    }
+    if (parsedContacts.length === 0) parsedContacts = [""];
+
+    setEditForm({
+      nama_pic: site.nama_pic || "",
+      nama_perusahaan: site.nama_perusahaan || "",
+      email_pic: site.email_pic || "",
+      kontak_pic: parsedContacts,
+      alamat_instalasi: site.alamat_instalasi || "",
+      vlan: site.vlan !== null && site.vlan !== undefined ? String(site.vlan) : "",
+      infrastruktur: site.infrastruktur || "",
+      media_koneksi: site.media_koneksi || "",
+      ip_public: site.ip_public || "",
+      ip_private: site.ip_private || "",
+      server: site.server || "",
+      sn_ont: site.sn_ont || "",
+      sid: site.sid || "",
+      ao: site.ao || "",
+      nomor_order: site.nomor_order || "",
+      catatan: "",
+    });
+    setEditError(null);
+    setEditSuccess(null);
+    setEditModalOpen(true);
+  };
+
+  const handleAddContact = () => {
+    setEditForm((prev) => ({
+      ...prev,
+      kontak_pic: [...prev.kontak_pic, ""],
+    }));
+  };
+
+  const handleRemoveContact = (index: number) => {
+    setEditForm((prev) => {
+      const updated = prev.kontak_pic.filter((_, i) => i !== index);
+      return {
+        ...prev,
+        kontak_pic: updated.length > 0 ? updated : [""],
+      };
+    });
+  };
+
+  const handleContactChange = (index: number, value: string) => {
+    setEditForm((prev) => {
+      const updated = [...prev.kontak_pic];
+      updated[index] = value;
+      return { ...prev, kontak_pic: updated };
+    });
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!site) return;
+
+    if (!editForm.nama_pic.trim()) {
+      setEditError("Nama PIC wajib diisi.");
+      return;
+    }
+
+    const validContacts = editForm.kontak_pic.map((k) => k.trim()).filter((k) => k.length > 0);
+    if (validContacts.length === 0) {
+      setEditError("Minimal cantumkan 1 nomor kontak PIC / WhatsApp.");
+      return;
+    }
+
+    setIsSubmittingEdit(true);
+    setEditError(null);
+
+    try {
+      const res = await fetch(`/api/pop-sites/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: currentUser?.id,
+          nama_pic: editForm.nama_pic.trim(),
+          nama_perusahaan: editForm.nama_perusahaan.trim() || null,
+          email_pic: editForm.email_pic.trim() || null,
+          kontak_pic: validContacts,
+          alamat_instalasi: editForm.alamat_instalasi.trim() || null,
+          vlan: editForm.vlan.trim() ? parseInt(editForm.vlan.trim(), 10) : null,
+          infrastruktur: editForm.infrastruktur.trim() || null,
+          media_koneksi: editForm.media_koneksi.trim() || null,
+          ip_public: editForm.ip_public.trim() || null,
+          ip_private: editForm.ip_private.trim() || null,
+          server: editForm.server.trim() || null,
+          sn_ont: editForm.sn_ont.trim() || null,
+          sid: editForm.sid.trim() || null,
+          ao: editForm.ao.trim() || null,
+          nomor_order: editForm.nomor_order.trim() || null,
+          catatan: editForm.catatan.trim() || "Perubahan Data Administrasi & Sirkuit",
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal menyimpan perubahan data.");
+      }
+
+      setSite(data.data);
+      setEditSuccess(data.message || "Data administrasi berhasil diperbarui!");
+      setTimeout(() => {
+        setEditModalOpen(false);
+        setEditSuccess(null);
+        setActiveMainTab("data_changes");
+      }, 1000);
+    } catch (err: any) {
+      setEditError(err.message || "Terjadi kesalahan saat menyimpan perubahan.");
+    } finally {
+      setIsSubmittingEdit(false);
     }
   };
 
@@ -436,14 +674,8 @@ export default function PopSiteDetailPage({
               </span>
             </div>
             <h1 className="text-xl font-black text-slate-900 tracking-tight">
-              {site.nama_perusahaan ? site.nama_perusahaan : site.nama_pic}
+              {site.nama_pic}
             </h1>
-            {site.nama_perusahaan ? (
-              <p className="text-xs text-slate-600 font-medium">
-                Nama PIC: <strong className="text-slate-900">{site.nama_pic}</strong>
-                {site.email_pic && <span className="text-slate-400 ml-1">({site.email_pic})</span>}
-              </p>
-            ) : null}
             <p className="text-xs text-slate-500 flex items-center">
               <Calendar className="w-3.5 h-3.5 mr-1 text-slate-400" />
               Go-Live Sejak: {new Date(site.waktu_go_live).toLocaleDateString("id-ID", { dateStyle: "long" })}
@@ -474,6 +706,16 @@ export default function PopSiteDetailPage({
               >
                 <ShieldCheck className="w-3.5 h-3.5 mr-1.5" />
                 Unisolir (Buka Isolir)
+              </button>
+            )}
+
+            {site.status_layanan === "Terminated" && (
+              <button
+                onClick={() => openActionModal("Unterminated")}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-xs flex items-center animate-pulse"
+              >
+                <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                Unterminated (Buka Terminasi)
               </button>
             )}
 
@@ -512,6 +754,18 @@ export default function PopSiteDetailPage({
               <PowerOff className="w-3.5 h-3.5 mr-1.5" />
               Terminate
             </button>
+
+            {site.status_layanan === "Terminated" && isSuperAdmin && (
+              <button
+                type="button"
+                onClick={() => setDeleteModalOpen(true)}
+                className="px-3.5 py-2 rounded-xl text-xs font-bold bg-rose-700 hover:bg-rose-800 text-white transition shadow-xs flex items-center cursor-pointer"
+                title="Hapus permanen POP Site ini dari database (Khusus Super Admin & Status Terminated)"
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+                Hapus Site
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -528,9 +782,19 @@ export default function PopSiteDetailPage({
                 <Building2 className="w-4 h-4 mr-2 text-emerald-600 dark:text-emerald-400" />
                 Data Administrasi & Sirkuit
               </h2>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 uppercase">
-                Active Master Asset
-              </span>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={openEditModal}
+                  className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 dark:hover:bg-white text-white dark:text-slate-900 transition shadow-xs cursor-pointer"
+                >
+                  <Edit3 className="w-3 h-3 mr-1 text-emerald-400 dark:text-emerald-600" />
+                  Edit Data
+                </button>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 uppercase">
+                  Active Master Asset
+                </span>
+              </div>
             </div>
 
             {/* Section 1: Data PIC & Lokasi */}
@@ -540,27 +804,8 @@ export default function PopSiteDetailPage({
               </span>
               <div className="bg-slate-50 dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-100 dark:border-slate-700/60 space-y-2.5 text-xs">
                 <div>
-                  <span className="text-slate-400 dark:text-slate-400 text-[11px] block">Perusahaan / Entitas:</span>
-                  <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
-                    {site.nama_perusahaan ? site.nama_perusahaan : <span className="text-slate-400 dark:text-slate-400 font-normal italic">- (Perorangan)</span>}
-                  </span>
-                </div>
-                <div>
                   <span className="text-slate-400 dark:text-slate-400 text-[11px] block">Nama PIC:</span>
                   <span className="font-bold text-slate-800 dark:text-slate-200">{site.nama_pic || "-"}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 dark:text-slate-400 text-[11px] block">Email PIC:</span>
-                  {site.email_pic ? (
-                    <a
-                      href={`mailto:${site.email_pic}`}
-                      className="font-medium text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center"
-                    >
-                      {site.email_pic}
-                    </a>
-                  ) : (
-                    <span className="text-slate-400 dark:text-slate-400 italic">-</span>
-                  )}
                 </div>
                 <div>
                   <span className="text-slate-400 dark:text-slate-400 text-[11px] block">Kontak PIC / WhatsApp:</span>
@@ -749,6 +994,9 @@ export default function PopSiteDetailPage({
               )}
             </div>
 
+            {/* ICMP Ping Monitoring Widget (Uptime Kuma Engine) */}
+            <IcmpMonitorWidget popSiteId={site.id} currentIpPublic={site.ip_public} />
+
             {/* Section 3: Integrasi Carrier & Parameter Sirkuit */}
             {hasCircuitParams && (
               <div
@@ -858,7 +1106,16 @@ export default function PopSiteDetailPage({
                 Aksi Antrean Lifecycle:
               </span>
               <div className="grid grid-cols-2 gap-2">
-                {site.status_layanan === "Isolir" ? (
+                {site.status_layanan === "Terminated" ? (
+                  <button
+                    type="button"
+                    onClick={() => openActionModal("Unterminated")}
+                    className="col-span-2 px-3 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center transition shadow-sm animate-pulse"
+                  >
+                    <RotateCcw className="w-4 h-4 mr-1.5" />
+                    Ajukan Unterminated (Buka Terminasi Sirkuit)
+                  </button>
+                ) : site.status_layanan === "Isolir" ? (
                   <button
                     type="button"
                     onClick={() => openActionModal("Unisolir")}
@@ -908,47 +1165,89 @@ export default function PopSiteDetailPage({
                   <PowerOff className="w-4 h-4 mr-1 text-rose-600" />
                   Ajukan Terminate
                 </button>
+
+                {site.status_layanan === "Terminated" && isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setDeleteModalOpen(true)}
+                    className="col-span-2 px-3 py-2.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold flex items-center justify-center transition shadow-xs cursor-pointer"
+                    title="Hapus permanen POP Site ini dari database (Khusus Super Admin & Status Terminated)"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1.5" />
+                    Hapus Permanen POP Site
+                  </button>
+                )}
               </div>
             </div>
           </div>
         </div>
 
         {/* ======================================================== */}
-        {/* SISI KANAN: SEMUA HISTORY (AKTIVASI, UPGRADE, DOWNGRADE, ISOLIR, TERMINATE) */}
+        {/* SISI KANAN: SEMUA HISTORY (TERPISAH ANTARA LIFECYCLE & PERUBAHAN DATA) */}
         {/* ======================================================== */}
         <div className="lg:col-span-7 space-y-4">
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-3 border-b border-slate-100">
-              <div>
-                <h2 className="text-base font-bold text-slate-900 flex items-center">
-                  <History className="w-5 h-5 mr-2 text-emerald-600" />
-                  Semua Riwayat Lifecycle Sirkuit
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Daftar seluruh aktivitas mulai dari Aktivasi Awal, Upgrade, Downgrade, Isolir, hingga Terminasi.
-                </p>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm p-6 space-y-5">
+            {/* Top-Level Menu Switcher: Lifecycle vs Perubahan Data */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center space-x-1.5 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setActiveMainTab("lifecycle")}
+                  className={`flex items-center px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    activeMainTab === "lifecycle"
+                      ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <History className="w-3.5 h-3.5 mr-1.5 text-emerald-600 dark:text-emerald-400" />
+                  Riwayat Lifecycle Sirkuit
+                  <span className="ml-2 px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-mono">
+                    {site.orders.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveMainTab("data_changes")}
+                  className={`flex items-center px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
+                    activeMainTab === "data_changes"
+                      ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5 mr-1.5 text-purple-600 dark:text-purple-400" />
+                  Riwayat Perubahan Data
+                  <span className="ml-2 px-1.5 py-0.2 rounded-full text-[10px] bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 font-mono">
+                    {site.data_change_logs?.length || 0}
+                  </span>
+                </button>
               </div>
 
-              {/* Classification filter for history */}
-              <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl overflow-x-auto text-xs">
-                {["Semua", "Aktivasi", "Upgrade", "Downgrade", "Isolir", "Unisolir", "Terminate"].map((tab) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => setHistoryTab(tab)}
-                    className={`px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap ${
-                      historyTab === tab
-                        ? "bg-white text-slate-900 shadow-sm"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    {tab}
-                  </button>
-                ))}
-              </div>
+              {activeMainTab === "lifecycle" && (
+                /* Classification filter for lifecycle history */
+                <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl overflow-x-auto text-xs">
+                  {["Semua", "Aktivasi", "Upgrade", "Downgrade", "Isolir", "Unisolir", "Terminate"].map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setHistoryTab(tab)}
+                      className={`px-2.5 py-1 rounded-lg font-bold transition whitespace-nowrap cursor-pointer ${
+                        historyTab === tab
+                          ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Chronological Timeline History */}
+            {/* TAB 1: RIWAYAT LIFECYCLE SIRKUIT */}
+            {activeMainTab === "lifecycle" && (
+              <div>
+                {/* Chronological Timeline History */}
             {filteredHistory.length === 0 ? (
               <div className="py-12 text-center text-xs text-slate-400 space-y-1">
                 <History className="w-8 h-8 mx-auto text-slate-300" />
@@ -1076,6 +1375,119 @@ export default function PopSiteDetailPage({
               </div>
             )}
           </div>
+        )}
+
+        {/* TAB 2: RIWAYAT PERUBAHAN DATA (AUDIT LOG TERPISAH) */}
+        {activeMainTab === "data_changes" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                  Audit Log Perubahan Data Administrasi
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Histori penyuntingan data master, dicatat otomatis berdasarkan akun yang melakukan perubahan.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={openEditModal}
+                className="inline-flex items-center px-3 py-1.5 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white shadow-xs transition cursor-pointer"
+              >
+                <Edit3 className="w-3.5 h-3.5 mr-1" />
+                Ubah Data Sekarang
+              </button>
+            </div>
+
+            {!site.data_change_logs || site.data_change_logs.length === 0 ? (
+              <div className="py-12 text-center text-xs text-slate-400 space-y-2">
+                <FileText className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-700" />
+                <p className="font-semibold text-slate-600 dark:text-slate-300 text-sm">Belum Ada Riwayat Perubahan Data</p>
+                <p className="text-slate-400">Data administrasi & sirkuit masih sesuai dengan dokumen aktivasi awal.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {site.data_change_logs.map((log) => {
+                  let diffList: Array<{ field: string; label: string; old_value: string; new_value: string }> = [];
+                  try {
+                    diffList = JSON.parse(log.changes);
+                  } catch {
+                    diffList = [];
+                  }
+
+                  return (
+                    <div
+                      key={log.id}
+                      className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-700/60 space-y-3"
+                    >
+                      {/* Log Header */}
+                      <div className="flex items-center justify-between flex-wrap gap-2 pb-2.5 border-b border-slate-200/80 dark:border-slate-700/80">
+                        <div className="flex items-center space-x-2.5">
+                          <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 flex items-center justify-center font-bold text-xs">
+                            {log.user?.nama ? log.user.nama.charAt(0).toUpperCase() : "U"}
+                          </div>
+                          <div>
+                            <div className="flex items-center space-x-2">
+                              <span className="font-bold text-slate-900 dark:text-slate-100 text-xs">
+                                {log.user?.nama || "User"}
+                              </span>
+                              <span className="text-[10px] uppercase font-bold px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                {log.user?.role || "Staff"}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 dark:text-slate-400">
+                              {log.user?.email || ""}
+                            </span>
+                          </div>
+                        </div>
+                        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center">
+                          <Clock className="w-3.5 h-3.5 mr-1" />
+                          {new Date(log.created_at).toLocaleString("id-ID", {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })} WIB
+                        </span>
+                      </div>
+
+                      {/* Catatan Perubahan */}
+                      {log.catatan && (
+                        <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs text-slate-700 dark:text-slate-300 italic">
+                          &ldquo;{log.catatan}&rdquo;
+                        </div>
+                      )}
+
+                      {/* Diff Table */}
+                      <div className="space-y-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                          Rincian Data yang Diubah ({diffList.length}):
+                        </span>
+                        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 text-xs overflow-hidden">
+                          {diffList.map((d, dIdx) => (
+                            <div key={dIdx} className="p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                              <span className="font-bold text-slate-700 dark:text-slate-300 sm:w-1/3">
+                                {d.label}
+                              </span>
+                              <div className="flex items-center space-x-2 text-xs font-mono flex-1 sm:justify-end flex-wrap">
+                                <span className="text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-800 line-through">
+                                  {d.old_value}
+                                </span>
+                                <ArrowRight className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                                <span className="text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 font-bold">
+                                  {d.new_value}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+          </div>
         </div>
       </div>
 
@@ -1089,6 +1501,7 @@ export default function PopSiteDetailPage({
                 {actionType === "Downgrade" && <TrendingDown className="w-5 h-5 text-blue-400" />}
                 {actionType === "Isolir" && <ShieldAlert className="w-5 h-5 text-amber-400" />}
                 {actionType === "Unisolir" && <ShieldCheck className="w-5 h-5 text-teal-400" />}
+                {actionType === "Unterminated" && <RotateCcw className="w-5 h-5 text-emerald-400" />}
                 {actionType === "Terminate" && <PowerOff className="w-5 h-5 text-rose-400" />}
                 <div>
                   <h3 className="text-base font-bold">
@@ -1212,6 +1625,8 @@ export default function PopSiteDetailPage({
                           ? "Tunggakan invoice tagihan 2 bulan / isolir sementara"
                           : actionType === "Unisolir"
                           ? "Pelanggan telah melunasi tagihan tertunggak / konfirmasi finance"
+                          : actionType === "Unterminated"
+                          ? "Pengaktifan kembali layanan yang sebelumnya diterminasi / renewal kontrak baru"
                           : "Kontrak layanan berakhir / relokasi kantor"
                       }
                       className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
@@ -1244,7 +1659,7 @@ export default function PopSiteDetailPage({
                       type="submit"
                       disabled={isSubmittingAction || ((actionType === "Upgrade" || actionType === "Downgrade") && (!newLayanan || availableLayananOptions.length === 0))}
                       className={`px-5 py-2.5 rounded-xl text-white text-xs font-bold shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed ${
-                        actionType === "Upgrade"
+                        actionType === "Upgrade" || actionType === "Unterminated"
                           ? "bg-emerald-600 hover:bg-emerald-700"
                           : actionType === "Downgrade"
                           ? "bg-blue-600 hover:bg-blue-700"
@@ -1260,6 +1675,410 @@ export default function PopSiteDetailPage({
                   </div>
                 </form>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT DATA ADMINISTRASI & SIRKUIT MODAL */}
+      {editModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-2xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-scaleUp">
+            {/* Modal Header */}
+            <div className="px-6 py-4 bg-slate-900 dark:bg-slate-950 text-white flex items-center justify-between border-b border-slate-800 shrink-0">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold flex items-center gap-2">
+                    Edit Data Administrasi & Sirkuit
+                    <span className="font-mono text-xs px-2 py-0.5 rounded bg-emerald-950/70 text-emerald-300 border border-emerald-800">
+                      {site.site_id}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Perubahan data akan otomatis dicatat di Audit Log atas nama akun <strong>{currentUser?.nama || "Staff"}</strong>.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setEditModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body: Form */}
+            <form onSubmit={handleSaveEdit} className="flex-1 overflow-y-auto p-6 space-y-6 text-xs">
+              {editError && (
+                <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 flex items-start space-x-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  <span>{editError}</span>
+                </div>
+              )}
+
+              {editSuccess && (
+                <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 flex items-start space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  <span>{editSuccess}</span>
+                </div>
+              )}
+
+              {/* Group 1: Data Pelanggan & PIC */}
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2 pb-1.5 border-b border-slate-100 dark:border-slate-800">
+                  <Building2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <h4 className="font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 text-[11px]">
+                    1. Data Pelanggan & Kontak PIC
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="sm:col-span-2">
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Nama PIC <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={editForm.nama_pic}
+                      onChange={(e) => setEditForm({ ...editForm, nama_pic: e.target.value })}
+                      placeholder="Nama lengkap PIC"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  {/* Multi-Contact PIC */}
+                  <div className="sm:col-span-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-slate-700 dark:text-slate-300 font-bold">
+                        Nomor Kontak PIC / WhatsApp <span className="text-rose-500">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleAddContact}
+                        className="inline-flex items-center px-2 py-1 rounded-lg text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition"
+                      >
+                        <Plus className="w-3 h-3 mr-1" /> Tambah Nomor
+                      </button>
+                    </div>
+
+                    {editForm.kontak_pic.map((contact, idx) => (
+                      <div key={idx} className="flex items-center space-x-2">
+                        <div className="relative flex-1">
+                          <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                          <input
+                            type="text"
+                            value={contact}
+                            onChange={(e) => handleContactChange(idx, e.target.value)}
+                            placeholder="08123456789 atau 628..."
+                            className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                          />
+                        </div>
+                        {editForm.kontak_pic.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveContact(idx)}
+                            className="p-2 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Alamat Fisik Instalasi
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={editForm.alamat_instalasi}
+                      onChange={(e) => setEditForm({ ...editForm, alamat_instalasi: e.target.value })}
+                      placeholder="Gedung, lantai, ruang server, nama jalan..."
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 2: Spesifikasi Teknis Layanan */}
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2 pb-1.5 border-b border-slate-100 dark:border-slate-800">
+                  <Network className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <h4 className="font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 text-[11px]">
+                    2. Spesifikasi Teknis Layanan
+                  </h4>
+                </div>
+
+                {/* Locked Layanan & Bandwidth Notice */}
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 flex items-start space-x-3">
+                  <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0 mt-0.5">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <div className="space-y-0.5 flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-amber-900 dark:text-amber-200">
+                        Layanan & Bandwidth Aktif: {site.layanan_dedicated || site.kapasitas_layanan || "-"}
+                      </span>
+                      <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-amber-200/80 dark:bg-amber-900 text-amber-900 dark:text-amber-200 font-bold">
+                        Terkunci / Read-Only
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-amber-800 dark:text-amber-400 leading-relaxed">
+                      Sesuai SOP pengoperasian jaringan, perubahan kapasitas layanan atau bandwidth tidak dapat diedit langsung. Gunakan menu <strong>Upgrade</strong> atau <strong>Downgrade</strong> untuk menerbitkan tiket kerja NOC resmi.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      VLAN ID
+                    </label>
+                    <input
+                      type="number"
+                      value={editForm.vlan}
+                      onChange={(e) => setEditForm({ ...editForm, vlan: e.target.value })}
+                      placeholder="Contoh: 3005"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-mono font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Infrastruktur
+                    </label>
+                    <input
+                      type="text"
+                      list="infrastruktur-list"
+                      value={editForm.infrastruktur}
+                      onChange={(e) => setEditForm({ ...editForm, infrastruktur: e.target.value })}
+                      placeholder="Pilih atau ketik infrastruktur..."
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                    <datalist id="infrastruktur-list">
+                      {DEFAULT_INFRASTRUCTURE_OPTIONS.map((item) => (
+                        <option key={item} value={item} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Media Koneksi Transmisi
+                    </label>
+                    <input
+                      type="text"
+                      list="media-list"
+                      value={editForm.media_koneksi}
+                      onChange={(e) => setEditForm({ ...editForm, media_koneksi: e.target.value })}
+                      placeholder="Pilih atau ketik media (SFP, ONT, RJ45)..."
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                    <datalist id="media-list">
+                      {DEFAULT_MEDIA_OPTIONS.map((item) => (
+                        <option key={item} value={item} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Server / BRAS Aggregator
+                    </label>
+                    <input
+                      type="text"
+                      list="server-list"
+                      value={editForm.server}
+                      onChange={(e) => setEditForm({ ...editForm, server: e.target.value })}
+                      placeholder="Pilih atau ketik nama server / BRAS..."
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                    <datalist id="server-list">
+                      {DEFAULT_SERVER_OPTIONS.map((item) => (
+                        <option key={item} value={item} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      IP Public
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.ip_public}
+                      onChange={(e) => setEditForm({ ...editForm, ip_public: e.target.value })}
+                      placeholder="Contoh: 103.97.111.1/32"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      IP Private
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.ip_private}
+                      onChange={(e) => setEditForm({ ...editForm, ip_private: e.target.value })}
+                      placeholder="Contoh: 192.168.1.1/31"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      SN ONT / Modem
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.sn_ont}
+                      onChange={(e) => setEditForm({ ...editForm, sn_ont: e.target.value })}
+                      placeholder="Contoh: ZTEGC1234567 atau HWTC12345678"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 3: Parameter Sirkuit Provider */}
+              <div className="space-y-3">
+                <div className="flex items-center space-x-2 pb-1.5 border-b border-slate-100 dark:border-slate-800">
+                  <Radio className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <h4 className="font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 text-[11px]">
+                    3. Parameter Sirkuit Partner / Provider (Opsional)
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Circuit ID (SID)
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.sid}
+                      onChange={(e) => setEditForm({ ...editForm, sid: e.target.value })}
+                      placeholder="TELKOM-METRO-9812"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Account Order (AO)
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.ao}
+                      onChange={(e) => setEditForm({ ...editForm, ao: e.target.value })}
+                      placeholder="AO-2026-JKT-8821"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                      Nomor Order Provider
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.nomor_order}
+                      onChange={(e) => setEditForm({ ...editForm, nomor_order: e.target.value })}
+                      placeholder="ORD-TLK-771290"
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 font-mono focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 4: Alasan & Catatan Perubahan (Audit Log) */}
+              <div className="space-y-2 p-3.5 rounded-xl bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60">
+                <label className="block text-purple-900 dark:text-purple-200 font-bold">
+                  Catatan / Alasan Perubahan Data <span className="text-purple-600">*</span>
+                </label>
+                <textarea
+                  rows={2}
+                  required
+                  value={editForm.catatan}
+                  onChange={(e) => setEditForm({ ...editForm, catatan: e.target.value })}
+                  placeholder="Contoh: Update nomor telepon PIC baru, penyesuaian IP publik, perbaikan typo alamat..."
+                  className="w-full px-3 py-2 rounded-xl border border-purple-200 dark:border-purple-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+                <p className="text-[10px] text-purple-700 dark:text-purple-300">
+                  Catatan ini akan disimpan ke dalam <strong>Riwayat Perubahan Data</strong> secara permanen bersama tanggal dan nama akun penyunting.
+                </p>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-xl font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  Batal
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isSubmittingEdit}
+                  className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                >
+                  <Save className="w-4 h-4 mr-1.5" />
+                  {isSubmittingEdit ? "Menyimpan Perubahan..." : "Simpan Perubahan Data"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal (Super Admin Only & Terminated Only) */}
+      {deleteModalOpen && site && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full border border-rose-200 dark:border-rose-800 shadow-2xl p-6 space-y-4 animate-scaleUp">
+            <div className="w-12 h-12 rounded-2xl bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <div className="text-center space-y-1">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 uppercase tracking-wider">
+                Super Admin Only
+              </span>
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                Hapus Permanen POP Site?
+              </h3>
+              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                Apakah Anda yakin ingin menghapus POP Site <strong>[{site.site_id}]</strong> ({site.nama_pic}) secara permanen?
+              </p>
+            </div>
+            <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-[11px] text-rose-800 dark:text-rose-300">
+              ⚠ Sirkuit ini dan seluruh riwayat antrean tiket terkait ({site.orders?.length || 0} history) akan dihapus secara permanen dari database. Tindakan ini tidak dapat dibatalkan.
+            </div>
+            <div className="flex items-center justify-end space-x-2.5 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteModalOpen(false)}
+                className="px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-xl font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDeleteSite}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md transition disabled:opacity-50 cursor-pointer"
+              >
+                {isDeleting ? "Menghapus..." : "Hapus Permanen"}
+              </button>
             </div>
           </div>
         </div>

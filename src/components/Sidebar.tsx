@@ -18,12 +18,20 @@ import {
   Radio,
   FileText,
   Sliders,
+  FolderClock,
+  History,
   Users,
   Activity,
   PlusCircle,
   X,
   LogOut,
   KeyRound,
+  Globe,
+  Terminal,
+  Boxes,
+  Wrench,
+  Database,
+  LayoutDashboard,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -43,6 +51,39 @@ export function Sidebar({
   const router = useRouter();
   const { currentUser, setCurrentUser, users, logout } = useCurrentUser();
   const [isRoleOpen, setIsRoleOpen] = useState(false);
+  const isSuperAdmin = currentUser?.role === "admin";
+
+  // Collapsible Menu & Submenu states for:
+  // 1. Layanan & Inventaris
+  // 2. Tools & Generator
+  // 3. Integrasi & Sistem
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    layanan: true,
+    tools: true,
+    integrasi: true,
+  });
+
+  const toggleSection = (key: string) => {
+    setOpenSections((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  const isLayananActive =
+    pathname === "/queue" ||
+    pathname.startsWith("/pop-sites") ||
+    pathname.startsWith("/enterprise") ||
+    pathname.startsWith("/ipam") ||
+    pathname.startsWith("/monitoring");
+
+  const isToolsActive = pathname.startsWith("/tools");
+
+  const isIntegrasiActive =
+    pathname === "/admin/sync" ||
+    pathname.startsWith("/settings") ||
+    pathname === "/logs" ||
+    pathname === "/admin/logs";
 
   const getRoleLabel = (role: string) => {
     switch (role) {
@@ -144,160 +185,554 @@ export function Sidebar({
 
           {/* Navigation Links Grouped by Section (Styled like Photo 2) */}
           <div className="p-3 space-y-4 overflow-y-auto max-h-[calc(100vh-160px)] scrollbar-none">
-            {/* Main Item: Dashboard Antrean */}
-            <div>
+            {/* TOP NAVIGATION: DASHBOARD UTAMA */}
+            <div className="space-y-1">
               <Link
-                href="/queue"
+                href="/dashboard"
                 onClick={onCloseMobile}
-                className={`group flex items-center px-3.5 py-3 rounded-2xl text-sm font-bold transition ${
-                  pathname === "/queue" || pathname === "/"
-                    ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 shadow-xs"
-                    : "text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                  pathname === "/dashboard"
+                    ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold shadow-sm shadow-blue-500/20"
+                    : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
                 } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
-                title="Dashboard Antrean"
+                title="Dashboard Utama"
               >
                 <div className="flex items-center space-x-3">
-                  <Layers
+                  <LayoutDashboard
                     className={`w-5 h-5 shrink-0 ${
-                      pathname === "/queue" || pathname === "/"
+                      pathname === "/dashboard"
+                        ? "text-white"
+                        : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                    }`}
+                  />
+                  {!isCollapsed && <span>Dashboard</span>}
+                </div>
+                {!isCollapsed && (
+                  <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      pathname === "/dashboard"
+                        ? "bg-white/20 text-white border border-white/20"
+                        : "bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
+                    }`}
+                  >
+                    Utama
+                  </span>
+                )}
+              </Link>
+            </div>
+
+            {/* SECTION 1: LAYANAN & INVENTARIS */}
+            <div className="space-y-1">
+              <button
+                type="button"
+                onClick={() => toggleSection("layanan")}
+                className={`w-full group flex items-center px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition select-none ${
+                  isCollapsed ? "justify-center" : "justify-between"
+                } ${
+                  isLayananActive
+                    ? "text-blue-700 dark:text-blue-300 bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-900/60 shadow-2xs"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                }`}
+                title="Layanan & Inventaris (Klik untuk Buka/Tutup Submenu)"
+              >
+                <div className="flex items-center space-x-2.5">
+                  <Boxes
+                    className={`w-4 h-4 shrink-0 ${
+                      isLayananActive
                         ? "text-blue-600 dark:text-blue-400"
                         : "text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"
                     }`}
                   />
-                  {!isCollapsed && <span>Dashboard Antrean</span>}
+                  {!isCollapsed && <span>LAYANAN & INVENTARIS</span>}
                 </div>
                 {!isCollapsed && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/80 text-blue-800 dark:text-blue-300">
-                    Queue
-                  </span>
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60">
+                      5
+                    </span>
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                        openSections.layanan ? "rotate-0" : "-rotate-90"
+                      }`}
+                    />
+                  </div>
                 )}
-              </Link>
-            </div>
+              </button>
 
-            {/* SECTION 1: LAYANAN & INVENTARIS POP SITE */}
-            <div className="space-y-1">
-              {!isCollapsed && (
-                <p className="text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 pt-1 pb-1">
-                  LAYANAN & INVENTARIS
-                </p>
-              )}
+              {/* Submenu: Layanan & Inventaris */}
+              {(openSections.layanan || isCollapsed) && (
+                <div className={`${!isCollapsed ? "pl-2 ml-2 border-l border-slate-200/80 dark:border-slate-800/80" : ""} space-y-1 mt-0.5 transition-all duration-200`}>
+                  <Link
+                    href="/queue"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/queue"
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
+                    title="List Antrean"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Layers
+                        className={`w-5 h-5 shrink-0 ${
+                          pathname === "/queue"
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                        }`}
+                      />
+                      {!isCollapsed && <span>List Antrean</span>}
+                    </div>
+                    {!isCollapsed && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                        Queue
+                      </span>
+                    )}
+                  </Link>
 
-              <Link
-                href="/pop-sites"
-                onClick={onCloseMobile}
-                className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
-                  pathname.startsWith("/pop-sites")
-                    ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
-                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
-                } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
-                title="List POP Site"
-              >
-                <div className="flex items-center space-x-3">
-                  <Building2
-                    className={`w-5 h-5 shrink-0 ${
+                  <Link
+                    href="/pop-sites"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
                       pathname.startsWith("/pop-sites")
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400"
-                    }`}
-                  />
-                  {!isCollapsed && <span>List POP Site</span>}
-                </div>
-                {!isCollapsed && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                    Aset Aktif
-                  </span>
-                )}
-              </Link>
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
+                    title="List POP Site"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Building2
+                        className={`w-5 h-5 shrink-0 ${
+                          pathname.startsWith("/pop-sites")
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400"
+                        }`}
+                      />
+                      {!isCollapsed && <span>List POP Site</span>}
+                    </div>
+                    {!isCollapsed && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                        Aset Aktif
+                      </span>
+                    )}
+                  </Link>
 
-              <Link
-                href="/enterprise"
-                onClick={onCloseMobile}
-                className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
-                  pathname.startsWith("/enterprise")
-                    ? "bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/80 font-bold shadow-xs"
-                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
-                } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
-                title="List Enterprise"
-              >
-                <div className="flex items-center space-x-3">
-                  <Network
-                    className={`w-5 h-5 shrink-0 ${
+                  <Link
+                    href="/enterprise"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
                       pathname.startsWith("/enterprise")
-                        ? "text-purple-600 dark:text-purple-400"
-                        : "text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-400"
-                    }`}
-                  />
-                  {!isCollapsed && <span>List Enterprise</span>}
+                        ? "bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
+                    title="List Enterprise"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Network
+                        className={`w-5 h-5 shrink-0 ${
+                          pathname.startsWith("/enterprise")
+                            ? "text-purple-600 dark:text-purple-400"
+                            : "text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-400"
+                        }`}
+                      />
+                      {!isCollapsed && <span>List Enterprise</span>}
+                    </div>
+                    {!isCollapsed && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                        Enterprise
+                      </span>
+                    )}
+                  </Link>
+
+                  <Link
+                    href="/ipam"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                      pathname.startsWith("/ipam")
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
+                    title="Prefix IP Public (phpIPAM)"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Globe
+                        className={`w-5 h-5 shrink-0 ${
+                          pathname.startsWith("/ipam")
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                        }`}
+                      />
+                      {!isCollapsed && <span>Prefix IP Public</span>}
+                    </div>
+                    {!isCollapsed && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                        phpIPAM
+                      </span>
+                    )}
+                  </Link>
+
+                  <Link
+                    href="/monitoring"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                      pathname.startsWith("/monitoring")
+                        ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
+                    title="ICMP Ping Monitor"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Activity
+                        className={`w-5 h-5 shrink-0 ${
+                          pathname.startsWith("/monitoring")
+                            ? "text-emerald-600 dark:text-emerald-400 animate-pulse"
+                            : "text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400"
+                        }`}
+                      />
+                      {!isCollapsed && <span>ICMP Ping Monitor</span>}
+                    </div>
+                    {!isCollapsed && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                        Uptime
+                      </span>
+                    )}
+                  </Link>
                 </div>
-                {!isCollapsed && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                    Enterprise
-                  </span>
-                )}
-              </Link>
+              )}
             </div>
 
-            {/* SECTION 2: INTEGRASI SISTEM & DATABASE */}
+            {/* SECTION 2: TOOLS & GENERATOR */}
             <div className="space-y-1">
-              {!isCollapsed && (
-                <p className="text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 px-3 pt-1 pb-1">
-                  INTEGRASI & SISTEM
-                </p>
-              )}
-
-              <Link
-                href="/admin/sync"
-                onClick={onCloseMobile}
-                className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
-                  pathname === "/admin/sync"
-                    ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
-                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
-                } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
-                title="Google Sheets Sync & Admin"
+              <button
+                type="button"
+                onClick={() => toggleSection("tools")}
+                className={`w-full group flex items-center px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition select-none ${
+                  isCollapsed ? "justify-center" : "justify-between"
+                } ${
+                  isToolsActive
+                    ? "text-blue-700 dark:text-blue-300 bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-900/60 shadow-2xs"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                }`}
+                title="Tools & Generator (Klik untuk Buka/Tutup Submenu)"
               >
-                <div className="flex items-center space-x-3">
-                  <FileSpreadsheet
-                    className={`w-5 h-5 shrink-0 ${
-                      pathname === "/admin/sync"
-                        ? "text-indigo-600 dark:text-indigo-400"
-                        : "text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
-                    }`}
-                  />
-                  {!isCollapsed && <span>Sheets Sync & Admin</span>}
-                </div>
-                {!isCollapsed && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                    Sync
-                  </span>
-                )}
-              </Link>
-
-              <Link
-                href="/settings/users"
-                onClick={onCloseMobile}
-                className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
-                  pathname === "/settings/users"
-                    ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
-                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
-                } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
-                title="Pengaturan User Akses & Profil"
-              >
-                <div className="flex items-center space-x-3">
-                  <ShieldCheck
-                    className={`w-5 h-5 shrink-0 ${
-                      pathname === "/settings/users"
+                <div className="flex items-center space-x-2.5">
+                  <Wrench
+                    className={`w-4 h-4 shrink-0 ${
+                      isToolsActive
                         ? "text-blue-600 dark:text-blue-400"
-                        : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                        : "text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"
                     }`}
                   />
-                  {!isCollapsed && <span>Pengaturan User Akses</span>}
+                  {!isCollapsed && <span>TOOLS & GENERATOR</span>}
                 </div>
                 {!isCollapsed && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                    Akses
-                  </span>
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60">
+                      {isSuperAdmin ? "6" : "4"}
+                    </span>
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                        openSections.tools ? "rotate-0" : "-rotate-90"
+                      }`}
+                    />
+                  </div>
                 )}
-              </Link>
+              </button>
+
+              {/* Submenu: Tools & Generator */}
+              {(openSections.tools || isCollapsed) && (
+                <div className={`${!isCollapsed ? "pl-2 ml-2 border-l border-slate-200/80 dark:border-slate-800/80" : ""} space-y-1 mt-0.5 transition-all duration-200`}>
+                  <Link
+                    href="/tools/mikrotik"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                      pathname.startsWith("/tools/mikrotik")
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
+                    title="MikroTik Tools (16 Generator)"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Server
+                        className={`w-5 h-5 shrink-0 ${
+                          pathname.startsWith("/tools/mikrotik")
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                        }`}
+                      />
+                      {!isCollapsed && <span>MikroTik Tools</span>}
+                    </div>
+                    {!isCollapsed && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                        16 Tools
+                      </span>
+                    )}
+                  </Link>
+
+                  <Link
+                    href="/tools/traffic-qos"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                      pathname.startsWith("/tools/traffic-qos")
+                        ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
+                    title="Traffic QoS Bandwidth Shaper"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Network
+                        className={`w-5 h-5 shrink-0 ${
+                          pathname.startsWith("/tools/traffic-qos")
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400"
+                        }`}
+                      />
+                      {!isCollapsed && <span>Traffic QoS</span>}
+                    </div>
+                    {!isCollapsed && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                        QoS
+                      </span>
+                    )}
+                  </Link>
+
+                  {isSuperAdmin && (
+                    <Link
+                      href="/tools/huawei"
+                      onClick={onCloseMobile}
+                      className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                        pathname.startsWith("/tools/huawei")
+                          ? "bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/80 font-bold shadow-xs"
+                          : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                      } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
+                      title="Aktivasi Huawei OLT / ONT (Super Admin Only)"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <Terminal
+                          className={`w-5 h-5 shrink-0 ${
+                            pathname.startsWith("/tools/huawei")
+                              ? "text-rose-600 dark:text-rose-400"
+                              : "text-slate-400 group-hover:text-rose-600 dark:group-hover:text-rose-400"
+                          }`}
+                        />
+                        {!isCollapsed && <span>Aktivasi Huawei</span>}
+                      </div>
+                      {!isCollapsed && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                          Super Admin
+                        </span>
+                      )}
+                    </Link>
+                  )}
+
+                  <Link
+                    href="/tools/documents"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/tools/documents"
+                        ? "bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
+                    title="Dokumen & Surat NOC (BA, ST, Permit, RFO, BPV)"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <FileText
+                        className={`w-5 h-5 shrink-0 ${
+                          pathname === "/tools/documents"
+                            ? "text-purple-600 dark:text-purple-400"
+                            : "text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-400"
+                        }`}
+                      />
+                      {!isCollapsed && <span>Dokumen & Surat</span>}
+                    </div>
+                    {!isCollapsed && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                        NOC Doc
+                      </span>
+                    )}
+                  </Link>
+
+                  {isSuperAdmin && (
+                    <Link
+                      href="/tools/templates"
+                      onClick={onCloseMobile}
+                      className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                        pathname.startsWith("/tools/templates") || pathname.startsWith("/tools/documents/templates")
+                          ? "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/80 font-bold shadow-xs"
+                          : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                      } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
+                      title="Pengaturan Template Surat, Kop & Tanda Tangan (Super Admin Only)"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <Sliders
+                          className={`w-5 h-5 shrink-0 ${
+                            pathname.startsWith("/tools/templates") || pathname.startsWith("/tools/documents/templates")
+                              ? "text-amber-600 dark:text-amber-400"
+                              : "text-slate-400 group-hover:text-amber-600 dark:group-hover:text-amber-400"
+                          }`}
+                        />
+                        {!isCollapsed && <span>Template Surat</span>}
+                      </div>
+                      {!isCollapsed && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                          Super Admin
+                        </span>
+                      )}
+                    </Link>
+                  )}
+
+                  <Link
+                    href="/tools/documents/history"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                      pathname.startsWith("/tools/documents/history") || pathname === "/tools/history"
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
+                    title="Arsip & Riwayat Dokumen NOC"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <FolderClock
+                        className={`w-5 h-5 shrink-0 ${
+                          pathname.startsWith("/tools/documents/history") || pathname === "/tools/history"
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                        }`}
+                      />
+                      {!isCollapsed && <span>Arsip Dokumen</span>}
+                    </div>
+                    {!isCollapsed && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                        Arsip
+                      </span>
+                    )}
+                  </Link>
+                </div>
+              )}
+            </div>
+
+            {/* SECTION 3: INTEGRASI & SISTEM */}
+            <div className="space-y-1">
+              <button
+                type="button"
+                onClick={() => toggleSection("integrasi")}
+                className={`w-full group flex items-center px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition select-none ${
+                  isCollapsed ? "justify-center" : "justify-between"
+                } ${
+                  isIntegrasiActive
+                    ? "text-blue-700 dark:text-blue-300 bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-900/60 shadow-2xs"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                }`}
+                title="Integrasi & Sistem (Klik untuk Buka/Tutup Submenu)"
+              >
+                <div className="flex items-center space-x-2.5">
+                  <Database
+                    className={`w-4 h-4 shrink-0 ${
+                      isIntegrasiActive
+                        ? "text-blue-600 dark:text-blue-400"
+                        : "text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"
+                    }`}
+                  />
+                  {!isCollapsed && <span>INTEGRASI & SISTEM</span>}
+                </div>
+                {!isCollapsed && (
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60">
+                      3
+                    </span>
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                        openSections.integrasi ? "rotate-0" : "-rotate-90"
+                      }`}
+                    />
+                  </div>
+                )}
+              </button>
+
+              {/* Submenu: Integrasi & Sistem */}
+              {(openSections.integrasi || isCollapsed) && (
+                <div className={`${!isCollapsed ? "pl-2 ml-2 border-l border-slate-200/80 dark:border-slate-800/80" : ""} space-y-1 mt-0.5 transition-all duration-200`}>
+                  <Link
+                    href="/admin/sync"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/admin/sync"
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
+                    title="Google Sheets Sync & Admin"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <FileSpreadsheet
+                        className={`w-5 h-5 shrink-0 ${
+                          pathname === "/admin/sync"
+                            ? "text-indigo-600 dark:text-indigo-400"
+                            : "text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
+                        }`}
+                      />
+                      {!isCollapsed && <span>Sheets Sync & Admin</span>}
+                    </div>
+                    {!isCollapsed && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                        Sync
+                      </span>
+                    )}
+                  </Link>
+
+                  <Link
+                    href="/settings/users"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/settings/users"
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
+                    title="Pengaturan User Akses & Profil"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <ShieldCheck
+                        className={`w-5 h-5 shrink-0 ${
+                          pathname === "/settings/users"
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                        }`}
+                      />
+                      {!isCollapsed && <span>Pengaturan User Akses</span>}
+                    </div>
+                    {!isCollapsed && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                        Akses
+                      </span>
+                    )}
+                  </Link>
+
+                  <Link
+                    href="/logs"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/logs" || pathname === "/admin/logs"
+                        ? "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
+                    title="Log Aplikasi & Riwayat Aktivitas Login/Perubahan"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <History
+                        className={`w-5 h-5 shrink-0 ${
+                          pathname === "/logs" || pathname === "/admin/logs"
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-slate-400 group-hover:text-amber-600 dark:group-hover:text-amber-400"
+                        }`}
+                      />
+                      {!isCollapsed && <span>Log Aplikasi</span>}
+                    </div>
+                    {!isCollapsed && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                        Audit
+                      </span>
+                    )}
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         </div>

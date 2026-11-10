@@ -108,6 +108,7 @@ export async function GET(request: NextRequest) {
       downgrade: await prisma.popSite.count({ where: { ...baseScope, orders: { some: { tipe_order: "Downgrade" } } } }),
       isolir: await prisma.popSite.count({ where: { ...baseScope, orders: { some: { tipe_order: "Isolir" } } } }),
       unisolir: await prisma.popSite.count({ where: { ...baseScope, orders: { some: { tipe_order: "Unisolir" } } } }),
+      unterminated: await prisma.popSite.count({ where: { ...baseScope, orders: { some: { tipe_order: { in: ["Unterminate", "Unterminated"] } } } } }),
       terminate: await prisma.popSite.count({ where: { ...baseScope, orders: { some: { tipe_order: "Terminate" } } } }),
     };
 

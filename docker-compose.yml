@@ -1,19 +1,50 @@
-version: "3.8"
-
 services:
+  # ==============================================================================
+  # SERVICE 1: PostgreSQL 16 Database
+  # ==============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: actis-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-actis_db}
+    ports:
+      - "${POSTGRES_PORT:-15432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-actis_db}"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==============================================================================
+  # SERVICE 2: ACTIS Web Application (Next.js Standalone)
+  # ==============================================================================
   actis-app:
     container_name: actis-web
     build:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "${PORT:-3000}:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
       - HOSTNAME=0.0.0.0
-      - DATABASE_URL=file:/app/prisma/dev.db
+      # Koneksi internal container ke service postgres (port 5432 internal)
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-actis_db}?schema=public
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       - GOOGLE_APPS_SCRIPT_WEBHOOK_URL=${GOOGLE_APPS_SCRIPT_WEBHOOK_URL}
       - GOOGLE_SHEET_ID=${GOOGLE_SHEET_ID}
@@ -21,19 +52,21 @@ services:
       - GOOGLE_PRIVATE_KEY=${GOOGLE_PRIVATE_KEY}
       - INITIAL_SEED=${INITIAL_SEED:-false}
     volumes:
-      # Persistent Volume untuk Database SQLite agar data tidak hilang saat restart/update
-      - ./data:/app/prisma
-      # Persistent Volume untuk File Hasil Upload (Evidence, Speedtest, PDF)
+      # Persistent Volume untuk File Hasil Upload (Evidence Uji Jaringan, Speedtest, PDF)
       - ./uploads:/app/public/uploads
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 15s
+      start_period: 20s
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
 
+volumes:
+  # Persistent volume PostgreSQL agar data transaksi NOC & inventaris aman
+  postgres_data:
+    name: actis_postgres_data

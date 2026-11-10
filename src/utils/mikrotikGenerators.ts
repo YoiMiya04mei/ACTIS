@@ -1,0 +1,2686 @@
+import type {
+  RouterOSVersion,
+  WanLine,
+  PCCConfig,
+  NTHConfig,
+  ECMPConfig,
+  RecursiveFailoverConfig,
+  GamesRoutingConfig,
+  WebsiteRoutingConfig,
+  ClientIpRoutingConfig,
+  PortForwardingConfig,
+  PortRoutingConfig,
+  AllTrafficVPNConfig,
+  RemoteAccessConfig,
+  VPNGamesConfig,
+  VPNRemoteClientConfig,
+  SocialMediaRoutingConfig,
+  HotspotQRCodeConfig,
+  HotspotUserGenConfig,
+  BlockSharingTTLConfig,
+  BandwidthUpToConfig,
+  HotspotWizardConfig,
+  ExpiredNotificationConfig,
+  PPPSecretsGenConfig,
+  DoHConfig,
+  BondingConfig,
+  NetwatchConfig,
+  RogueDHCPConfig,
+  MacChangeConfig,
+  HideRouterboardConfig,
+  PortKnockingConfig,
+  AdvancedProtectionConfig,
+  BlockWebsitesConfig,
+  AutoBackupEmailConfig,
+  MangleObfuscatorConfig,
+  BlockSocialMediaConfig,
+  IndonesiaNTPConfig,
+  WifiIdAutoLoginConfig,
+  BurstLimitConfig,
+  PCQBurstQueueSizeConfig,
+  SimpleQueueTokenBucketConfig,
+  SimpleQueueSharedUpToConfig,
+  QueueTreeSharedUpToConfig,
+  PCQTreeSimpleConfig,
+  QoSPriorityConfig,
+} from '../types/mikrotikTools';
+
+// Game Port Presets Database
+export interface GamePreset {
+  id: string;
+  name: string;
+  tcpPorts: string;
+  udpPorts: string;
+}
+
+export const GAME_PRESETS: GamePreset[] = [
+  {
+    id: 'mlbb',
+    name: 'Mobile Legends (MLBB)',
+    tcpPorts: '5001-5010,5500-5700',
+    udpPorts: '9000-10000,9992,30000-30200',
+  },
+  {
+    id: 'ff',
+    name: 'Free Fire',
+    tcpPorts: '7006,10006',
+    udpPorts: '10001-10010,39003,39698,39699,39700,39800',
+  },
+  {
+    id: 'pubgm',
+    name: 'PUBG Mobile',
+    tcpPorts: '10012,17500',
+    udpPorts: '7889,10012,10612,17500,20000-20002',
+  },
+  {
+    id: 'valorant',
+    name: 'Valorant / Riot Games',
+    tcpPorts: '2099,5222,5223,8393-8400',
+    udpPorts: '7000-8000,8180-8181',
+  },
+  {
+    id: 'genshin',
+    name: 'Genshin Impact',
+    tcpPorts: '80,443,27015-27030',
+    udpPorts: '22101-22102,42472',
+  },
+  {
+    id: 'roblox',
+    name: 'Roblox',
+    tcpPorts: '80,443',
+    udpPorts: '49152-65535',
+  },
+  {
+    id: 'dota2_steam',
+    name: 'Dota 2 & Steam Network',
+    tcpPorts: '27015-27030,27036-27037',
+    udpPorts: '27000-27100,4380,3478',
+  },
+  {
+    id: 'pb',
+    name: 'Point Blank (Zepetto)',
+    tcpPorts: '1209,1210',
+    udpPorts: '40000-40010',
+  },
+];
+
+// Website Presets Database
+export interface WebsitePreset {
+  id: string;
+  name: string;
+  category: string;
+  domains: string[];
+}
+
+export const WEBSITE_PRESETS: WebsitePreset[] = [
+  {
+    id: 'bank_bca',
+    name: 'Bank BCA (KlikBCA / myBCA)',
+    category: 'Perbankan',
+    domains: ['klikbca.com', 'bca.co.id', 'ib.klikbca.com'],
+  },
+  {
+    id: 'bank_mandiri',
+    name: 'Bank Mandiri (Livin)',
+    category: 'Perbankan',
+    domains: ['bankmandiri.co.id', 'livin.mandiri.co.id', 'mandiri.co.id'],
+  },
+  {
+    id: 'bank_bri',
+    name: 'Bank BRI (BRImo)',
+    category: 'Perbankan',
+    domains: ['bri.co.id', 'ib.bri.co.id', 'brimo.bri.co.id'],
+  },
+  {
+    id: 'bank_bni',
+    name: 'Bank BNI (BNI Mobile/IBank)',
+    category: 'Perbankan',
+    domains: ['bni.co.id', 'ibank.bni.co.id'],
+  },
+  {
+    id: 'pajak_djp',
+    name: 'Pajak DJP Online & OSS',
+    category: 'Pemerintah',
+    domains: ['pajak.go.id', 'djponline.pajak.go.id', 'oss.go.id'],
+  },
+  {
+    id: 'zoom_meeting',
+    name: 'Zoom Video Communications',
+    category: 'Meeting',
+    domains: ['zoom.us', 'zoomgov.com'],
+  },
+  {
+    id: 'ms_teams',
+    name: 'Microsoft Teams & Office365',
+    category: 'Meeting',
+    domains: ['teams.microsoft.com', 'office.com', 'microsoft365.com'],
+  },
+  {
+    id: 'speedtest',
+    name: 'Speedtest Ookla',
+    category: 'Tools',
+    domains: ['speedtest.net', 'ooklaserver.net'],
+  },
+];
+
+// Social Platforms Database
+export interface SocialPlatformPreset {
+  id: string;
+  name: string;
+  domains: string[];
+  portsTcp?: string;
+  portsUdp?: string;
+}
+
+export const SOCIAL_PRESETS: SocialPlatformPreset[] = [
+  {
+    id: 'youtube',
+    name: 'YouTube & Google Video',
+    domains: ['youtube.com', 'googlevideo.com', 'ytimg.com', 'youtu.be'],
+  },
+  {
+    id: 'tiktok',
+    name: 'TikTok Video & Live',
+    domains: ['tiktok.com', 'byteoversea.com', 'tiktokcdn.com', 'ibytedtos.com', 'ttwstatic.com'],
+  },
+  {
+    id: 'facebook_meta',
+    name: 'Facebook & Instagram (Meta)',
+    domains: ['facebook.com', 'fbcdn.net', 'instagram.com', 'cdninstagram.com', 'meta.com'],
+  },
+  {
+    id: 'whatsapp',
+    name: 'WhatsApp (Call & Media)',
+    domains: ['whatsapp.com', 'whatsapp.net'],
+    portsTcp: '443,5222,5223,5228',
+    portsUdp: '3478,45395',
+  },
+  {
+    id: 'netflix',
+    name: 'Netflix Streaming',
+    domains: ['netflix.com', 'nflxvideo.net', 'nflximg.net', 'nflxext.com'],
+  },
+];
+
+function headerBanner(title: string, rosVersion: RouterOSVersion): string {
+  return `# ==============================================================================
+# MIKROTIK ROUTEROS SCRIPT: ${title}
+# Target RouterOS: ${rosVersion.toUpperCase()} (Generated by GENERATOR TOOLS)
+# Timestamp: ${new Date().toLocaleString('id-ID')}
+# Cara Pakai: Buka Winbox -> New Terminal -> Paste seluruh skrip di bawah ini
+# ==============================================================================
+`;
+}
+
+// Helper function to calculate PCC Divisor and proportional slot distribution from WAN bandwidth speeds
+export function computePCCRatio(wans: WanLine[]): {
+  totalSlots: number;
+  overallGcd: number;
+  allocations: {
+    wan: WanLine;
+    speed: number;
+    slots: number;
+    percentage: string;
+    ratios: string[];
+  }[];
+} {
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+
+  const speeds = wans.map((w) => {
+    if (typeof w.speed === 'number' && w.speed > 0) return Math.round(w.speed);
+    if (typeof w.weight === 'number' && w.weight > 0) return Math.round(w.weight);
+    return 100;
+  });
+
+  let overallGcd = speeds[0] || 1;
+  for (let i = 1; i < speeds.length; i++) {
+    overallGcd = gcd(overallGcd, speeds[i]);
+  }
+  if (!overallGcd || overallGcd <= 0) overallGcd = 1;
+
+  const normalizedSlots = speeds.map((s) => Math.max(1, Math.round(s / overallGcd)));
+  const totalSlots = normalizedSlots.reduce((a, b) => a + b, 0);
+
+  let currentSlot = 0;
+  const allocations = wans.map((w, idx) => {
+    const slots = normalizedSlots[idx];
+    const ratios: string[] = [];
+    for (let s = 0; s < slots; s++) {
+      ratios.push(`${totalSlots}/${currentSlot}`);
+      currentSlot++;
+    }
+    const percentage = ((slots / totalSlots) * 100).toFixed(1);
+    return {
+      wan: w,
+      speed: speeds[idx],
+      slots,
+      percentage,
+      ratios,
+    };
+  });
+
+  return {
+    totalSlots,
+    overallGcd,
+    allocations,
+  };
+}
+
+// 1. PCC (Per Connection Classifier)
+export function generatePCCScript(config: PCCConfig): string {
+  const { rosVersion, lanInterface, lanSubnet, pccClassifier, wans, addDefaultRoute, addNatMasquerade, addLocalAcceptRule } = config;
+  const count = wans.length;
+  if (count < 2) return '# Error: Minimal 2 WAN line diperlukan untuk Load Balancing PCC.';
+
+  const ratioInfo = computePCCRatio(wans);
+  const ratioDetails = ratioInfo.allocations.map((a) => `${a.wan.name}: ${a.speed}Mbps (${a.slots} slot)`).join(' : ');
+
+  const lines: string[] = [headerBanner(`Load Balancing PCC (${count} WAN Lines)`, rosVersion)];
+  lines.push(`# Rasio Bandwidth & Slot Divisor: ${ratioDetails} | Total Divisor: ${ratioInfo.totalSlots}`);
+  lines.push('');
+
+  if (addLocalAcceptRule) {
+    lines.push('# 1. Address List Jaringan Lokal (RFC6890 / RFC1918)');
+    lines.push('/ip firewall address-list');
+    lines.push('add address=10.0.0.0/8 list=LOCAL-IP comment="RFC1918 Private"');
+    lines.push('add address=172.16.0.0/12 list=LOCAL-IP comment="RFC1918 Private"');
+    lines.push('add address=192.168.0.0/16 list=LOCAL-IP comment="RFC1918 Private"');
+    if (lanSubnet && !['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'].includes(lanSubnet)) {
+      lines.push(`add address=${lanSubnet} list=LOCAL-IP comment="LAN Subnet"`);
+    }
+    lines.push('');
+  }
+
+  if (rosVersion === 'v7') {
+    lines.push('# 2. RouterOS v7 Routing Tables Definition');
+    lines.push('/routing table');
+    wans.forEach((w) => {
+      lines.push(`add name="to_${w.name}" fib`);
+    });
+    lines.push('');
+  }
+
+  lines.push('# 3. Mangle Rules (Per Connection Classifier)');
+  lines.push('/ip firewall mangle');
+  if (addLocalAcceptRule) {
+    lines.push(`add chain=prerouting dst-address-list=LOCAL-IP src-address-list=LOCAL-IP action=accept comment="Accept LAN to LAN"`);
+  }
+
+  // Input & Output rules for each WAN
+  wans.forEach((w) => {
+    lines.push(`add chain=input in-interface="${w.interface}" connection-state=new action=mark-connection new-connection-mark="${w.name}_conn" passthrough=yes comment="${w.name} Incoming"`);
+    lines.push(`add chain=output connection-mark="${w.name}_conn" action=mark-routing new-routing-mark="to_${w.name}" passthrough=no comment="${w.name} Output Reply"`);
+  });
+
+  // Prerouting PCC classifier rules with proportional bandwidth slot allocations
+  const lanCondition = lanInterface ? `in-interface="${lanInterface}"` : `src-address="${lanSubnet || '192.168.88.0/24'}"`;
+  ratioInfo.allocations.forEach((alloc) => {
+    alloc.ratios.forEach((ratio, slotIdx) => {
+      const partInfo = alloc.ratios.length > 1 ? ` (${slotIdx + 1}/${alloc.ratios.length})` : '';
+      lines.push(
+        `add chain=prerouting ${lanCondition} connection-state=new dst-address-type=!local per-connection-classifier=${pccClassifier}:${ratio} action=mark-connection new-connection-mark="${alloc.wan.name}_conn" passthrough=yes comment="PCC Classifier ${alloc.wan.name}${partInfo}"`
+      );
+    });
+  });
+
+  // Prerouting mark routing based on connection mark
+  wans.forEach((w) => {
+    lines.push(
+      `add chain=prerouting ${lanCondition} connection-mark="${w.name}_conn" action=mark-routing new-routing-mark="to_${w.name}" passthrough=no comment="Route to ${w.name}"`
+    );
+  });
+  lines.push('');
+
+  if (addDefaultRoute) {
+    lines.push('# 4. IP Routes');
+    lines.push('/ip route');
+    wans.forEach((w) => {
+      const routingTableParam = rosVersion === 'v7' ? `routing-table="to_${w.name}"` : `routing-mark="to_${w.name}"`;
+      lines.push(
+        `add dst-address=0.0.0.0/0 gateway=${w.gateway} ${routingTableParam} check-gateway=ping distance=1 comment="Route via ${w.name}"`
+      );
+    });
+    // Main routing table failover routes
+    wans.forEach((w, index) => {
+      lines.push(
+        `add dst-address=0.0.0.0/0 gateway=${w.gateway} distance=${index + 1} check-gateway=ping comment="Default Failover ${w.name}"`
+      );
+    });
+    lines.push('');
+  }
+
+  if (addNatMasquerade) {
+    lines.push('# 5. NAT Masquerade per WAN');
+    lines.push('/ip firewall nat');
+    wans.forEach((w) => {
+      lines.push(`add chain=srcnat out-interface="${w.interface}" action=masquerade comment="NAT Masquerade ${w.name}"`);
+    });
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+// 2. NTH (Round Robin Packet/Connection Counter)
+export function generateNTHScript(config: NTHConfig): string {
+  const { rosVersion, lanInterface, lanSubnet, wans, addDefaultRoute, addNatMasquerade } = config;
+  const count = wans.length;
+  if (count < 2) return '# Error: Minimal 2 WAN line diperlukan untuk Load Balancing NTH.';
+
+  const lines: string[] = [headerBanner(`Load Balancing NTH (${count} WAN Lines)`, rosVersion)];
+
+  if (rosVersion === 'v7') {
+    lines.push('# 1. RouterOS v7 Routing Tables');
+    lines.push('/routing table');
+    wans.forEach((w) => {
+      lines.push(`add name="to_${w.name}" fib`);
+    });
+    lines.push('');
+  }
+
+  lines.push('# 2. Mangle NTH Rules');
+  lines.push('/ip firewall mangle');
+  const lanCondition = lanInterface ? `in-interface="${lanInterface}"` : `src-address="${lanSubnet || '192.168.88.0/24'}"`;
+
+  // Mangle input & output for stateful return
+  wans.forEach((w) => {
+    lines.push(`add chain=input in-interface="${w.interface}" action=mark-connection new-connection-mark="${w.name}_conn" passthrough=yes comment="${w.name} Incoming"`);
+    lines.push(`add chain=output connection-mark="${w.name}_conn" action=mark-routing new-routing-mark="to_${w.name}" passthrough=no comment="${w.name} Output Reply"`);
+  });
+
+  // NTH rules
+  wans.forEach((w, index) => {
+    const nthVal = `${count},${index + 1}`;
+    lines.push(
+      `add chain=prerouting ${lanCondition} connection-state=new dst-address-type=!local nth=${nthVal} action=mark-connection new-connection-mark="${w.name}_conn" passthrough=yes comment="NTH ${nthVal} to ${w.name}"`
+    );
+    lines.push(
+      `add chain=prerouting ${lanCondition} connection-mark="${w.name}_conn" action=mark-routing new-routing-mark="to_${w.name}" passthrough=no comment="Route to ${w.name}"`
+    );
+  });
+  lines.push('');
+
+  if (addDefaultRoute) {
+    lines.push('# 3. IP Routes');
+    lines.push('/ip route');
+    wans.forEach((w) => {
+      const routingTableParam = rosVersion === 'v7' ? `routing-table="to_${w.name}"` : `routing-mark="to_${w.name}"`;
+      lines.push(`add dst-address=0.0.0.0/0 gateway=${w.gateway} ${routingTableParam} check-gateway=ping distance=1 comment="Route via ${w.name}"`);
+    });
+    wans.forEach((w, index) => {
+      lines.push(`add dst-address=0.0.0.0/0 gateway=${w.gateway} distance=${index + 1} check-gateway=ping comment="Default Failover ${w.name}"`);
+    });
+    lines.push('');
+  }
+
+  if (addNatMasquerade) {
+    lines.push('# 4. NAT Masquerade');
+    lines.push('/ip firewall nat');
+    wans.forEach((w) => {
+      lines.push(`add chain=srcnat out-interface="${w.interface}" action=masquerade comment="NAT Masquerade ${w.name}"`);
+    });
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+// 3. ECMP (Equal Cost Multi-Path)
+export function generateECMPScript(config: ECMPConfig): string {
+  const { rosVersion, wans, checkGateway, addNatMasquerade } = config;
+  if (wans.length < 2) return '# Error: Minimal 2 WAN line diperlukan untuk ECMP.';
+
+  const lines: string[] = [headerBanner(`Load Balancing ECMP (${wans.length} WAN Lines)`, rosVersion)];
+
+  // Build gateway list with weights
+  const gatewayParts: string[] = [];
+  wans.forEach((w) => {
+    const weight = Math.max(1, w.weight || 1);
+    for (let i = 0; i < weight; i++) {
+      gatewayParts.push(w.gateway);
+    }
+  });
+
+  const checkParam = checkGateway !== 'none' ? ` check-gateway=${checkGateway}` : '';
+
+  lines.push('# 1. ECMP Multi-Gateway Route');
+  lines.push('/ip route');
+  lines.push(`add dst-address=0.0.0.0/0 gateway=${gatewayParts.join(',')}${checkParam} distance=1 comment="ECMP Multi-Gateway Load Balancing"`);
+
+  // Fallback individual routes
+  lines.push('# Fallback Single Gateway Routes (Failover Protection)');
+  wans.forEach((w, idx) => {
+    lines.push(`add dst-address=0.0.0.0/0 gateway=${w.gateway}${checkParam} distance=${idx + 2} comment="Failover ${w.name}"`);
+  });
+  lines.push('');
+
+  if (addNatMasquerade) {
+    lines.push('# 2. NAT Masquerade for Each WAN');
+    lines.push('/ip firewall nat');
+    wans.forEach((w) => {
+      lines.push(`add chain=srcnat out-interface="${w.interface}" action=masquerade comment="NAT Masquerade ${w.name}"`);
+    });
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+// 4. Failover Recursive Gateway
+export function generateRecursiveFailoverScript(config: RecursiveFailoverConfig): string {
+  const { rosVersion, primaryWan, secondaryWan, primaryTargetDns, secondaryTargetDns, addNatMasquerade } = config;
+  const lines: string[] = [headerBanner('Failover Recursive Gateway (DNS Check)', rosVersion)];
+
+  lines.push('# 1. Static Host Routes to Verification Targets (Scope 10)');
+  lines.push('/ip route');
+  lines.push(
+    `add dst-address=${primaryTargetDns}/32 gateway=${primaryWan.gateway} scope=10 comment="Host Route to Check Target 1 via ${primaryWan.name}"`
+  );
+  lines.push(
+    `add dst-address=${secondaryTargetDns}/32 gateway=${secondaryWan.gateway} scope=10 comment="Host Route to Check Target 2 via ${secondaryWan.name}"`
+  );
+  lines.push('');
+
+  lines.push('# 2. Recursive Default Routes (Target-Scope 30, Check-Gateway Ping)');
+  lines.push(
+    `add dst-address=0.0.0.0/0 gateway=${primaryTargetDns} distance=1 check-gateway=ping target-scope=30 comment="Primary Default Route via ${primaryWan.name} (Recursive)"`
+  );
+  lines.push(
+    `add dst-address=0.0.0.0/0 gateway=${secondaryTargetDns} distance=2 check-gateway=ping target-scope=30 comment="Secondary Backup Route via ${secondaryWan.name} (Recursive)"`
+  );
+  lines.push('');
+
+  if (addNatMasquerade) {
+    lines.push('# 3. NAT Masquerade for Both WANs');
+    lines.push('/ip firewall nat');
+    lines.push(`add chain=srcnat out-interface="${primaryWan.interface}" action=masquerade comment="NAT Masquerade ${primaryWan.name}"`);
+    lines.push(`add chain=srcnat out-interface="${secondaryWan.interface}" action=masquerade comment="NAT Masquerade ${secondaryWan.name}"`);
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+// 5 & 6. Games Static Routing (Filter Raw or Mangle Port)
+export function generateGamesRoutingScript(config: GamesRoutingConfig): string {
+  const { rosVersion, lanInterface, targetWan, targetGateway, routingMarkName, method, selectedGameIds, customPortsTcp, customPortsUdp } =
+    config;
+
+  const title = method === 'raw' ? 'Games Static Routing (Filter Raw)' : 'Games Static Routing (Mangle Port)';
+  const lines: string[] = [headerBanner(title, rosVersion)];
+
+  // Gather ports
+  const tcpList: string[] = [];
+  const udpList: string[] = [];
+
+  selectedGameIds.forEach((id) => {
+    const preset = GAME_PRESETS.find((p) => p.id === id);
+    if (preset) {
+      if (preset.tcpPorts) tcpList.push(preset.tcpPorts);
+      if (preset.udpPorts) udpList.push(preset.udpPorts);
+    }
+  });
+
+  if (customPortsTcp) tcpList.push(customPortsTcp.trim());
+  if (customPortsUdp) udpList.push(customPortsUdp.trim());
+
+  const combinedTcp = tcpList.filter(Boolean).join(',');
+  const combinedUdp = udpList.filter(Boolean).join(',');
+
+  if (rosVersion === 'v7') {
+    lines.push('# 1. Create Routing Table for Games');
+    lines.push('/routing table');
+    lines.push(`add name="${routingMarkName}" fib`);
+    lines.push('');
+  }
+
+  if (method === 'raw') {
+    lines.push('# 2. Firewall RAW Rules (Low CPU Packet Inspection)');
+    lines.push('/ip firewall raw');
+    if (combinedTcp) {
+      lines.push(
+        `add chain=prerouting in-interface="${lanInterface}" protocol=tcp dst-port="${combinedTcp}" action=add-dst-to-address-list address-list=GAMES_IP address-list-timeout=06:00:00 comment="Capture Game TCP IPs to List"`
+      );
+    }
+    if (combinedUdp) {
+      lines.push(
+        `add chain=prerouting in-interface="${lanInterface}" protocol=udp dst-port="${combinedUdp}" action=add-dst-to-address-list address-list=GAMES_IP address-list-timeout=06:00:00 comment="Capture Game UDP IPs to List"`
+      );
+    }
+    lines.push('');
+
+    lines.push('# 3. Mangle Rule for Address List Routing Mark');
+    lines.push('/ip firewall mangle');
+    lines.push(
+      `add chain=prerouting in-interface="${lanInterface}" dst-address-list=GAMES_IP action=mark-routing new-routing-mark="${routingMarkName}" passthrough=no comment="Route Game Traffic to Dedicated Line"`
+    );
+    lines.push('');
+  } else {
+    lines.push('# 2. Mangle Rules for Direct Game Ports');
+    lines.push('/ip firewall mangle');
+    if (combinedTcp) {
+      lines.push(
+        `add chain=prerouting in-interface="${lanInterface}" protocol=tcp dst-port="${combinedTcp}" action=mark-connection new-connection-mark="GAMES_conn" passthrough=yes comment="Mark Connection Game TCP"`
+      );
+    }
+    if (combinedUdp) {
+      lines.push(
+        `add chain=prerouting in-interface="${lanInterface}" protocol=udp dst-port="${combinedUdp}" action=mark-connection new-connection-mark="GAMES_conn" passthrough=yes comment="Mark Connection Game UDP"`
+      );
+    }
+    lines.push(
+      `add chain=prerouting in-interface="${lanInterface}" connection-mark="GAMES_conn" action=mark-routing new-routing-mark="${routingMarkName}" passthrough=no comment="Mark Routing Game Traffic"`
+    );
+    lines.push('');
+  }
+
+  lines.push('# 4. Dedicated Game Route');
+  lines.push('/ip route');
+  const routingParam = rosVersion === 'v7' ? `routing-table="${routingMarkName}"` : `routing-mark="${routingMarkName}"`;
+  lines.push(
+    `add dst-address=0.0.0.0/0 gateway=${targetGateway} ${routingParam} distance=1 check-gateway=ping comment="Game Line via ${targetWan}"`
+  );
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// 7. Website Static Routing
+export function generateWebsiteRoutingScript(config: WebsiteRoutingConfig): string {
+  const { rosVersion, lanInterface, targetWan, targetGateway, routingMarkName, selectedPresets, customDomains } = config;
+  const lines: string[] = [headerBanner('Website Static Routing (Banking, Gov, Zoom)', rosVersion)];
+
+  const domainList: string[] = [];
+  selectedPresets.forEach((id) => {
+    const preset = WEBSITE_PRESETS.find((p) => p.id === id);
+    if (preset) domainList.push(...preset.domains);
+  });
+  customDomains.forEach((d) => {
+    if (d.trim()) domainList.push(d.trim());
+  });
+
+  const uniqueDomains = Array.from(new Set(domainList));
+
+  lines.push('# 1. Address List Websites / Domains');
+  lines.push('/ip firewall address-list');
+  uniqueDomains.forEach((d) => {
+    lines.push(`add address="${d}" list=STATIC_WEBSITES comment="Website ${d}"`);
+  });
+  lines.push('');
+
+  if (rosVersion === 'v7') {
+    lines.push('# 2. RouterOS v7 Routing Table');
+    lines.push('/routing table');
+    lines.push(`add name="${routingMarkName}" fib`);
+    lines.push('');
+  }
+
+  lines.push('# 3. Mangle Mark Routing for Websites');
+  lines.push('/ip firewall mangle');
+  lines.push(
+    `add chain=prerouting in-interface="${lanInterface}" dst-address-list=STATIC_WEBSITES action=mark-connection new-connection-mark="WEBSITE_conn" passthrough=yes comment="Mark Connection Website"`
+  );
+  lines.push(
+    `add chain=prerouting in-interface="${lanInterface}" connection-mark="WEBSITE_conn" action=mark-routing new-routing-mark="${routingMarkName}" passthrough=no comment="Route Websites to ${targetWan}"`
+  );
+  lines.push('');
+
+  lines.push('# 4. Route for Website Traffic');
+  lines.push('/ip route');
+  const routingParam = rosVersion === 'v7' ? `routing-table="${routingMarkName}"` : `routing-mark="${routingMarkName}"`;
+  lines.push(`add dst-address=0.0.0.0/0 gateway=${targetGateway} ${routingParam} distance=1 check-gateway=ping comment="Website Route via ${targetWan}"`);
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// 8. Local Client IP Static Routing
+export function generateClientIpRoutingScript(config: ClientIpRoutingConfig): string {
+  const { rosVersion, lanInterface, targetWan, targetGateway, routingMarkName, clientIpList, description } = config;
+  const lines: string[] = [headerBanner(`Local Client IP Static Routing (${description || 'Dedicated Clients'})`, rosVersion)];
+
+  const ips = clientIpList.split(',').map((s) => s.trim()).filter(Boolean);
+
+  lines.push('# 1. Address List for Selected Local Clients');
+  lines.push('/ip firewall address-list');
+  ips.forEach((ip) => {
+    lines.push(`add address="${ip}" list=VIP_CLIENTS comment="${description || 'VIP Client'}"`);
+  });
+  lines.push('');
+
+  if (rosVersion === 'v7') {
+    lines.push('# 2. RouterOS v7 Routing Table');
+    lines.push('/routing table');
+    lines.push(`add name="${routingMarkName}" fib`);
+    lines.push('');
+  }
+
+  lines.push('# 3. Mangle Rule for Client IP Routing');
+  lines.push('/ip firewall mangle');
+  lines.push(
+    `add chain=prerouting in-interface="${lanInterface}" src-address-list=VIP_CLIENTS dst-address-type=!local action=mark-routing new-routing-mark="${routingMarkName}" passthrough=no comment="Route VIP Clients to ${targetWan}"`
+  );
+  lines.push('');
+
+  lines.push('# 4. Dedicated Route for Clients');
+  lines.push('/ip route');
+  const routingParam = rosVersion === 'v7' ? `routing-table="${routingMarkName}"` : `routing-mark="${routingMarkName}"`;
+  lines.push(`add dst-address=0.0.0.0/0 gateway=${targetGateway} ${routingParam} distance=1 check-gateway=ping comment="Clients Route via ${targetWan}"`);
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// 9. Port Forwarding NAT (dst-nat)
+export function generatePortForwardingScript(config: PortForwardingConfig): string {
+  const { rosVersion, wanInterface, publicIp, protocol, externalPort, internalIp, internalPort, comment, includeHairpinNat, lanSubnet } = config;
+  const lines: string[] = [headerBanner(`Port Forwarding NAT (${comment || 'Service'})`, rosVersion)];
+
+  const protocols = protocol === 'both' ? ['tcp', 'udp'] : [protocol];
+
+  lines.push('# 1. DST-NAT Port Forwarding Rules');
+  lines.push('/ip firewall nat');
+  protocols.forEach((proto) => {
+    const inCondition = publicIp ? `dst-address=${publicIp}` : `in-interface="${wanInterface}"`;
+    lines.push(
+      `add chain=dstnat ${inCondition} protocol=${proto} dst-port=${externalPort} action=dst-nat to-addresses=${internalIp} to-ports=${internalPort} comment="Forward ${proto.toUpperCase()} ${externalPort} -> ${internalIp}:${internalPort} (${comment || 'Port Forward'})"`
+    );
+  });
+  lines.push('');
+
+  if (includeHairpinNat) {
+    lines.push('# 2. Hairpin NAT Rule (Access Internal Server from Local LAN via Public IP/Domain)');
+    lines.push(
+      `add chain=srcnat src-address=${lanSubnet || '192.168.88.0/24'} dst-address=${internalIp} protocol=${protocols[0]} dst-port=${internalPort} action=masquerade comment="Hairpin NAT for ${internalIp}"`
+    );
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+// 10. Port TCP/UDP Static Routing
+export function generatePortTcpUdpRoutingScript(config: PortRoutingConfig): string {
+  const { rosVersion, lanInterface, targetWan, targetGateway, routingMarkName, protocol, ports, description } = config;
+  const lines: string[] = [headerBanner(`Port Static Routing (${description || 'Custom Ports'})`, rosVersion)];
+
+  if (rosVersion === 'v7') {
+    lines.push('# 1. Create Routing Table');
+    lines.push('/routing table');
+    lines.push(`add name="${routingMarkName}" fib`);
+    lines.push('');
+  }
+
+  const protocols = protocol === 'both' ? ['tcp', 'udp'] : [protocol];
+
+  lines.push('# 2. Mangle Routing Mark by Ports');
+  lines.push('/ip firewall mangle');
+  protocols.forEach((proto) => {
+    lines.push(
+      `add chain=prerouting in-interface="${lanInterface}" protocol=${proto} dst-port="${ports}" action=mark-connection new-connection-mark="PORT_${proto.toUpperCase()}_conn" passthrough=yes comment="Mark ${proto.toUpperCase()} ${ports}"`
+    );
+    lines.push(
+      `add chain=prerouting in-interface="${lanInterface}" connection-mark="PORT_${proto.toUpperCase()}_conn" action=mark-routing new-routing-mark="${routingMarkName}" passthrough=no comment="Route ${proto.toUpperCase()} ${ports} to ${targetWan}"`
+    );
+  });
+  lines.push('');
+
+  lines.push('# 3. Route for Port Traffic');
+  lines.push('/ip route');
+  const routingParam = rosVersion === 'v7' ? `routing-table="${routingMarkName}"` : `routing-mark="${routingMarkName}"`;
+  lines.push(`add dst-address=0.0.0.0/0 gateway=${targetGateway} ${routingParam} distance=1 check-gateway=ping comment="Port Route via ${targetWan}"`);
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// 11. All Traffic to VPN Tunnel
+export function generateAllTrafficVPNScript(config: AllTrafficVPNConfig): string {
+  const { rosVersion, vpnInterface, lanInterface, vpnServerIp, addNatMasquerade, enableKillSwitch, clientSubnet } = config;
+  const lines: string[] = [headerBanner('All Traffic to VPN Tunnel with Loop Prevention', rosVersion)];
+
+  if (vpnServerIp) {
+    lines.push('# 1. Exclude VPN Server Endpoint from Tunnel (Prevents Routing Loop)');
+    lines.push('/ip route');
+    lines.push(`add dst-address=${vpnServerIp}/32 gateway=main distance=1 comment="VPN Server Endpoint via Physical Gateway"`);
+    lines.push('');
+  }
+
+  if (rosVersion === 'v7') {
+    lines.push('# 2. Routing Table for VPN');
+    lines.push('/routing table');
+    lines.push('add name="to_VPN" fib');
+    lines.push('');
+  }
+
+  lines.push('# 3. Mangle Rule to Force Traffic into VPN Tunnel');
+  lines.push('/ip firewall mangle');
+  const srcCondition = clientSubnet ? `src-address="${clientSubnet}"` : `in-interface="${lanInterface}"`;
+  lines.push(
+    `add chain=prerouting ${srcCondition} dst-address-type=!local action=mark-routing new-routing-mark="to_VPN" passthrough=no comment="Redirect All Outbound to VPN"`
+  );
+  lines.push('');
+
+  lines.push('# 4. VPN Default Route');
+  lines.push('/ip route');
+  const routingParam = rosVersion === 'v7' ? 'routing-table="to_VPN"' : 'routing-mark="to_VPN"';
+  lines.push(`add dst-address=0.0.0.0/0 gateway="${vpnInterface}" ${routingParam} distance=1 comment="Default Route via VPN"`);
+  lines.push('');
+
+  if (addNatMasquerade) {
+    lines.push('# 5. NAT Masquerade on VPN Interface');
+    lines.push('/ip firewall nat');
+    lines.push(`add chain=srcnat out-interface="${vpnInterface}" action=masquerade comment="NAT Masquerade VPN Tunnel"`);
+    lines.push('');
+  }
+
+  if (enableKillSwitch) {
+    lines.push('# 6. Kill Switch Protection (Drop Leaks if VPN Disconnects)');
+    lines.push('/ip firewall filter');
+    lines.push(
+      `add chain=forward ${srcCondition} out-interface=!"${vpnInterface}" action=drop comment="KILL SWITCH: Block Outbound Traffic if VPN is Down"`
+    );
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+// 12. Remote Access ISP "Public IP Static"
+export function generateRemoteAccessScript(config: RemoteAccessConfig): string {
+  const { rosVersion, wanInterface, wanGateway, allowedSourceIps, enableWinbox, winboxPort, enableWebfig, webfigPort, enableSSH, sshPort, enableApi, apiPort, addMangleReplyRule } = config;
+  const lines: string[] = [headerBanner('Remote Access ISP (Public IP Static Security & Multi-WAN Reply)', rosVersion)];
+
+  lines.push('# 1. Firewall Filter Rules for Safe Remote Management');
+  lines.push('/ip firewall filter');
+  const srcParam = allowedSourceIps ? `src-address="${allowedSourceIps}"` : '';
+
+  if (enableWinbox) {
+    lines.push(`add chain=input in-interface="${wanInterface}" protocol=tcp dst-port=${winboxPort || '8291'} ${srcParam} action=accept comment="Allow Winbox Remote"`);
+  }
+  if (enableWebfig) {
+    lines.push(`add chain=input in-interface="${wanInterface}" protocol=tcp dst-port=${webfigPort || '80,443'} ${srcParam} action=accept comment="Allow WebFig Remote"`);
+  }
+  if (enableSSH) {
+    lines.push(`add chain=input in-interface="${wanInterface}" protocol=tcp dst-port=${sshPort || '22'} ${srcParam} action=accept comment="Allow SSH Remote"`);
+  }
+  if (enableApi) {
+    lines.push(`add chain=input in-interface="${wanInterface}" protocol=tcp dst-port=${apiPort || '8728'} ${srcParam} action=accept comment="Allow API Remote"`);
+  }
+  lines.push('');
+
+  if (addMangleReplyRule) {
+    lines.push('# 2. Multi-WAN Guarantee: Replies Always Exit Through the Same Interface');
+    if (rosVersion === 'v7') {
+      lines.push('/routing table');
+      lines.push(`add name="to_${wanInterface}" fib`);
+      lines.push('');
+    }
+
+    lines.push('/ip firewall mangle');
+    lines.push(`add chain=input in-interface="${wanInterface}" connection-state=new action=mark-connection new-connection-mark="${wanInterface}_in_conn" passthrough=yes comment="Mark Incoming Admin Connection"`);
+    lines.push(`add chain=output connection-mark="${wanInterface}_in_conn" action=mark-routing new-routing-mark="to_${wanInterface}" passthrough=no comment="Route Admin Reply via ${wanInterface}"`);
+    lines.push('');
+
+    lines.push('/ip route');
+    const routingParam = rosVersion === 'v7' ? `routing-table="to_${wanInterface}"` : `routing-mark="to_${wanInterface}"`;
+    lines.push(`add dst-address=0.0.0.0/0 gateway=${wanGateway} ${routingParam} distance=1 comment="Reply Route for ${wanInterface}"`);
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+// 13 & 14. VPN Routing for Games (Port & IP)
+export function generateVPNGamesScript(config: VPNGamesConfig): string {
+  const { rosVersion, vpnInterface, routingMarkName, type, selectedGameIds, customPortsTcp, customPortsUdp, customIps } = config;
+  const title = type === 'port' ? 'VPN Routing: Port Games' : 'VPN Routing: IP Address Games';
+  const lines: string[] = [headerBanner(title, rosVersion)];
+
+  if (rosVersion === 'v7') {
+    lines.push('# 1. Create VPN Routing Table');
+    lines.push('/routing table');
+    lines.push(`add name="${routingMarkName}" fib`);
+    lines.push('');
+  }
+
+  if (type === 'port') {
+    const tcpList: string[] = [];
+    const udpList: string[] = [];
+    selectedGameIds.forEach((id) => {
+      const p = GAME_PRESETS.find((x) => x.id === id);
+      if (p) {
+        if (p.tcpPorts) tcpList.push(p.tcpPorts);
+        if (p.udpPorts) udpList.push(p.udpPorts);
+      }
+    });
+    if (customPortsTcp) tcpList.push(customPortsTcp.trim());
+    if (customPortsUdp) udpList.push(customPortsUdp.trim());
+
+    const cTcp = tcpList.filter(Boolean).join(',');
+    const cUdp = udpList.filter(Boolean).join(',');
+
+    lines.push('# 2. Mangle Routing Mark for Game Ports to VPN');
+    lines.push('/ip firewall mangle');
+    if (cTcp) {
+      lines.push(`add chain=prerouting protocol=tcp dst-port="${cTcp}" action=mark-connection new-connection-mark="VPN_GAMES_conn" passthrough=yes comment="Game TCP to VPN"`);
+    }
+    if (cUdp) {
+      lines.push(`add chain=prerouting protocol=udp dst-port="${cUdp}" action=mark-connection new-connection-mark="VPN_GAMES_conn" passthrough=yes comment="Game UDP to VPN"`);
+    }
+    lines.push(`add chain=prerouting connection-mark="VPN_GAMES_conn" action=mark-routing new-routing-mark="${routingMarkName}" passthrough=no comment="Route Games to VPN"`);
+    lines.push('');
+  } else {
+    lines.push('# 2. Game IP Address List');
+    lines.push('/ip firewall address-list');
+    const ips = (customIps || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (ips.length > 0) {
+      ips.forEach((ip) => {
+        lines.push(`add address="${ip}" list=VPN_GAME_IPS comment="Game Server IP"`);
+      });
+    } else {
+      lines.push('add address=103.0.0.0/8 list=VPN_GAME_IPS comment="Example Gaming Subnet"');
+    }
+    lines.push('');
+
+    lines.push('# 3. Mangle Game IPs to VPN');
+    lines.push('/ip firewall mangle');
+    lines.push(`add chain=prerouting dst-address-list=VPN_GAME_IPS action=mark-routing new-routing-mark="${routingMarkName}" passthrough=no comment="Route Game IPs to VPN"`);
+    lines.push('');
+  }
+
+  lines.push('# 4. VPN Route and Masquerade');
+  lines.push('/ip route');
+  const routingParam = rosVersion === 'v7' ? `routing-table="${routingMarkName}"` : `routing-mark="${routingMarkName}"`;
+  lines.push(`add dst-address=0.0.0.0/0 gateway="${vpnInterface}" ${routingParam} distance=1 comment="Route Games via ${vpnInterface}"`);
+  lines.push('');
+  lines.push('/ip firewall nat');
+  lines.push(`add chain=srcnat out-interface="${vpnInterface}" action=masquerade comment="NAT Masquerade Gaming VPN"`);
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// 15. VPN Remote Client (SSTP, L2TP, PPTP, OVPN, WireGuard)
+export function generateVPNRemoteClientScript(config: VPNRemoteClientConfig): string {
+  const { rosVersion, vpnType, serverAddress, serverPort, username, password, profileName, interfaceName, addDefaultRoute, wireguardPrivateKey, wireguardClientIp, wireguardServerPublicKey } = config;
+  const lines: string[] = [headerBanner(`VPN Remote Client: ${vpnType.toUpperCase()} Connection`, rosVersion)];
+
+  if (vpnType === 'wireguard') {
+    if (rosVersion === 'v6') {
+      return '# Error: WireGuard hanya didukung pada RouterOS v7 ke atas. Silakan ubah target RouterOS ke v7.';
+    }
+    lines.push('# 1. Create WireGuard Interface');
+    lines.push('/interface wireguard');
+    lines.push(`add name="${interfaceName}" listen-port=${serverPort || '13231'} private-key="${wireguardPrivateKey || '<YOUR_PRIVATE_KEY>'}" comment="VPN Remote WireGuard"`);
+    lines.push('');
+
+    if (wireguardClientIp) {
+      lines.push('# 2. Assign IP Address to WireGuard Interface');
+      lines.push('/ip address');
+      lines.push(`add address="${wireguardClientIp}" interface="${interfaceName}" comment="WireGuard Tunnel IP"`);
+      lines.push('');
+    }
+
+    lines.push('# 3. Add WireGuard Peer');
+    lines.push('/interface wireguard peers');
+    lines.push(
+      `add interface="${interfaceName}" endpoint-address="${serverAddress}" endpoint-port=${serverPort || '51820'} public-key="${wireguardServerPublicKey || '<SERVER_PUBLIC_KEY>'}" allowed-address=0.0.0.0/0 persistent-keepalive=25s comment="Remote Server Peer"`
+    );
+    lines.push('');
+    return lines.join('\n');
+  }
+
+  // SSTP / L2TP / PPTP / OVPN
+  const defaultRouteParam = addDefaultRoute ? 'add-default-route=yes' : 'add-default-route=no';
+
+  if (vpnType === 'sstp') {
+    lines.push('/interface sstp-client');
+    lines.push(
+      `add name="${interfaceName}" connect-to="${serverAddress}" port=${serverPort || '443'} user="${username}" password="${password}" profile="${profileName || 'default-encryption'}" ${defaultRouteParam} disabled=no comment="VPN Remote SSTP"`
+    );
+  } else if (vpnType === 'l2tp') {
+    lines.push('/interface l2tp-client');
+    lines.push(
+      `add name="${interfaceName}" connect-to="${serverAddress}" user="${username}" password="${password}" profile="${profileName || 'default-encryption'}" ${defaultRouteParam} use-ipsec=yes ipsec-secret="123456" disabled=no comment="VPN Remote L2TP/IPsec"`
+    );
+  } else if (vpnType === 'pptp') {
+    lines.push('/interface pptp-client');
+    lines.push(
+      `add name="${interfaceName}" connect-to="${serverAddress}" user="${username}" password="${password}" profile="${profileName || 'default-encryption'}" ${defaultRouteParam} disabled=no comment="VPN Remote PPTP"`
+    );
+  } else if (vpnType === 'ovpn') {
+    lines.push('/interface ovpn-client');
+    lines.push(
+      `add name="${interfaceName}" connect-to="${serverAddress}" port=${serverPort || '1194'} mode=ip user="${username}" password="${password}" profile="${profileName || 'default-encryption'}" ${defaultRouteParam} cipher=aes256 auth=sha1 disabled=no comment="VPN Remote OpenVPN"`
+    );
+  }
+
+  lines.push('');
+  lines.push('# NAT Masquerade on VPN Client Interface');
+  lines.push('/ip firewall nat');
+  lines.push(`add chain=srcnat out-interface="${interfaceName}" action=masquerade comment="NAT Masquerade Remote VPN"`);
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// 16. Social Media & Streaming Static Routing
+export function generateSocialMediaRoutingScript(config: SocialMediaRoutingConfig): string {
+  const { rosVersion, lanInterface, targetWan, targetGateway, routingMarkName, selectedPlatforms, customDomains } = config;
+  const lines: string[] = [headerBanner('Social Media & Video Streaming Static Routing (YouTube, TikTok, FB, WA)', rosVersion)];
+
+  const domainList: string[] = [];
+  const portListTcp: string[] = [];
+  const portListUdp: string[] = [];
+
+  selectedPlatforms.forEach((id) => {
+    const p = SOCIAL_PRESETS.find((x) => x.id === id);
+    if (p) {
+      domainList.push(...p.domains);
+      if (p.portsTcp) portListTcp.push(p.portsTcp);
+      if (p.portsUdp) portListUdp.push(p.portsUdp);
+    }
+  });
+
+  customDomains.forEach((d) => {
+    if (d.trim()) domainList.push(d.trim());
+  });
+
+  const uniqueDomains = Array.from(new Set(domainList));
+
+  lines.push('# 1. Social Media & Streaming Address List');
+  lines.push('/ip firewall address-list');
+  uniqueDomains.forEach((d) => {
+    lines.push(`add address="${d}" list=SOSMED_STREAMING comment="Domain ${d}"`);
+  });
+  lines.push('');
+
+  if (rosVersion === 'v7') {
+    lines.push('# 2. RouterOS v7 Routing Table');
+    lines.push('/routing table');
+    lines.push(`add name="${routingMarkName}" fib`);
+    lines.push('');
+  }
+
+  lines.push('# 3. Mangle Rules for Social Media & Streaming');
+  lines.push('/ip firewall mangle');
+  lines.push(
+    `add chain=prerouting in-interface="${lanInterface}" dst-address-list=SOSMED_STREAMING action=mark-connection new-connection-mark="SOSMED_conn" passthrough=yes comment="Mark Connection Social Media"`
+  );
+
+  if (portListTcp.length > 0) {
+    lines.push(
+      `add chain=prerouting in-interface="${lanInterface}" protocol=tcp dst-port="${portListTcp.join(',')}" action=mark-connection new-connection-mark="SOSMED_conn" passthrough=yes comment="Social Media TCP Ports"`
+    );
+  }
+  if (portListUdp.length > 0) {
+    lines.push(
+      `add chain=prerouting in-interface="${lanInterface}" protocol=udp dst-port="${portListUdp.join(',')}" action=mark-connection new-connection-mark="SOSMED_conn" passthrough=yes comment="Social Media UDP Ports"`
+    );
+  }
+
+  lines.push(
+    `add chain=prerouting in-interface="${lanInterface}" connection-mark="SOSMED_conn" action=mark-routing new-routing-mark="${routingMarkName}" passthrough=no comment="Route Social Media to ${targetWan}"`
+  );
+  lines.push('');
+
+  lines.push('# 4. Route for Social Media Traffic');
+  lines.push('/ip route');
+  const routingParam = rosVersion === 'v7' ? `routing-table="${routingMarkName}"` : `routing-mark="${routingMarkName}"`;
+  lines.push(`add dst-address=0.0.0.0/0 gateway=${targetGateway} ${routingParam} distance=1 check-gateway=ping comment="Social Route via ${targetWan}"`);
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 17. Free Hotspot Wi-Fi QR Code Template & MikroTik Integration
+// ==============================================================================
+export function generateHotspotQRCodeScript(config: HotspotQRCodeConfig): string {
+  const { rosVersion, ssid, encryption, password, hidden, loginUrl, hotspotServerName } = config;
+  const qrString = `WIFI:S:${ssid};T:${encryption};P:${password || ''};${hidden ? 'H:true;' : ''};`;
+
+  const lines: string[] = [
+    headerBanner('Hotspot Wi-Fi QR Code & Captive Portal Login Script', rosVersion),
+    '# ==============================================================================',
+    `# 1. Payload Data QR Code (Gunakan format ini di generator QR atau barcode printer):`,
+    `# ${qrString}`,
+    '# ==============================================================================',
+    '',
+    '# 2. Walled Garden Rules untuk Asset QR Code Scanner di Halaman Login Hotspot',
+    '/ip hotspot walled-garden ip',
+    `add dst-host="*.qr-code-styling.com" action=accept comment="Allow QR Code Lib"`,
+    `add dst-host="*.cloudflare.com" action=accept comment="Allow CDN Lib"`,
+    `add dst-host="cdnjs.cloudflare.com" action=accept comment="Allow Cloudflare CDN"`,
+    '',
+    '# 3. Pengaturan Walled Garden HTTP Domain',
+    '/ip hotspot walled-garden',
+    `add dst-host="*.jsdelivr.net" action=allow comment="Allow JS QR scanner"`,
+    `add dst-host="*.unpkg.com" action=allow comment="Allow HTML5 QR scanner"`,
+    '',
+    '# 4. Potongan Script HTML (Paste di login.html MikroTik Hotspot):',
+    '# ------------------------------------------------------------------------------',
+    `# <!-- Hotspot QR Auto Login -->`,
+    `# <a href="${loginUrl || 'http://192.168.88.1/login'}?username=GUEST&password=" class="btn-qr">`,
+    `#    Hubungkan via QR Code SSID: ${ssid}`,
+    `# </a>`,
+    '# ------------------------------------------------------------------------------',
+    '',
+    '# 5. User Profil Hotspot Khusus Tamu QR (Gratis / Trial)',
+    '/ip hotspot user profile',
+    `add name="QR_FREE_USER" rate-limit="3M/3M" shared-users=1 session-timeout=01:00:00 status-autorefresh=1m keepalive-timeout=2m comment="Profil Tamu QR Code"`,
+    '',
+    '# 6. User Default untuk Hotspot Server: ' + hotspotServerName,
+    '/ip hotspot user',
+    `add name="GUEST" password="" profile="QR_FREE_USER" server="${hotspotServerName}" comment="Akun Tamu QR Code"`,
+    '',
+  ];
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 18. Hotspot Username Password Generator
+// ==============================================================================
+export function generateHotspotUserGenScript(config: HotspotUserGenConfig): string {
+  const { rosVersion, server, profile, prefix, userCount, userType, charType, length, uptimeLimit, comment } = config;
+  const lines: string[] = [headerBanner(`Hotspot Batch User Generator (${userCount} Vouchers)`, rosVersion)];
+
+  lines.push('# Batch Generator Akun Hotspot MikroTik');
+  lines.push('/ip hotspot user');
+
+  const chars =
+    charType === 'numeric'
+      ? '0123456789'
+      : charType === 'lowercase'
+      ? 'abcdefghijklmnopqrstuvwxyz0123456789'
+      : 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+  const makeRand = (len: number) => {
+    let res = '';
+    for (let i = 0; i < len; i++) {
+      res += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return res;
+  };
+
+  const count = Math.min(Math.max(1, userCount), 200);
+  const uptimeParam = uptimeLimit ? ` limit-uptime=${uptimeLimit}` : '';
+  const serverParam = server && server !== 'all' ? ` server="${server}"` : '';
+
+  for (let i = 1; i <= count; i++) {
+    const rawUser = makeRand(length || 4);
+    const uName = prefix ? `${prefix}${rawUser}` : rawUser;
+    const uPass = userType === 'same' ? uName : makeRand(length || 4);
+    lines.push(
+      `add name="${uName}" password="${uPass}" profile="${profile || 'default'}"${serverParam}${uptimeParam} comment="${comment || 'Batch Voucher'}"`
+    );
+  }
+
+  lines.push('');
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 19. Block Sharing Hotspot with "Change TTL"
+// ==============================================================================
+export function generateBlockSharingTTLScript(config: BlockSharingTTLConfig): string {
+  const { rosVersion, hotspotInterface, ttlValue, chain, comment } = config;
+  const lines: string[] = [headerBanner('Block Sharing Hotspot / Anti-Tethering (Change TTL)', rosVersion)];
+
+  lines.push('# 1. Aturan Mangle TTL: Mengunci nilai TTL paket agar tidak bisa di-share/tethering');
+  lines.push('/ip firewall mangle');
+
+  lines.push(
+    `add chain=${chain} out-interface="${hotspotInterface}" action=change-ttl new-ttl=set:${ttlValue || 1} passthrough=yes comment="${comment || 'Anti-Tethering Hotspot (TTL 1)'}"`
+  );
+
+  lines.push(
+    `add chain=prerouting in-interface="${hotspotInterface}" ttl=equal:1 action=drop comment="Drop Paket Bekas Tethering / Repeater"`
+  );
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 20. Bandwidth Share Up-To for Hotspot (PCQ)
+// ==============================================================================
+export function generateBandwidthUpToScript(config: BandwidthUpToConfig): string {
+  const { rosVersion, queueName, targetSubnet, totalDownloadRate, totalUploadRate, maxClientRate } = config;
+  const lines: string[] = [headerBanner('Bandwidth Share Up-To (PCQ Equal Dynamic Sharing)', rosVersion)];
+
+  lines.push('# 1. Queue Types PCQ (Download & Upload)');
+  lines.push('/queue type');
+  const maxDown = maxClientRate && maxClientRate !== '0' ? maxClientRate : '0';
+  const maxUp = maxClientRate && maxClientRate !== '0' ? maxClientRate : '0';
+
+  lines.push(
+    `add name="pcq_hotspot_down" kind=pcq pcq-rate=${maxDown} pcq-limit=50KiB pcq-total-limit=2000KiB pcq-classifier=dst-address comment="PCQ Dynamic Download"`
+  );
+  lines.push(
+    `add name="pcq_hotspot_up" kind=pcq pcq-rate=${maxUp} pcq-limit=50KiB pcq-total-limit=2000KiB pcq-classifier=src-address comment="PCQ Dynamic Upload"`
+  );
+  lines.push('');
+
+  lines.push('# 2. Simple Queue dengan PCQ Equal Distribution');
+  lines.push('/queue simple');
+  lines.push(
+    `add name="${queueName || 'Hotspot_UpTo_Share'}" target="${targetSubnet || '192.168.88.0/24'}" max-limit="${totalUploadRate || '20M'}/${totalDownloadRate || '50M'}" queue="pcq_hotspot_up/pcq_hotspot_down" priority=8/8 comment="Bandwidth Share Up-To Hotspot"`
+  );
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 21. Easy Hotspot Configuration Wizard
+// ==============================================================================
+export function generateHotspotWizardScript(config: HotspotWizardConfig): string {
+  const { rosVersion, interfaceName, localIpAddress, dhcpPoolRange, dnsName, adminUser, adminPassword, defaultProfileRateLimit, sharedUsers } = config;
+  const lines: string[] = [headerBanner(`Easy Hotspot Setup Wizard (${interfaceName})`, rosVersion)];
+
+  const cleanIp = localIpAddress.split('/')[0];
+  const poolName = `hs-pool-${interfaceName}`;
+
+  lines.push('# 1. Pasang IP Address pada Interface Hotspot');
+  lines.push('/ip address');
+  lines.push(`add address=${localIpAddress} interface="${interfaceName}" comment="Hotspot Gateway"`);
+  lines.push('');
+
+  lines.push('# 2. IP Pool & DHCP Server untuk Klien Hotspot');
+  lines.push('/ip pool');
+  lines.push(`add name="${poolName}" ranges=${dhcpPoolRange}`);
+  lines.push('/ip dhcp-server');
+  lines.push(`add name="dhcp-${interfaceName}" interface="${interfaceName}" address-pool="${poolName}" lease-time=1h disabled=no`);
+  lines.push('/ip dhcp-server network');
+  lines.push(`add address=${localIpAddress} gateway=${cleanIp} dns-server=${cleanIp},8.8.8.8 comment="Hotspot Network"`);
+  lines.push('');
+
+  lines.push('# 3. Profil Server Hotspot');
+  lines.push('/ip hotspot profile');
+  lines.push(
+    `add name="hsprof-${interfaceName}" hotspot-address=${cleanIp} dns-name="${dnsName || 'hotspot.net'}" html-directory=hotspot login-by=http-chap,http-pap use-radius=no`
+  );
+  lines.push('');
+
+  lines.push('# 4. Server Hotspot');
+  lines.push('/ip hotspot');
+  lines.push(`add name="hotspot-${interfaceName}" interface="${interfaceName}" address-pool="${poolName}" profile="hsprof-${interfaceName}" disabled=no`);
+  lines.push('');
+
+  lines.push('# 5. Profil User Default');
+  lines.push('/ip hotspot user profile');
+  lines.push(
+    `add name="uprof-default" rate-limit="${defaultProfileRateLimit || '5M/5M'}" shared-users=${sharedUsers || 1} status-autorefresh=1m keepalive-timeout=2m`
+  );
+  lines.push('');
+
+  lines.push('# 6. Akun Admin Awal');
+  lines.push('/ip hotspot user');
+  lines.push(`add name="${adminUser || 'admin'}" password="${adminPassword || 'admin123'}" profile="uprof-default" comment="Master Admin Hotspot"`);
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 22. Expired Notification Hotspot + PPPoE
+// ==============================================================================
+export function generateExpiredNotificationScript(config: ExpiredNotificationConfig): string {
+  const { rosVersion, serviceType, redirectUrl, internalProxyPort, addressListName } = config;
+  const listName = addressListName || 'ISOLIR_CLIENTS';
+  const lines: string[] = [headerBanner(`Expired / Isolir Notification Redirect (${serviceType.toUpperCase()})`, rosVersion)];
+
+  lines.push('# 1. Address List Dummy (Tambahkan IP Klien yang Jatuh Tempo ke List ini)');
+  lines.push('/ip firewall address-list');
+  lines.push(`add address=10.254.254.2 list=${listName} comment="Contoh Klien Isolir"`);
+  lines.push('');
+
+  lines.push('# 2. DST-NAT Redirect HTTP Port 80 ke Halaman Pemberitahuan Isolir');
+  lines.push('/ip firewall nat');
+  lines.push(
+    `add chain=dstnat src-address-list=${listName} protocol=tcp dst-port=80 action=redirect to-ports=${internalProxyPort || '8080'} comment="Redirect HTTP to Isolir Notice"`
+  );
+  lines.push('');
+
+  lines.push('# 3. Firewall Filter: Blokir Akses Selain Halaman Isolir');
+  lines.push('/ip firewall filter');
+  lines.push(`add chain=forward src-address-list=${listName} protocol=tcp dst-port=53 action=accept comment="Allow DNS TCP"`);
+  lines.push(`add chain=forward src-address-list=${listName} protocol=udp dst-port=53 action=accept comment="Allow DNS UDP"`);
+  lines.push(
+    `add chain=forward src-address-list=${listName} action=drop comment="Drop Seluruh Internet Klien yang Expired / Isolir"`
+  );
+  lines.push('');
+
+  lines.push('# 4. Web Proxy Internal MikroTik (Untuk Menampilkan Redirect URL)');
+  lines.push('/ip proxy');
+  lines.push(`set enabled=yes port=${internalProxyPort || '8080'}`);
+  lines.push('/ip proxy access');
+  lines.push(`add action=deny redirect-to="${redirectUrl || 'http://billing.isp.net/isolir.html'}" comment="Tampilkan Web Isolir"`);
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 23. PPP Secrets Username Password Generator
+// ==============================================================================
+export function generatePPPSecretsGenScript(config: PPPSecretsGenConfig): string {
+  const { rosVersion, service, profile, prefix, userCount, length, remoteIpPrefix, comment } = config;
+  const lines: string[] = [headerBanner(`PPP Secrets Batch Generator (${userCount} Accounts)`, rosVersion)];
+
+  lines.push('/ppp secret');
+  const count = Math.min(Math.max(1, userCount), 200);
+
+  const makeRand = (len: number) => {
+    const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+    let res = '';
+    for (let i = 0; i < len; i++) {
+      res += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return res;
+  };
+
+  for (let i = 1; i <= count; i++) {
+    const rawUser = makeRand(length || 5);
+    const uName = prefix ? `${prefix}${rawUser}` : `user_${rawUser}`;
+    const uPass = makeRand(6);
+    const remoteParam = remoteIpPrefix ? ` remote-address="${remoteIpPrefix}${i + 1}"` : '';
+    lines.push(
+      `add name="${uName}" password="${uPass}" service=${service || 'pppoe'} profile="${profile || 'default'}"${remoteParam} comment="${comment || 'Pelanggan PPPoE'}"`
+    );
+  }
+
+  lines.push('');
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 24. DNS over HTTPS (DoH) Servers
+// ==============================================================================
+export function generateDoHScript(config: DoHConfig): string {
+  const { rosVersion, provider, dohUrl, fallbackDns, verifyCert } = config;
+  const lines: string[] = [headerBanner(`DNS over HTTPS (DoH) - ${provider.toUpperCase()}`, rosVersion)];
+
+  lines.push('# 1. Set Regular Fallback DNS Resolvers');
+  lines.push('/ip dns');
+  lines.push(`set servers=${fallbackDns || '1.1.1.1,8.8.8.8'} allow-remote-requests=yes max-concurrent-queries=200 max-concurrent-tcp-sessions=50`);
+  lines.push('');
+
+  lines.push('# 2. Aktifkan DNS over HTTPS (DoH)');
+  const verifyParam = verifyCert ? 'verify-doh-cert=yes' : 'verify-doh-cert=no';
+  lines.push(`set use-doh-server="${dohUrl}" ${verifyParam}`);
+  lines.push('');
+
+  lines.push('# 3. Static Host Resolution untuk DoH Endpoint (Mencegah Loop Query)');
+  lines.push('/ip dns static');
+  if (provider === 'cloudflare') {
+    lines.push('add name=cloudflare-dns.com address=1.1.1.1 comment="DoH Cloudflare"');
+    lines.push('add name=cloudflare-dns.com address=1.0.0.1 comment="DoH Cloudflare"');
+  } else if (provider === 'google') {
+    lines.push('add name=dns.google address=8.8.8.8 comment="DoH Google"');
+    lines.push('add name=dns.google address=8.8.4.4 comment="DoH Google"');
+  } else if (provider === 'adguard') {
+    lines.push('add name=dns.adguard-dns.com address=94.140.14.14 comment="DoH AdGuard"');
+  }
+  lines.push('');
+
+  lines.push('# 4. Redirect DNS Biasa (Port 53) ke DoH Router');
+  lines.push('/ip firewall nat');
+  lines.push('add chain=dstnat protocol=udp dst-port=53 action=redirect to-ports=53 comment="Force DNS UDP to Router DoH"');
+  lines.push('add chain=dstnat protocol=tcp dst-port=53 action=redirect to-ports=53 comment="Force DNS TCP to Router DoH"');
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 25. Bonding Interface / Link Aggregation
+// ==============================================================================
+export function generateBondingScript(config: BondingConfig): string {
+  const { rosVersion, bondingName, slaveInterfaces, mode, lacpRate, transmitHashPolicy, ipAddress } = config;
+  const lines: string[] = [headerBanner(`Bonding Interface / Link Aggregation (${bondingName})`, rosVersion)];
+
+  lines.push('# 1. Buat Interface Bonding');
+  lines.push('/interface bonding');
+  const slavesStr = slaveInterfaces.join(',');
+  const lacpParam = mode === '802.3ad' ? ` lacp-rate=${lacpRate || '1sec'}` : '';
+  const hashParam = mode === '802.3ad' ? ` transmit-hash-policy=${transmitHashPolicy || 'layer-2-and-3'}` : '';
+
+  lines.push(
+    `add name="${bondingName}" slaves="${slavesStr}" mode=${mode}${lacpParam}${hashParam} comment="Bonding Link Aggregation"`
+  );
+  lines.push('');
+
+  if (ipAddress) {
+    lines.push('# 2. Pasang IP Address pada Interface Bonding');
+    lines.push('/ip address');
+    lines.push(`add address="${ipAddress}" interface="${bondingName}" comment="IP Bonding Trunk"`);
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 26. Netwatch to Telegram, WA, Email, SMS
+// ==============================================================================
+export function generateNetwatchScript(config: NetwatchConfig): string {
+  const { rosVersion, hostIp, hostName, checkInterval, timeout, notifyChannel, telegramBotToken, telegramChatId, emailRecipient } = config;
+  const lines: string[] = [headerBanner(`Netwatch Auto Notification (${hostName || hostIp}) via ${notifyChannel.toUpperCase()}`, rosVersion)];
+
+  let upScript = '';
+  let downScript = '';
+
+  if (notifyChannel === 'telegram') {
+    const token = telegramBotToken || '<TELEGRAM_BOT_TOKEN>';
+    const chatId = telegramChatId || '<TELEGRAM_CHAT_ID>';
+    downScript = `/tool fetch url="https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}&text=%E2%9A%A0%EF%B8%8F+ALERT:+Host+${hostName}+(${hostIp})+is+DOWN!" keep-result=no`;
+    upScript = `/tool fetch url="https://api.telegram.org/bot${token}/sendMessage?chat_id=${chatId}&text=%E2%9C%85+RECOVERY:+Host+${hostName}+(${hostIp})+is+BACK+ONLINE!" keep-result=no`;
+  } else if (notifyChannel === 'email') {
+    const email = emailRecipient || 'admin@network.lan';
+    downScript = `/tool e-mail send to="${email}" subject="[ALERT] ${hostName} is DOWN" body="Host ${hostName} (${hostIp}) tidak merespon ping!"`;
+    upScript = `/tool e-mail send to="${email}" subject="[RECOVERY] ${hostName} is UP" body="Host ${hostName} (${hostIp}) sudah online kembali."`;
+  } else {
+    downScript = `:log error "NETWATCH: Host ${hostName} (${hostIp}) is DOWN!"`;
+    upScript = `:log info "NETWATCH: Host ${hostName} (${hostIp}) is UP!"`;
+  }
+
+  lines.push('# Buat Aturan Netwatch');
+  lines.push('/tool netwatch');
+  lines.push(
+    `add host=${hostIp} interval=${checkInterval || '30s'} timeout=${timeout || '1000ms'} up-script="${upScript}" down-script="${downScript}" comment="Netwatch ${hostName}"`
+  );
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 27. Looping / Unknown DHCP Rogue Server
+// ==============================================================================
+export function generateRogueDHCPScript(config: RogueDHCPConfig): string {
+  const { rosVersion, lanInterface, validServerMac, alertTimeout, action } = config;
+  const lines: string[] = [headerBanner('Looping & Rogue DHCP Server Protection', rosVersion)];
+
+  lines.push('# 1. DHCP Server Alert Detector');
+  lines.push('/ip dhcp-server alert');
+  lines.push(
+    `add interface="${lanInterface}" valid-server="${validServerMac}" alert-timeout=${alertTimeout || '1h'} on-alert=":log error \\"BAHAYA: Terdeteksi Rogue DHCP Server asing di ${lanInterface}!\\"" disabled=no`
+  );
+  lines.push('');
+
+  if (action === 'block' || action === 'both') {
+    lines.push('# 2. Bridge Filter: Blokir Paket DHCP Offer dari Port Selain Server Resmi');
+    lines.push('/interface bridge filter');
+    lines.push(
+      `add chain=forward in-interface=!"${lanInterface}" mac-protocol=ip ip-protocol=udp src-port=67 action=drop comment="Block Rogue DHCP Server Offer"`
+    );
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 28. Change or Random Mac Address Interface
+// ==============================================================================
+export function generateMacChangeScript(config: MacChangeConfig): string {
+  const { rosVersion, targetInterface, newMacAddress } = config;
+  const lines: string[] = [headerBanner(`Change / Clone MAC Address (${targetInterface})`, rosVersion)];
+
+  lines.push('# 1. Ubah MAC Address Interface untuk Bypass ISP Binding');
+  lines.push(`/interface ethernet set [find name="${targetInterface}"] mac-address="${newMacAddress}"`);
+  lines.push('');
+  lines.push('# Catatan: Untuk mengembalikan ke MAC Address fisik bawaan pabrik:');
+  lines.push(`# /interface ethernet reset-mac [find name="${targetInterface}"]`);
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 29. MikroTik Ninja: Hide Routerboard from ISP
+// ==============================================================================
+export function generateHideRouterboardScript(config: HideRouterboardConfig): string {
+  const { rosVersion, wanInterface, lanInterface, disableNeighborDiscovery, disableMacServer, disableBandwidthServer, blockIcmpTracerouteToWan, normalizeOutboundTTL } = config;
+  const lines: string[] = [headerBanner('MikroTik Ninja: Hide Routerboard Identity from ISP', rosVersion)];
+
+  if (disableNeighborDiscovery) {
+    lines.push('# 1. Matikan Neighbor Discovery (MNDP, CDP, LLDP) ke Arah ISP');
+    lines.push('/ip neighbor discovery-settings');
+    lines.push(`set discover-interface-list=!"${wanInterface}"`);
+    lines.push('');
+  }
+
+  if (disableMacServer) {
+    lines.push('# 2. Batasi MAC Server & MAC Winbox Hanya untuk Jaringan LAN');
+    lines.push('/tool mac-server');
+    lines.push(`set allowed-interface-list="${lanInterface}"`);
+    lines.push('/tool mac-server mac-winbox');
+    lines.push(`set allowed-interface-list="${lanInterface}"`);
+    lines.push('');
+  }
+
+  if (disableBandwidthServer) {
+    lines.push('# 3. Matikan BTest Bandwidth Server dari Sisi Internet');
+    lines.push('/tool bandwidth-server set enabled=no');
+    lines.push('');
+  }
+
+  if (normalizeOutboundTTL) {
+    lines.push('# 4. Samarkan Nilai TTL Menjadi Normal (64) agar Topologi Router di Belakang Tersembunyi');
+    lines.push('/ip firewall mangle');
+    lines.push(
+      `add chain=postrouting out-interface="${wanInterface}" action=change-ttl new-ttl=set:64 passthrough=yes comment="Ninja: Normal TTL 64"`
+    );
+    lines.push('');
+  }
+
+  if (blockIcmpTracerouteToWan) {
+    lines.push('# 5. Blokir Balasan Traceroute ICMP TTL-Exceeded ke Arah ISP (Hop Router Menjadi Bintang *)');
+    lines.push('/ip firewall filter');
+    lines.push(
+      `add chain=output out-interface="${wanInterface}" protocol=icmp icmp-options=11:0 action=drop comment="Ninja: Hide Hop from Traceroute"`
+    );
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 30. Port Knocking with ICMP + Packet Size
+// ==============================================================================
+export function generatePortKnockingScript(config: PortKnockingConfig): string {
+  const { rosVersion, wanInterface, targetPort, knockSize1, knockSize2, knockTimeout, accessDuration } = config;
+  const lines: string[] = [headerBanner('Port Knocking with ICMP (Ping Packet Size Sequence)', rosVersion)];
+
+  lines.push('# 1. Urutan Port Knocking via Ping ICMP:');
+  lines.push(`#    Langkah 1: Ping router dengan ukuran paket ${knockSize1} bytes (contoh: ping ${wanInterface} -l ${knockSize1})`);
+  lines.push(`#    Langkah 2: Dalam ${knockTimeout}, ping dengan ukuran paket ${knockSize2} bytes`);
+  lines.push(`#    Hasil: Port ${targetPort} terbuka otomatis selama ${accessDuration}`);
+  lines.push('');
+
+  lines.push('/ip firewall filter');
+  lines.push(
+    `add chain=input in-interface="${wanInterface}" protocol=icmp packet-size=${knockSize1} action=add-src-to-address-list address-list=KNOCK_STEP_1 address-list-timeout=${knockTimeout || '30s'} comment="Knock 1: Ping size ${knockSize1}"`
+  );
+
+  lines.push(
+    `add chain=input in-interface="${wanInterface}" src-address-list=KNOCK_STEP_1 protocol=icmp packet-size=${knockSize2} action=add-src-to-address-list address-list=KNOCK_AUTHORIZED address-list-timeout=${accessDuration || '1h'} comment="Knock 2: Authorized Access"`
+  );
+
+  lines.push(
+    `add chain=input in-interface="${wanInterface}" src-address-list=KNOCK_AUTHORIZED protocol=tcp dst-port=${targetPort || '8291'} action=accept comment="Allow Port ${targetPort} for Knocked Admin"`
+  );
+
+  lines.push(
+    `add chain=input in-interface="${wanInterface}" protocol=tcp dst-port=${targetPort || '8291'} action=drop comment="Drop Port ${targetPort} for Everyone Else"`
+  );
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 31. Advanced MikroTik Router-OS Protection
+// ==============================================================================
+export function generateAdvancedProtectionScript(config: AdvancedProtectionConfig): string {
+  const { rosVersion, wanInterface, dropInvalid, blockSynFlood, blockPortScanners, protectBruteForceWinbox, protectBruteForceSSH, blockDnsOpenResolver } = config;
+  const lines: string[] = [headerBanner('Enterprise-Grade Advanced MikroTik Security Protection', rosVersion)];
+
+  lines.push('/ip firewall filter');
+
+  if (dropInvalid) {
+    lines.push('add chain=input connection-state=invalid action=drop comment="Drop Invalid Packets (Input)"');
+    lines.push('add chain=forward connection-state=invalid action=drop comment="Drop Invalid Packets (Forward)"');
+  }
+
+  if (blockDnsOpenResolver) {
+    lines.push(
+      `add chain=input in-interface="${wanInterface}" protocol=udp dst-port=53 action=drop comment="Block Open DNS Resolver from WAN"`
+    );
+    lines.push(
+      `add chain=input in-interface="${wanInterface}" protocol=tcp dst-port=53 action=drop comment="Block Open DNS Resolver from WAN (TCP)"`
+    );
+  }
+
+  if (blockSynFlood) {
+    lines.push(
+      `add chain=input protocol=tcp tcp-flags=syn connection-state=new limit=100,5:packet action=accept comment="Protect Against SYN Flood"`
+    );
+    lines.push('add chain=input protocol=tcp tcp-flags=syn connection-state=new action=drop comment="Drop Excess SYN Packets"');
+  }
+
+  if (blockPortScanners) {
+    lines.push(
+      `add chain=input protocol=tcp psd=21,3s,3,1 action=add-src-to-address-list address-list=PORT_SCANNERS address-list-timeout=1d comment="Detect Port Scanner"`
+    );
+    lines.push('add chain=input src-address-list=PORT_SCANNERS action=drop comment="Drop Blacklisted Port Scanners"');
+  }
+
+  if (protectBruteForceWinbox) {
+    lines.push(
+      `add chain=input in-interface="${wanInterface}" protocol=tcp dst-port=8291 connection-state=new src-address-list=winbox_stage3 action=add-src-to-address-list address-list=winbox_blacklist address-list-timeout=1d comment="Winbox Brute Force Blacklist"`
+    );
+    lines.push(
+      `add chain=input in-interface="${wanInterface}" protocol=tcp dst-port=8291 connection-state=new src-address-list=winbox_stage2 action=add-src-to-address-list address-list=winbox_stage3 address-list-timeout=1m`
+    );
+    lines.push(
+      `add chain=input in-interface="${wanInterface}" protocol=tcp dst-port=8291 connection-state=new src-address-list=winbox_stage1 action=add-src-to-address-list address-list=winbox_stage2 address-list-timeout=1m`
+    );
+    lines.push(
+      `add chain=input in-interface="${wanInterface}" protocol=tcp dst-port=8291 connection-state=new action=add-src-to-address-list address-list=winbox_stage1 address-list-timeout=1m`
+    );
+    lines.push('add chain=input src-address-list=winbox_blacklist action=drop comment="Drop Winbox Brute Force Attackers"');
+  }
+
+  if (protectBruteForceSSH) {
+    lines.push(
+      `add chain=input in-interface="${wanInterface}" protocol=tcp dst-port=22 connection-state=new src-address-list=ssh_stage3 action=add-src-to-address-list address-list=ssh_blacklist address-list-timeout=1d comment="SSH Brute Force Blacklist"`
+    );
+    lines.push(
+      `add chain=input in-interface="${wanInterface}" protocol=tcp dst-port=22 connection-state=new src-address-list=ssh_stage2 action=add-src-to-address-list address-list=ssh_stage3 address-list-timeout=1m`
+    );
+    lines.push(
+      `add chain=input in-interface="${wanInterface}" protocol=tcp dst-port=22 connection-state=new action=add-src-to-address-list address-list=ssh_stage1 address-list-timeout=1m`
+    );
+    lines.push('add chain=input src-address-list=ssh_blacklist action=drop comment="Drop SSH Brute Force Attackers"');
+  }
+
+  lines.push('');
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 32. Block Websites Generator
+// ==============================================================================
+export function generateBlockWebsitesScript(config: BlockWebsitesConfig): string {
+  const { rosVersion, lanInterface, categories, customDomains, blockMethod } = config;
+  const lines: string[] = [headerBanner('Block Websites & Domain Filter Generator', rosVersion)];
+
+  const domainsToBlock: string[] = [];
+
+  if (categories.includes('gambling')) {
+    domainsToBlock.push('sbobet.com', 'maxbet.com', 'slot88.com', 'judionline.com', 'pragmaticplay.com', 'spadegaming.com');
+  }
+  if (categories.includes('pornography')) {
+    domainsToBlock.push('pornhub.com', 'xvideos.com', 'xnxx.com', 'redtube.com', 'onlyfans.com');
+  }
+  if (categories.includes('crypto_mining')) {
+    domainsToBlock.push('coin-hive.com', 'coinhive.com', 'cryptoloot.pro', 'minr.pw', 'webminepool.com');
+  }
+  if (categories.includes('piracy')) {
+    domainsToBlock.push('thepiratebay.org', '1337x.to', 'rarbg.to', 'torrentz.eu', 'yts.mx');
+  }
+
+  customDomains.forEach((d) => {
+    if (d.trim()) domainsToBlock.push(d.trim());
+  });
+
+  const unique = Array.from(new Set(domainsToBlock));
+
+  if (blockMethod === 'address-list' || blockMethod === 'tls-host') {
+    lines.push('# 1. Address List Situs Terlarang');
+    lines.push('/ip firewall address-list');
+    unique.forEach((d) => {
+      lines.push(`add address="${d}" list=BLOCKED_DOMAINS comment="Block ${d}"`);
+    });
+    lines.push('');
+
+    lines.push('# 2. Drop Akses ke Situs Terlarang');
+    lines.push('/ip firewall filter');
+    lines.push(
+      `add chain=forward in-interface="${lanInterface}" dst-address-list=BLOCKED_DOMAINS action=drop comment="Block Access to Restricted Websites"`
+    );
+    if (blockMethod === 'tls-host') {
+      unique.forEach((d) => {
+        lines.push(
+          `add chain=forward in-interface="${lanInterface}" protocol=tcp dst-port=443 tls-host="*${d}*" action=drop comment="TLS Block ${d}"`
+        );
+      });
+    }
+  } else {
+    lines.push('# 1. DNS Static Sinkhole (Arahkan Domain ke 127.0.0.1)');
+    lines.push('/ip dns static');
+    unique.forEach((d) => {
+      lines.push(`add name="${d}" address=127.0.0.1 comment="Sinkhole ${d}"`);
+      lines.push(`add name="*.${d}" address=127.0.0.1 comment="Sinkhole wildcard ${d}"`);
+    });
+  }
+
+  lines.push('');
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 33. MikroTik Auto Backup to E-Mail
+// ==============================================================================
+export function generateAutoBackupEmailScript(config: AutoBackupEmailConfig): string {
+  const { rosVersion, emailRecipient, backupPassword, exportRsc, scheduleTime, scheduleInterval, routerIdentity } = config;
+  const lines: string[] = [headerBanner(`Automated Scheduled Backup to E-Mail (${scheduleInterval})`, rosVersion)];
+
+  const scriptName = 'AutoBackupToEmail';
+  const passParam = backupPassword ? ` password="${backupPassword}"` : '';
+  const sysnameExpr = routerIdentity ? `\\"${routerIdentity}\\"` : `[\\/system identity get name]`;
+
+  lines.push('# 1. Buat Script Auto Backup & E-Mail');
+  lines.push('/system script');
+  lines.push(`add name="${scriptName}" source="\\
+  :local sysname ${sysnameExpr};\\
+  :local date [\\/system clock get date];\\
+  :local time [\\/system clock get time];\\
+  :local filename (\\$sysname . \\"-\\" . \\$date . \\"-\\" . [:pick \\$time 0 2] . [:pick \\$time 3 5] . \\".backup\\");\\
+  :local rscname (\\$sysname . \\"-\\" . \\$date . \\"-\\" . [:pick \\$time 0 2] . [:pick \\$time 3 5] . \\".rsc\\");\\
+  /system backup save name=\\$filename${passParam};\\
+  ${exportRsc ? '/export file=\\$rscname;\\ ' : ''}\\
+  :delay 5s;\\
+  /tool e-mail send to=\\"${emailRecipient}\\" subject=(\\"[BACKUP] \\" . \\$sysname . \\" - \\" . \\$date) file=\\$filename body=(\\"Lampiran backup otomatis router \\" . \\$sysname . \\" per \\" . \\$date . \\" \\" . \\$time);\\
+  :log info (\\"Backup email berhasil terkirim ke ${emailRecipient}\\");\\
+" comment="Script Pengirim Backup E-Mail"`);
+  lines.push('');
+
+  lines.push('# 2. Jadwalkan Eksekusi Otomatis Melalui Scheduler');
+  lines.push('/system scheduler');
+  lines.push(
+    `add name="Sched_${scriptName}" start-time="${scheduleTime || '02:00:00'}" interval=${scheduleInterval || '1d'} on-event="${scriptName}" comment="Jadwal Auto Backup E-Mail"`
+  );
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 34. Mangle Chain Obfuscator / Encryption
+// ==============================================================================
+export function generateMangleObfuscatorScript(config: MangleObfuscatorConfig): string {
+  const { rosVersion, originalScript, stripComments, addDecoyRules } = config;
+  const lines: string[] = [headerBanner('Mangle Chain Obfuscator & Script Protect', rosVersion)];
+
+  lines.push('# Script yang Telah Diobfuskasi / Dibersihkan dari Identifikasi Terbuka');
+  lines.push('');
+
+  const rawLines = originalScript.split('\n');
+  rawLines.forEach((l) => {
+    let line = l;
+    if (stripComments) {
+      if (line.trim().startsWith('#')) return;
+      line = line.replace(/comment="[^"]*"/g, '');
+    }
+    if (line.trim()) lines.push(line);
+  });
+
+  if (addDecoyRules) {
+    lines.push('');
+    lines.push('# Decoy Rules (Pengabur Pola Mangle)');
+    lines.push('/ip firewall mangle');
+    lines.push('add chain=prerouting protocol=tcp dst-port=65534 action=passthrough disabled=yes');
+    lines.push('add chain=forward protocol=udp dst-port=65534 action=passthrough disabled=yes');
+  }
+
+  lines.push('');
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 35. Block For Youtube, Tiktok, WA, FB, etc.
+// ==============================================================================
+export function generateBlockSocialMediaScript(config: BlockSocialMediaConfig): string {
+  const { rosVersion, lanInterface, selectedPlatforms, blockTimeStart, blockTimeEnd, blockDays } = config;
+  const lines: string[] = [headerBanner('Block Social Media & Video Streaming Filter', rosVersion)];
+
+  const timeParam =
+    blockTimeStart && blockTimeEnd
+      ? ` time="${blockTimeStart}-${blockTimeEnd},${blockDays || 'mon,tue,wed,thu,fri'}"`
+      : '';
+
+  lines.push('# 1. Address List Platform yang Diblokir');
+  lines.push('/ip firewall address-list');
+
+  selectedPlatforms.forEach((plat: string) => {
+    const p = SOCIAL_PRESETS.find((x) => x.id === plat);
+    if (p) {
+      p.domains.forEach((d) => {
+        lines.push(`add address="${d}" list=BLOCKED_SOCIAL comment="Block ${p.name}"`);
+      });
+    }
+  });
+  lines.push('');
+
+  lines.push('# 2. Drop Forward Rules (Dengan Opsi Jam Kerja/Sekolah)');
+  lines.push('/ip firewall filter');
+  lines.push(
+    `add chain=forward in-interface="${lanInterface}" dst-address-list=BLOCKED_SOCIAL${timeParam} action=drop comment="Drop Social Media & Video Streaming"`
+  );
+
+  // TLS Host deep blocking for HTTPS
+  selectedPlatforms.forEach((plat: string) => {
+    const p = SOCIAL_PRESETS.find((x) => x.id === plat);
+    if (p) {
+      p.domains.slice(0, 2).forEach((d) => {
+        lines.push(
+          `add chain=forward in-interface="${lanInterface}" protocol=tcp dst-port=443 tls-host="*${d}*"${timeParam} action=drop comment="TLS Drop ${d}"`
+        );
+      });
+    }
+  });
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 36. Load Balancing PCC Calculation
+// ==============================================================================
+export function calculatePCCDivisors(wanSpeeds: number[]): {
+  totalSlots: number;
+  allocations: { wanIndex: number; slots: number; pccRatios: string[] }[];
+  cliScript: string;
+} {
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+  const validSpeeds = wanSpeeds.map((s) => Math.max(1, Math.round(s)));
+
+  let overallGcd = validSpeeds[0] || 1;
+  for (let i = 1; i < validSpeeds.length; i++) {
+    overallGcd = gcd(overallGcd, validSpeeds[i]);
+  }
+
+  const normalizedSlots = validSpeeds.map((s) => Math.round(s / overallGcd));
+  const totalSlots = normalizedSlots.reduce((a, b) => a + b, 0);
+
+  let currentSlot = 0;
+  const allocations = normalizedSlots.map((slots, idx) => {
+    const pccRatios: string[] = [];
+    for (let s = 0; s < slots; s++) {
+      pccRatios.push(`${totalSlots}/${currentSlot}`);
+      currentSlot++;
+    }
+    return {
+      wanIndex: idx + 1,
+      slots,
+      pccRatios,
+    };
+  });
+
+  const scriptLines: string[] = [
+    `# ==============================================================================`,
+    `# PCC DIVISOR & REMAINDER CALCULATION REPORT`,
+    `# Total Jalur WAN: ${wanSpeeds.length}`,
+    `# Pembagi Utama (Divisor): ${totalSlots}`,
+    `# Rasio Kecepatan: ${normalizedSlots.join(' : ')}`,
+    `# ==============================================================================`,
+    '',
+    '/ip firewall mangle',
+  ];
+
+  allocations.forEach((alloc) => {
+    scriptLines.push(`# --- WAN${alloc.wanIndex} (Alokasi: ${alloc.slots} Bagian) ---`);
+    alloc.pccRatios.forEach((ratio) => {
+      scriptLines.push(
+        `add chain=prerouting in-interface=ether-LAN connection-state=new dst-address-type=!local per-connection-classifier=both-addresses-and-ports:${ratio} action=mark-connection new-connection-mark="WAN${alloc.wanIndex}_conn" passthrough=yes`
+      );
+    });
+  });
+
+  return {
+    totalSlots,
+    allocations,
+    cliScript: scriptLines.join('\n'),
+  };
+}
+
+// ==============================================================================
+// 37. Indonesia Time Zone NTP/SNTP Client
+// ==============================================================================
+export function generateIndonesiaNTPScript(config: IndonesiaNTPConfig): string {
+  const { rosVersion, timezone, ntpServers } = config;
+  const lines: string[] = [headerBanner(`Indonesia Time Zone (${timezone}) & SNTP NTP Client`, rosVersion)];
+
+  lines.push('# 1. Pengaturan Jam Sistem & Zona Waktu');
+  lines.push('/system clock');
+  lines.push(`set time-zone-name="${timezone}"`);
+  lines.push('');
+
+  lines.push('# 2. Sinkronisasi Waktu SNTP / NTP Client (Pool Indonesia)');
+  lines.push('/system ntp client');
+  const srvList = ntpServers.length > 0 ? ntpServers.join(',') : 'id.pool.ntp.org,0.id.pool.ntp.org,1.id.pool.ntp.org';
+
+  if (rosVersion === 'v7') {
+    lines.push(`set enabled=yes servers="${srvList}"`);
+  } else {
+    lines.push(`set enabled=yes primary-ntp=202.162.32.22 secondary-ntp=103.28.57.10 server-dns-names="${srvList}"`);
+  }
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 38. Mikrotik IP Address Calculator
+// ==============================================================================
+export function calculateMikroTikIP(
+  ipWithCidr: string,
+  targetInterface: string,
+  rosVersion: RouterOSVersion
+): {
+  network: string;
+  netmask: string;
+  wildcard: string;
+  broadcast: string;
+  hostMin: string;
+  hostMax: string;
+  totalHosts: number;
+  usableHosts: number;
+  cliScript: string;
+} {
+  const parts = ipWithCidr.trim().split('/');
+  const ipStr = parts[0] || '192.168.88.1';
+  const prefix = parseInt(parts[1] || '24', 10);
+
+  const ipToInt = (ip: string) =>
+    ip.split('.').reduce((acc, oct) => (acc << 8) + parseInt(oct, 10), 0) >>> 0;
+
+  const intToIp = (num: number) =>
+    [
+      (num >>> 24) & 255,
+      (num >>> 16) & 255,
+      (num >>> 8) & 255,
+      num & 255,
+    ].join('.');
+
+  const ipNum = ipToInt(ipStr);
+  const maskNum = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+  const netNum = (ipNum & maskNum) >>> 0;
+  const wildcardNum = (~maskNum) >>> 0;
+  const bcastNum = (netNum | wildcardNum) >>> 0;
+
+  const totalHosts = Math.pow(2, 32 - prefix);
+  const usableHosts = prefix >= 31 ? (prefix === 31 ? 2 : 1) : Math.max(0, totalHosts - 2);
+
+  const hostMinNum = prefix >= 31 ? netNum : netNum + 1;
+  const hostMaxNum = prefix >= 31 ? bcastNum : bcastNum - 1;
+
+  const network = intToIp(netNum);
+  const netmask = intToIp(maskNum);
+  const wildcard = intToIp(wildcardNum);
+  const broadcast = intToIp(bcastNum);
+  const hostMin = intToIp(hostMinNum);
+  const hostMax = intToIp(hostMaxNum);
+
+  const script = `${headerBanner('MikroTik IP Address Configuration', rosVersion)}
+# Detail Kalkulasi Subnet:
+# IP Address   : ${ipStr}/${prefix}
+# Network      : ${network}
+# Netmask      : ${netmask}
+# Broadcast    : ${broadcast}
+# Usable Hosts : ${hostMin} - ${hostMax} (${usableHosts} Host)
+
+/ip address
+add address=${ipStr}/${prefix} network=${network} interface="${targetInterface || 'ether1'}" comment="Calculated IP Subnet"
+`;
+
+  return {
+    network,
+    netmask,
+    wildcard,
+    broadcast,
+    hostMin,
+    hostMax,
+    totalHosts,
+    usableHosts,
+    cliScript: script,
+  };
+}
+
+// ==============================================================================
+// 39. Wifi.id WMS and Seamless Auto Login
+// ==============================================================================
+export function generateWifiIdAutoLoginScript(config: WifiIdAutoLoginConfig): string {
+  const { rosVersion, loginType, username, password, wanInterface, checkInterval } = config;
+  const serviceLabel = loginType === 'wms' ? 'WMS' : loginType === 'seamless' ? 'Seamless' : '@wifi.id';
+  const lines: string[] = [headerBanner(`Wifi.id / WMS / Seamless Auto-Login Keepalive Script (${serviceLabel})`, rosVersion)];
+
+  const scriptName = 'WifiIdKeepAlive';
+  const authUrl =
+    loginType === 'wms'
+      ? 'https://welcome2.wifi.id/wms/auth.php'
+      : loginType === 'seamless'
+        ? 'https://welcome2.wifi.id/seamless/auth.php'
+        : 'https://welcome2.wifi.id/auth/process.php';
+
+  lines.push('# 1. Script Auto-Login via HTTP POST Request');
+  lines.push('/system script');
+  lines.push(`add name="${scriptName}" source="\\
+  :local check ([\\/ping 8.8.8.8 count=2 interface=\\"${wanInterface}\\"]);\\
+  :if (\\$check = 0) do={\\
+    :log warning (\\"Internet ${serviceLabel} terputus, mencoba auto-login kembali...\\");\\
+    /tool fetch url=\\"${authUrl}\\" http-method=post http-data=\\"username=${username}&password=${password}&submit=Login\\" keep-result=no;\\
+    :delay 3s;\\
+    :log info (\\"Proses login ${serviceLabel} selesai dikirim.\\");\\
+  } else={\\
+    :log info (\\"Status internet ${serviceLabel} normal.\\");\\
+  }\\
+" comment="Auto Login ${serviceLabel}"`);
+  lines.push('');
+
+  lines.push('# 2. Jadwalkan Pengecekan Koneksi Secara Berkala');
+  lines.push('/system scheduler');
+  lines.push(
+    `add name="Sched_${scriptName}" interval=${checkInterval || '2m'} on-event="${scriptName}" comment="Cek Koneksi ${serviceLabel} Berkala"`
+  );
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 40. Burst Limit Calculator Helper & Script Generator
+// ==============================================================================
+export function parseBandwidthToKbps(val: string): number {
+  if (!val) return 0;
+  const clean = val.trim().toUpperCase().replace(',', '.');
+  const numMatch = clean.match(/[0-9.]+/);
+  if (!numMatch) return 0;
+  const num = parseFloat(numMatch[0]);
+  if (isNaN(num) || num <= 0) return 0;
+
+  if (clean.endsWith('G') || clean.endsWith('GBPS')) {
+    return Math.round(num * 1000 * 1000);
+  }
+  if (clean.endsWith('M') || clean.endsWith('MBPS')) {
+    return Math.round(num * 1000);
+  }
+  return Math.round(num);
+}
+
+export function formatKbpsToSpeed(kbps: number): string {
+  if (kbps <= 0) return '0';
+  if (kbps >= 1000000 && kbps % 1000000 === 0) {
+    return `${kbps / 1000000}M`;
+  }
+  if (kbps >= 1000 && kbps % 1000 === 0) {
+    return `${kbps / 1000}M`;
+  }
+  if (kbps >= 1000) {
+    const m = (kbps / 1000).toFixed(1).replace('.0', '');
+    return `${m}M`;
+  }
+  return `${kbps}K`;
+}
+
+export interface BurstCalculationResult {
+  upMaxKbps: number;
+  upBurstKbps: number;
+  upThresholdKbps: number;
+  upLimitAtKbps: number;
+  upBurstTime: number;
+  upActualDuration: number;
+
+  downMaxKbps: number;
+  downBurstKbps: number;
+  downThresholdKbps: number;
+  downLimitAtKbps: number;
+  downBurstTime: number;
+  downActualDuration: number;
+
+  rateLimitString: string;
+}
+
+export function calculateBurstMetrics(
+  upMaxStr: string,
+  upBurstStr: string,
+  upDuration: number,
+  downMaxStr: string,
+  downBurstStr: string,
+  downDuration: number
+): BurstCalculationResult {
+  const upMaxKbps = parseBandwidthToKbps(upMaxStr) || 1000;
+  const upBurstKbps = Math.max(parseBandwidthToKbps(upBurstStr) || 2000, upMaxKbps);
+  const upThresholdKbps = Math.max(1, Math.round(upMaxKbps * 0.75));
+  const upLimitAtKbps = Math.max(1, Math.round(upMaxKbps * 0.125));
+  const upBurstTime = Math.max(1, Math.ceil(((upDuration || 15) * upBurstKbps) / upThresholdKbps));
+  const upActualDuration = Math.round((upThresholdKbps * upBurstTime) / upBurstKbps);
+
+  const downMaxKbps = parseBandwidthToKbps(downMaxStr) || 2000;
+  const downBurstKbps = Math.max(parseBandwidthToKbps(downBurstStr) || 4000, downMaxKbps);
+  const downThresholdKbps = Math.max(1, Math.round(downMaxKbps * 0.75));
+  const downLimitAtKbps = Math.max(1, Math.round(downMaxKbps * 0.125));
+  const downBurstTime = Math.max(1, Math.ceil(((downDuration || 15) * downBurstKbps) / downThresholdKbps));
+  const downActualDuration = Math.round((downThresholdKbps * downBurstTime) / downBurstKbps);
+
+  const rateLimitString = `${formatKbpsToSpeed(upMaxKbps)}/${formatKbpsToSpeed(downMaxKbps)} ${formatKbpsToSpeed(upBurstKbps)}/${formatKbpsToSpeed(downBurstKbps)} ${formatKbpsToSpeed(upThresholdKbps)}/${formatKbpsToSpeed(downThresholdKbps)} ${upBurstTime}/${downBurstTime} 8 ${formatKbpsToSpeed(upLimitAtKbps)}/${formatKbpsToSpeed(downLimitAtKbps)}`;
+
+  return {
+    upMaxKbps,
+    upBurstKbps,
+    upThresholdKbps,
+    upLimitAtKbps,
+    upBurstTime,
+    upActualDuration,
+    downMaxKbps,
+    downBurstKbps,
+    downThresholdKbps,
+    downLimitAtKbps,
+    downBurstTime,
+    downActualDuration,
+    rateLimitString,
+  };
+}
+
+export function generateBurstLimitScript(config: BurstLimitConfig): string {
+  const { rosVersion, upMaxLimit, upBurstLimit, upBonusDuration, downMaxLimit, downBurstLimit, downBonusDuration, targetSubnet, queueName } = config;
+  const metrics = calculateBurstMetrics(upMaxLimit, upBurstLimit, upBonusDuration, downMaxLimit, downBurstLimit, downBonusDuration);
+  const lines: string[] = [headerBanner('MikroTik Burst Limit Calculator & Traffic Shaper', rosVersion)];
+
+  lines.push('# ==========================================================');
+  lines.push('# TAB GENERAL & ADVANCED PARAMETERS:');
+  lines.push(`# Upload   : Max-Limit=${formatKbpsToSpeed(metrics.upMaxKbps)}, Burst-Limit=${formatKbpsToSpeed(metrics.upBurstKbps)}, Burst-Threshold=${formatKbpsToSpeed(metrics.upThresholdKbps)}, Burst-Time=${metrics.upBurstTime}s, Limit-At=${formatKbpsToSpeed(metrics.upLimitAtKbps)}`);
+  lines.push(`# Download : Max-Limit=${formatKbpsToSpeed(metrics.downMaxKbps)}, Burst-Limit=${formatKbpsToSpeed(metrics.downBurstKbps)}, Burst-Threshold=${formatKbpsToSpeed(metrics.downThresholdKbps)}, Burst-Time=${metrics.downBurstTime}s, Limit-At=${formatKbpsToSpeed(metrics.downLimitAtKbps)}`);
+  lines.push(`# Actual Bonus Duration: Up approx ${metrics.upActualDuration}s, Down approx ${metrics.downActualDuration}s`);
+  lines.push('# ==========================================================');
+  lines.push('');
+
+  lines.push('# 1. Konfigurasi Simple Queue');
+  lines.push('/queue simple');
+  lines.push(
+    `add name="${queueName || 'Burst-Client'}" target="${targetSubnet || '192.168.88.0/24'}" max-limit=${formatKbpsToSpeed(metrics.upMaxKbps)}/${formatKbpsToSpeed(metrics.downMaxKbps)} burst-limit=${formatKbpsToSpeed(metrics.upBurstKbps)}/${formatKbpsToSpeed(metrics.downBurstKbps)} burst-threshold=${formatKbpsToSpeed(metrics.upThresholdKbps)}/${formatKbpsToSpeed(metrics.downThresholdKbps)} burst-time=${metrics.upBurstTime}/${metrics.downBurstTime} limit-at=${formatKbpsToSpeed(metrics.upLimitAtKbps)}/${formatKbpsToSpeed(metrics.downLimitAtKbps)} priority=8/8 comment="Burst Limit Config by buananet.com"`
+  );
+  lines.push('');
+
+  lines.push('# 2. String Rate-Limit untuk Hotspot User Profile');
+  lines.push(`/ip hotspot user profile`);
+  lines.push(`add name="Burst-${formatKbpsToSpeed(metrics.downMaxKbps)}" rate-limit="${metrics.rateLimitString}"`);
+  lines.push('');
+
+  lines.push('# 3. String Rate-Limit untuk PPPoE Profile');
+  lines.push(`/ppp profile`);
+  lines.push(`add name="Burst-PPPoE-${formatKbpsToSpeed(metrics.downMaxKbps)}" rate-limit="${metrics.rateLimitString}"`);
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 41. PCQ Burst Rate + Queue Size Calculator Helper & Script Generator
+// ==============================================================================
+export interface PCQCalculationResult {
+  rateKbps: number;
+  burstRateKbps: number;
+  burstThresholdKbps: number;
+  burstTime: number;
+  actualDuration: number;
+  totalQueueSize: number;
+  estimatedRamMb: number;
+}
+
+export function calculatePCQMetrics(
+  totalClient: number,
+  queueSize: number,
+  maxRateStr: string,
+  burstRateStr: string,
+  actualBurstTimeSec: number
+): PCQCalculationResult {
+  const rateKbps = parseBandwidthToKbps(maxRateStr) || 512;
+  const burstRateKbps = Math.max(parseBandwidthToKbps(burstRateStr) || 1000, rateKbps);
+  const burstThresholdKbps = Math.max(1, Math.round(rateKbps * 0.75));
+  const burstTime = Math.max(1, Math.ceil(((actualBurstTimeSec || 6) * burstRateKbps) / burstThresholdKbps));
+  const actualDuration = Math.round((burstThresholdKbps * burstTime) / burstRateKbps);
+  const totalQueueSize = Math.max(1, (totalClient || 40) * (queueSize || 50));
+  const estimatedRamMb = parseFloat(((totalQueueSize * 1500) / (1024 * 1024)).toFixed(1));
+
+  return {
+    rateKbps,
+    burstRateKbps,
+    burstThresholdKbps,
+    burstTime,
+    actualDuration,
+    totalQueueSize,
+    estimatedRamMb,
+  };
+}
+
+export function generatePCQBurstQueueSizeScript(config: PCQBurstQueueSizeConfig): string {
+  const { rosVersion, totalClient, queueSize, maxRate, burstRate, actualBurstTime, queueName } = config;
+  const metrics = calculatePCQMetrics(totalClient, queueSize, maxRate, burstRate, actualBurstTime);
+  const name = queueName || 'pcq-custom-rate';
+  const lines: string[] = [headerBanner('PCQ Burst Rate & Queue Size Calculator', rosVersion)];
+
+  lines.push('# ==========================================================');
+  lines.push(`# Sub-Queue Clients: ${totalClient} user | Queue Limit: ${queueSize} packets/client`);
+  lines.push(`# Total Queue Size: ${metrics.totalQueueSize} packets (Perkiraan konsumsi RAM: ~${metrics.estimatedRamMb} MB)`);
+  lines.push(`# Rate: ${formatKbpsToSpeed(metrics.rateKbps)} | Burst-Rate: ${formatKbpsToSpeed(metrics.burstRateKbps)} | Threshold: ${formatKbpsToSpeed(metrics.burstThresholdKbps)} | Burst-Time: ${metrics.burstTime}s`);
+  lines.push(`# Durasi Bonus: Setiap client mendapatkan bonus speed ${formatKbpsToSpeed(metrics.burstRateKbps)} selama ${metrics.actualDuration} detik`);
+  lines.push('# ==========================================================');
+  lines.push('');
+
+  lines.push('/queue type');
+  lines.push(
+    `add kind=pcq name="${name}-download" pcq-classifier=dst-address pcq-rate=${formatKbpsToSpeed(metrics.rateKbps)} pcq-limit=${queueSize} pcq-total-limit=${metrics.totalQueueSize} pcq-burst-rate=${formatKbpsToSpeed(metrics.burstRateKbps)} pcq-burst-threshold=${formatKbpsToSpeed(metrics.burstThresholdKbps)} pcq-burst-time=${metrics.burstTime}s`
+  );
+  lines.push(
+    `add kind=pcq name="${name}-upload" pcq-classifier=src-address pcq-rate=${formatKbpsToSpeed(metrics.rateKbps)} pcq-limit=${queueSize} pcq-total-limit=${metrics.totalQueueSize} pcq-burst-rate=${formatKbpsToSpeed(metrics.burstRateKbps)} pcq-burst-threshold=${formatKbpsToSpeed(metrics.burstThresholdKbps)} pcq-burst-time=${metrics.burstTime}s`
+  );
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 42. Simple Queue + Token Bucket
+// ==============================================================================
+export function generateSimpleQueueTokenBucketScript(config: SimpleQueueTokenBucketConfig): string {
+  const {
+    rosVersion,
+    parentName,
+    parentTarget,
+    parentUpMax,
+    parentDownMax,
+    clientPrefix,
+    clientInitial,
+    startIp,
+    endIp,
+    clientUpMax,
+    clientDownMax,
+    bucketSizeUp,
+    bucketSizeDown,
+  } = config;
+
+  const lines: string[] = [headerBanner('Simple Queue + Token Bucket Generator', rosVersion)];
+
+  lines.push('# 1. Parent Queue');
+  lines.push('/queue simple');
+  lines.push(
+    `add name="${parentName || 'Global-Connection'}" target="${parentTarget || '192.168.88.0/24'}" max-limit=${parentUpMax}/${parentDownMax} comment="Parent Queue - buananet.com"`
+  );
+  lines.push('');
+
+  lines.push('# 2. Child Queues dengan Token Bucket');
+  const startParts = startIp.split('.').map((p) => parseInt(p, 10));
+  const endParts = endIp.split('.').map((p) => parseInt(p, 10));
+
+  if (startParts.length === 4 && endParts.length === 4 && !isNaN(startParts[3]) && !isNaN(endParts[3])) {
+    const baseSubnet = `${startParts[0]}.${startParts[1]}.${startParts[2]}`;
+    const fromOctet = Math.min(startParts[3], endParts[3]);
+    const toOctet = Math.max(startParts[3], endParts[3]);
+    let initialNum = clientInitial || 1;
+
+    for (let octet = fromOctet; octet <= toOctet; octet++) {
+      const clientIp = `${baseSubnet}.${octet}/32`;
+      const clientName = `${clientPrefix || 'Client-'}${initialNum}`;
+      lines.push(
+        `add name="${clientName}" target="${clientIp}" parent="${parentName || 'Global-Connection'}" max-limit=${clientUpMax}/${clientDownMax} bucket-size=${bucketSizeUp || 0.1}/${bucketSizeDown || 0.1} priority=8/8 comment="Client Token Bucket"`
+      );
+      initialNum++;
+    }
+  } else {
+    lines.push(
+      `add name="${clientPrefix || 'Client-'}1" target="${startIp}/32" parent="${parentName || 'Global-Connection'}" max-limit=${clientUpMax}/${clientDownMax} bucket-size=${bucketSizeUp}/${bucketSizeDown} priority=8/8`
+    );
+  }
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 43. Simple Queue + Bandwidth Shared Up-To
+// ==============================================================================
+export function generateSimpleQueueSharedUpToScript(config: SimpleQueueSharedUpToConfig): string {
+  const {
+    rosVersion,
+    parentName,
+    parentTarget,
+    parentUpMax,
+    parentDownMax,
+    clientPrefix,
+    clientInitial,
+    startIp,
+    endIp,
+    clientUpMax,
+    clientDownMax,
+    limitAtUp,
+    limitAtDown,
+    autoShared,
+  } = config;
+
+  const lines: string[] = [headerBanner('Simple Queue + Bandwidth Shared (Up-To)', rosVersion)];
+
+  lines.push('# 1. Parent Queue');
+  lines.push('/queue simple');
+  lines.push(
+    `add name="${parentName || 'Global-Connection'}" target="${parentTarget || '192.168.88.0/24'}" max-limit=${parentUpMax}/${parentDownMax} comment="Parent Queue Shared - buananet.com"`
+  );
+  lines.push('');
+
+  const startParts = startIp.split('.').map((p) => parseInt(p, 10));
+  const endParts = endIp.split('.').map((p) => parseInt(p, 10));
+
+  let finalLimitAtUp = limitAtUp;
+  let finalLimitAtDown = limitAtDown;
+
+  if (startParts.length === 4 && endParts.length === 4 && !isNaN(startParts[3]) && !isNaN(endParts[3])) {
+    const fromOctet = Math.min(startParts[3], endParts[3]);
+    const toOctet = Math.max(startParts[3], endParts[3]);
+    const totalClients = Math.max(1, toOctet - fromOctet + 1);
+
+    if (autoShared) {
+      const pUpKbps = parseBandwidthToKbps(parentUpMax);
+      const pDownKbps = parseBandwidthToKbps(parentDownMax);
+      const autoUp = Math.max(32, Math.floor(pUpKbps / totalClients));
+      const autoDown = Math.max(64, Math.floor(pDownKbps / totalClients));
+      finalLimitAtUp = formatKbpsToSpeed(autoUp);
+      finalLimitAtDown = formatKbpsToSpeed(autoDown);
+    }
+
+    lines.push(`# 2. Sub-Queue Clients (Total ${totalClients} Client, Limit-At Guaranteed = ${finalLimitAtUp}/${finalLimitAtDown})`);
+    const baseSubnet = `${startParts[0]}.${startParts[1]}.${startParts[2]}`;
+    let initialNum = clientInitial || 1;
+
+    for (let octet = fromOctet; octet <= toOctet; octet++) {
+      const clientIp = `${baseSubnet}.${octet}/32`;
+      const clientName = `${clientPrefix || 'Client-'}${initialNum}`;
+      lines.push(
+        `add name="${clientName}" target="${clientIp}" parent="${parentName || 'Global-Connection'}" max-limit=${clientUpMax}/${clientDownMax} limit-at=${finalLimitAtUp}/${finalLimitAtDown} priority=8/8 comment="Shared Client (Up-To)"`
+      );
+      initialNum++;
+    }
+  } else {
+    lines.push(
+      `add name="${clientPrefix || 'Client-'}1" target="${startIp}/32" parent="${parentName || 'Global-Connection'}" max-limit=${clientUpMax}/${clientDownMax} limit-at=${finalLimitAtUp}/${finalLimitAtDown} priority=8/8`
+    );
+  }
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 44. Queue Tree + Bandwidth Shared Up-To
+// ==============================================================================
+export function generateQueueTreeSharedUpToScript(config: QueueTreeSharedUpToConfig): string {
+  const {
+    rosVersion,
+    parentName,
+    subQueueUpload,
+    subQueueDownload,
+    parentUpMax,
+    parentDownMax,
+    clientPrefix,
+    clientInitial,
+    startIp,
+    endIp,
+    clientUpMax,
+    clientDownMax,
+    limitAtUp,
+    limitAtDown,
+    autoShared,
+  } = config;
+
+  const lines: string[] = [headerBanner('Queue Tree + Bandwidth Shared (Up-To)', rosVersion)];
+
+  const startParts = startIp.split('.').map((p) => parseInt(p, 10));
+  const endParts = endIp.split('.').map((p) => parseInt(p, 10));
+  let finalLimitAtUp = limitAtUp;
+  let finalLimitAtDown = limitAtDown;
+  let totalClients = 1;
+
+  if (startParts.length === 4 && endParts.length === 4 && !isNaN(startParts[3]) && !isNaN(endParts[3])) {
+    const fromOctet = Math.min(startParts[3], endParts[3]);
+    const toOctet = Math.max(startParts[3], endParts[3]);
+    totalClients = Math.max(1, toOctet - fromOctet + 1);
+
+    if (autoShared) {
+      const pUpKbps = parseBandwidthToKbps(parentUpMax);
+      const pDownKbps = parseBandwidthToKbps(parentDownMax);
+      const autoUp = Math.max(32, Math.floor(pUpKbps / totalClients));
+      const autoDown = Math.max(64, Math.floor(pDownKbps / totalClients));
+      finalLimitAtUp = formatKbpsToSpeed(autoUp);
+      finalLimitAtDown = formatKbpsToSpeed(autoDown);
+    }
+  }
+
+  lines.push('# 1. Queue Tree Parents');
+  lines.push('/queue tree');
+  lines.push(`add name="${parentName || 'Global-Connection'}" parent=global comment="Parent Global Queue"`);
+  lines.push(
+    `add name="${subQueueUpload || 'Upload'}" parent="${parentName || 'Global-Connection'}" max-limit=${parentUpMax} comment="Parent Upload"`
+  );
+  lines.push(
+    `add name="${subQueueDownload || 'Download'}" parent="${parentName || 'Global-Connection'}" max-limit=${parentDownMax} comment="Parent Download"`
+  );
+  lines.push('');
+
+  lines.push('# 2. Queue Tree Child Queues');
+  if (startParts.length === 4 && endParts.length === 4) {
+    const fromOctet = Math.min(startParts[3], endParts[3]);
+    const toOctet = Math.max(startParts[3], endParts[3]);
+    let initialNum = clientInitial || 1;
+
+    for (let octet = fromOctet; octet <= toOctet; octet++) {
+      const cName = `${clientPrefix || 'Client-'}${initialNum}`;
+      lines.push(
+        `add name="${cName}-UP" parent="${subQueueUpload || 'Upload'}" packet-mark="${cName}-UP" max-limit=${clientUpMax} limit-at=${finalLimitAtUp} priority=8 queue=default`
+      );
+      lines.push(
+        `add name="${cName}-DOWN" parent="${subQueueDownload || 'Download'}" packet-mark="${cName}-DOWN" max-limit=${clientDownMax} limit-at=${finalLimitAtDown} priority=8 queue=default`
+      );
+      initialNum++;
+    }
+  }
+  lines.push('');
+
+  lines.push('# 3. IP Firewall Mangle (Mark Connection & Packet)');
+  lines.push('/ip firewall mangle');
+  if (startParts.length === 4 && endParts.length === 4) {
+    const fromOctet = Math.min(startParts[3], endParts[3]);
+    const toOctet = Math.max(startParts[3], endParts[3]);
+    const baseSubnet = `${startParts[0]}.${startParts[1]}.${startParts[2]}`;
+    let initialNum = clientInitial || 1;
+
+    for (let octet = fromOctet; octet <= toOctet; octet++) {
+      const ip = `${baseSubnet}.${octet}`;
+      const cName = `${clientPrefix || 'Client-'}${initialNum}`;
+      lines.push(
+        `add action=mark-connection chain=forward src-address=${ip} new-connection-mark="${cName}-conn" passthrough=yes comment="Mark conn ${cName}"`
+      );
+      lines.push(
+        `add action=mark-packet chain=forward connection-mark="${cName}-conn" src-address=${ip} new-packet-mark="${cName}-UP" passthrough=no`
+      );
+      lines.push(
+        `add action=mark-packet chain=forward connection-mark="${cName}-conn" dst-address=${ip} new-packet-mark="${cName}-DOWN" passthrough=no`
+      );
+      initialNum++;
+    }
+  }
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 45. PCQ for Queue Tree & Queue Simple
+// ==============================================================================
+export function generatePCQTreeSimpleScript(config: PCQTreeSimpleConfig): string {
+  const {
+    rosVersion,
+    queueOption,
+    parentName,
+    subQueueUpload,
+    subQueueDownload,
+    parentUpMax,
+    parentDownMax,
+    pcqUploadName,
+    pcqDownloadName,
+    pcqUpLimit,
+    pcqDownLimit,
+    autoShared,
+    localSubnets,
+  } = config;
+
+  const lines: string[] = [headerBanner(`MikroTik PCQ Generator for ${queueOption === 'queue-tree' ? 'Queue Tree' : 'Queue Simple'}`, rosVersion)];
+
+  const rateUp = autoShared ? '0' : pcqUpLimit;
+  const rateDown = autoShared ? '0' : pcqDownLimit;
+
+  lines.push('# 1. Definisi Queue Type PCQ');
+  lines.push('/queue type');
+  lines.push(`add kind=pcq name="${pcqUploadName || 'PCQ-Up'}" pcq-classifier=src-address pcq-rate=${rateUp}`);
+  lines.push(`add kind=pcq name="${pcqDownloadName || 'PCQ-Down'}" pcq-classifier=dst-address pcq-rate=${rateDown}`);
+  lines.push('');
+
+  if (queueOption === 'queue-simple') {
+    lines.push('# 2. Konfigurasi Queue Simple PCQ');
+    lines.push('/queue simple');
+    lines.push(
+      `add name="${parentName || 'GLOBAL-CONNECTION'}" target="${localSubnets || '192.168.0.0/16,172.16.0.0/12,10.0.0.0/8'}" comment="PCQ Generator by buananet.com"`
+    );
+    lines.push(
+      `add max-limit="${parentUpMax}/${parentUpMax}" name="${subQueueUpload || 'Upload-Client'}" packet-marks="upload-client" parent="${parentName || 'GLOBAL-CONNECTION'}" queue="${pcqUploadName || 'PCQ-Up'}/${pcqDownloadName || 'PCQ-Down'}" target="${localSubnets || '192.168.0.0/16,172.16.0.0/12,10.0.0.0/8'}"`
+    );
+    lines.push(
+      `add max-limit="${parentDownMax}/${parentDownMax}" name="${subQueueDownload || 'Download-Client'}" packet-marks="download-client" parent="${parentName || 'GLOBAL-CONNECTION'}" queue="${pcqUploadName || 'PCQ-Up'}/${pcqDownloadName || 'PCQ-Down'}" target="${localSubnets || '192.168.0.0/16,172.16.0.0/12,10.0.0.0/8'}"`
+    );
+  } else {
+    lines.push('# 2. Konfigurasi Queue Tree PCQ');
+    lines.push('/queue tree');
+    lines.push(`add name="${parentName || 'GLOBAL-CONNECTION'}" parent=global comment="PCQ Generator by buananet.com"`);
+    lines.push(
+      `add max-limit="${parentUpMax}" name="${subQueueUpload || 'Upload-Client'}" packet-mark="upload-client" parent="${parentName || 'GLOBAL-CONNECTION'}" queue="${pcqUploadName || 'PCQ-Up'}"`
+    );
+    lines.push(
+      `add max-limit="${parentDownMax}" name="${subQueueDownload || 'Download-Client'}" packet-mark="download-client" parent="${parentName || 'GLOBAL-CONNECTION'}" queue="${pcqDownloadName || 'PCQ-Down'}"`
+    );
+  }
+  lines.push('');
+
+  lines.push('# 3. Mangle Traffic Classifier (Connection & Packet Mark)');
+  lines.push('/ip firewall mangle');
+  lines.push(
+    `add action=mark-connection chain=forward new-connection-mark="global-conn" passthrough=yes src-address-list=LOCAL-IP comment="PCQ Classifier by buananet.com"`
+  );
+  lines.push(
+    `add action=mark-packet chain=forward connection-mark="global-conn" src-address-list=LOCAL-IP new-packet-mark="upload-client" passthrough=no`
+  );
+  lines.push(
+    `add action=mark-packet chain=forward connection-mark="global-conn" dst-address-list=LOCAL-IP new-packet-mark="download-client" passthrough=no`
+  );
+  lines.push('');
+
+  lines.push('# 4. Address List Subnet Lokal');
+  lines.push('/ip firewall address-list');
+  const subs = (localSubnets || '192.168.0.0/16,172.16.0.0/12,10.0.0.0/8')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  subs.forEach((sub) => {
+    lines.push(`add address=${sub} list=LOCAL-IP`);
+  });
+  lines.push('');
+
+  return lines.join('\n');
+}
+
+// ==============================================================================
+// 46. QoS Priority Youtube, Tiktok, WA, FB, etc.
+// ==============================================================================
+export interface QoSServiceItem {
+  id: string;
+  name: string;
+  category: 'Streaming' | 'Social Media' | 'E-Commerce' | 'Video Conference' | 'Other List IP';
+  domains: string[];
+}
+
+export const QOS_SERVICE_PRESETS: QoSServiceItem[] = [
+  // Streaming
+  { id: 'Youtube', name: 'Youtube', category: 'Streaming', domains: ['youtube.com', 'googlevideo.com', 'ytimg.com', 'youtu.be'] },
+  { id: 'Tiktok', name: 'Tiktok', category: 'Streaming', domains: ['tiktok.com', 'tiktokv.com', 'tiktokcdn.com', 'byteoversea.com', 'ibyteimg.com'] },
+  { id: 'Vidio', name: 'Vidio', category: 'Streaming', domains: ['vidio.com', 'cdn.vidio.com'] },
+  { id: 'Iflix', name: 'Iflix', category: 'Streaming', domains: ['iflix.com'] },
+  { id: 'Netflix', name: 'Netflix', category: 'Streaming', domains: ['netflix.com', 'nflxvideo.net', 'nflxext.com', 'nflximg.net'] },
+  { id: 'Spotify', name: 'Spotify', category: 'Streaming', domains: ['spotify.com', 'audio-ak-spotify-com.akamaized.net', 'cdn.spotify.com', 'spoti.fi'] },
+  { id: 'Wetv', name: 'Wetv', category: 'Streaming', domains: ['wetv.vip'] },
+  { id: 'Vimeo', name: 'Vimeo', category: 'Streaming', domains: ['vimeo.com', 'vimeocdn.com'] },
+  { id: 'Twitch', name: 'Twitch', category: 'Streaming', domains: ['twitch.tv', 'ttvnw.net', 'jtvnw.net'] },
+
+  // Social Media
+  { id: 'Facebook', name: 'Facebook', category: 'Social Media', domains: ['facebook.com', 'fbcdn.net', 'fbsbx.com', 'fb.me', 'm.facebook.com'] },
+  { id: 'Instagram', name: 'Instagram', category: 'Social Media', domains: ['instagram.com', 'cdninstagram.com', 'igcdn.com'] },
+  { id: 'WhatsApp', name: 'WhatsApp', category: 'Social Media', domains: ['whatsapp.com', 'whatsapp.net', 'fna.whatsapp.net'] },
+  { id: 'Twitter-X', name: 'Twitter / X', category: 'Social Media', domains: ['twitter.com', 'x.com', 'twimg.com', 't.co'] },
+  { id: 'Telegram', name: 'Telegram', category: 'Social Media', domains: ['telegram.org', 't.me', 'telesco.pe'] },
+  { id: 'Threads', name: 'Threads', category: 'Social Media', domains: ['threads.net'] },
+  { id: 'Imo', name: 'Imo.im', category: 'Social Media', domains: ['imo.im'] },
+  { id: 'Snapchat', name: 'Snapchat', category: 'Social Media', domains: ['snapchat.com', 'sc-cdn.net'] },
+  { id: 'Linkedin', name: 'Linkedin', category: 'Social Media', domains: ['linkedin.com', 'licdn.com'] },
+  { id: 'Pinterest', name: 'Pinterest', category: 'Social Media', domains: ['pinterest.com', 'pinimg.com'] },
+
+  // E-Commerce
+  { id: 'Shopee', name: 'Shopee', category: 'E-Commerce', domains: ['shopee.co.id', 'shopee.com', 'shopeemobile.com', 'spx.co.id'] },
+  { id: 'Tokopedia', name: 'Tokopedia', category: 'E-Commerce', domains: ['tokopedia.com', 'tokopedia.net', 'tokocdn.net'] },
+  { id: 'Bukalapak', name: 'Bukalapak', category: 'E-Commerce', domains: ['bukalapak.com', 'bukalapak.net'] },
+  { id: 'Lazada', name: 'Lazada', category: 'E-Commerce', domains: ['lazada.co.id', 'lazada.com', 'alicdn.com'] },
+  { id: 'Blibli', name: 'Blibli', category: 'E-Commerce', domains: ['blibli.com', 'static-src.com'] },
+  { id: 'Amazon', name: 'Amazon', category: 'E-Commerce', domains: ['amazon.com', 'media-amazon.com', 'ssl-images-amazon.com'] },
+  { id: 'Alibaba', name: 'Alibaba', category: 'E-Commerce', domains: ['alibaba.com', 'alicdn.com', 'aliexpress.com'] },
+  { id: 'Etsy', name: 'Etsy', category: 'E-Commerce', domains: ['etsy.com', 'etsystatic.com'] },
+  { id: 'Rakuten', name: 'Rakuten', category: 'E-Commerce', domains: ['rakuten.com'] },
+  { id: 'Shopify', name: 'Shopify', category: 'E-Commerce', domains: ['shopify.com', 'myshopify.com'] },
+  { id: 'Wish', name: 'Wish', category: 'E-Commerce', domains: ['wish.com'] },
+  { id: 'Temu', name: 'Temu', category: 'E-Commerce', domains: ['temu.com'] },
+  { id: 'Ralali', name: 'Ralali', category: 'E-Commerce', domains: ['ralali.com'] },
+  { id: 'Olx', name: 'Olx', category: 'E-Commerce', domains: ['olx.co.id', 'olx.com'] },
+
+  // Video Conference
+  { id: 'Zoom', name: 'Zoom Meeting', category: 'Video Conference', domains: ['zoom.us', 'zoomgov.com', 'zoom.com'] },
+  { id: 'Teams', name: 'Microsoft Teams', category: 'Video Conference', domains: ['teams.microsoft.com', 'skype.com', 'live.com'] },
+  { id: 'Google-Meet', name: 'Google Meet', category: 'Video Conference', domains: ['meet.google.com'] },
+  { id: 'Discord', name: 'Discord', category: 'Video Conference', domains: ['discord.gg', 'discord.com', 'discordapp.com', 'discordapp.net'] },
+  { id: 'Webex', name: 'Webex', category: 'Video Conference', domains: ['webex.com'] },
+  { id: 'Skype', name: 'Skype', category: 'Video Conference', domains: ['skype.com'] },
+  { id: 'Jitsi', name: 'Jitsi', category: 'Video Conference', domains: ['meet.jit.si', 'jitsi.org'] },
+  { id: 'Whereby', name: 'Whereby', category: 'Video Conference', domains: ['whereby.com'] },
+
+  // Other List IP
+  { id: 'Meta', name: 'Meta Ecosystem', category: 'Other List IP', domains: ['meta.com', 'fb.com'] },
+  { id: 'Google', name: 'Google Ecosystem', category: 'Other List IP', domains: ['google.com', 'google.co.id', 'gstatic.com'] },
+  { id: 'Speedtest', name: 'Speedtest Ookla', category: 'Other List IP', domains: ['speedtest.net', 'ooklaserver.net'] },
+  { id: 'GGC', name: 'GGC (Google Global Cache)', category: 'Other List IP', domains: ['c.android.clients.google.com', '1e100.net'] },
+  { id: 'NICE-OIXP', name: 'Nice IIX or OIXP (Indonesia)', category: 'Other List IP', domains: ['oixp.co.id', 'iix.net.id'] },
+  { id: 'Bank-Indonesia', name: 'All Indonesian Bank', category: 'Other List IP', domains: ['klikbca.com', 'ib.bri.co.id', 'bankmandiri.co.id', 'bni.co.id'] },
+];
+
+export interface QoSPriorityScriptResult {
+  step1: string;
+  step2: string;
+  offlineScript: string;
+  fullScript: string;
+}
+
+export function generateQoSPriorityScript(config: QoSPriorityConfig): QoSPriorityScriptResult {
+  const { rosVersion, queueOption, service, queueName, priority, maxLimit, matchFilter, localSubnets } = config;
+  const svcItem = QOS_SERVICE_PRESETS.find((s) => s.id === service) || QOS_SERVICE_PRESETS[0];
+  const listName = `Mikrotik-${svcItem.id}`;
+  const rscFile = `Mikrotik-${svcItem.id}.rsc`;
+
+  // Step 1: Download from BuanaNET database
+  const step1Lines = [
+    `## STEP 1 - Download IP / RAW Database ke Storage Router`,
+    `/file remove "${rscFile}"`,
+    `/tool fetch url="https://buananet.com/mikrotik-routeros-rsc/${matchFilter}/${rscFile}" dst-path="${rscFile}"`,
+  ];
+
+  // Step 2: Import & Queue Configuration
+  const step2Lines = [
+    `## STEP 2 - Import Database & Buat Queue QoS Priority`,
+    `/import file-name="${rscFile}"`,
+    `/file remove "${rscFile}"`,
+    '',
+  ];
+
+  if (queueOption === 'queue-simple') {
+    step2Lines.push(
+      `/queue simple add priority=${priority}/${priority} max-limit="${maxLimit}/${maxLimit}" name="${queueName || `-> ${svcItem.name.toUpperCase()}`}" packet-marks="${svcItem.id}-Up,${svcItem.id}-Down" target="${localSubnets || '192.168.0.0/16,172.16.0.0/12,10.0.0.0/8'}" comment="QoS Priority ${svcItem.name}"`
+    );
+  } else {
+    step2Lines.push(
+      `/queue tree add parent=global priority=${priority} max-limit="${maxLimit}" name="${queueName || `-> ${svcItem.name.toUpperCase()}`} UP" packet-mark="${svcItem.id}-Up" comment="QoS Priority Up"`
+    );
+    step2Lines.push(
+      `/queue tree add parent=global priority=${priority} max-limit="${maxLimit}" name="${queueName || `-> ${svcItem.name.toUpperCase()}`} DOWN" packet-mark="${svcItem.id}-Down" comment="QoS Priority Down"`
+    );
+  }
+  step2Lines.push('');
+
+  step2Lines.push('<b>/ip firewall mangle</b>');
+  step2Lines.push(
+    `add action=mark-connection chain=prerouting new-connection-mark="${svcItem.id}-conn" dst-address-list="${listName}" passthrough=yes src-address-list=LOCAL-IP comment="${svcItem.name} Mangle - QoS Priority"`
+  );
+  step2Lines.push(
+    `add action=mark-packet chain=prerouting connection-mark="${svcItem.id}-conn" src-address-list=LOCAL-IP new-packet-mark="${svcItem.id}-Up" passthrough=no`
+  );
+  step2Lines.push(
+    `add action=mark-packet chain=postrouting connection-mark="${svcItem.id}-conn" dst-address-list=LOCAL-IP new-packet-mark="${svcItem.id}-Down" passthrough=no`
+  );
+  step2Lines.push('');
+
+  step2Lines.push('<b>/ip firewall address-list</b>');
+  const subs = (localSubnets || '192.168.0.0/16,172.16.0.0/12,10.0.0.0/8')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  subs.forEach((sub) => {
+    step2Lines.push(`add address=${sub} list=LOCAL-IP comment="LOCAL IP Subnet"`);
+  });
+
+  // Offline Standalone Version (uses local TLS host or content rules instead of remote RSC fetch)
+  const offlineLines = [headerBanner(`QoS Priority ${svcItem.name} (Direct / Offline Mode)`, rosVersion)];
+  offlineLines.push('# 1. Address List Subnet Lokal');
+  offlineLines.push('/ip firewall address-list');
+  subs.forEach((sub) => {
+    offlineLines.push(`add address=${sub} list=LOCAL-IP comment="LOCAL IP Subnet"`);
+  });
+  offlineLines.push('');
+
+  offlineLines.push('# 2. RAW Rule untuk Mendeteksi Domain / TLS-Host');
+  offlineLines.push('/ip firewall raw');
+  svcItem.domains.forEach((dom) => {
+    if (matchFilter === 'content') {
+      offlineLines.push(
+        `add action=add-dst-to-address-list address-list="${listName}" address-list-timeout=1d chain=prerouting content="${dom}" comment="Match ${dom}"`
+      );
+    } else {
+      offlineLines.push(
+        `add action=add-dst-to-address-list address-list="${listName}" address-list-timeout=1d chain=prerouting tls-host="*.${dom}" comment="Match *.${dom}"`
+      );
+      offlineLines.push(
+        `add action=add-dst-to-address-list address-list="${listName}" address-list-timeout=1d chain=prerouting tls-host="${dom}" comment="Match ${dom}"`
+      );
+    }
+  });
+  offlineLines.push('');
+
+  offlineLines.push('# 3. Mangle Packet Mark');
+  offlineLines.push('/ip firewall mangle');
+  offlineLines.push(
+    `add action=mark-connection chain=prerouting new-connection-mark="${svcItem.id}-conn" dst-address-list="${listName}" passthrough=yes src-address-list=LOCAL-IP comment="${svcItem.name} Connection"`
+  );
+  offlineLines.push(
+    `add action=mark-packet chain=prerouting connection-mark="${svcItem.id}-conn" src-address-list=LOCAL-IP new-packet-mark="${svcItem.id}-Up" passthrough=no`
+  );
+  offlineLines.push(
+    `add action=mark-packet chain=postrouting connection-mark="${svcItem.id}-conn" dst-address-list=LOCAL-IP new-packet-mark="${svcItem.id}-Down" passthrough=no`
+  );
+  offlineLines.push('');
+
+  offlineLines.push('# 4. Queue Limit & Priority');
+  if (queueOption === 'queue-simple') {
+    offlineLines.push('/queue simple');
+    offlineLines.push(
+      `add priority=${priority}/${priority} max-limit="${maxLimit}/${maxLimit}" name="${queueName || `-> ${svcItem.name.toUpperCase()}`}" packet-marks="${svcItem.id}-Up,${svcItem.id}-Down" target="${localSubnets || '192.168.0.0/16,172.16.0.0/12,10.0.0.0/8'}" comment="QoS Priority ${svcItem.name}"`
+    );
+  } else {
+    offlineLines.push('/queue tree');
+    offlineLines.push(
+      `add parent=global priority=${priority} max-limit="${maxLimit}" name="${queueName || `-> ${svcItem.name.toUpperCase()}`} UP" packet-mark="${svcItem.id}-Up" comment="QoS Priority Up"`
+    );
+    offlineLines.push(
+      `add parent=global priority=${priority} max-limit="${maxLimit}" name="${queueName || `-> ${svcItem.name.toUpperCase()}`} DOWN" packet-mark="${svcItem.id}-Down" comment="QoS Priority Down"`
+    );
+  }
+  offlineLines.push('');
+
+  const step1Text = step1Lines.join('\n');
+  const step2Text = step2Lines.map((l) => l.replace(/<\/?b>/g, '')).join('\n');
+  const fullText = [headerBanner(`QoS Priority ${svcItem.name} (${queueOption === 'queue-simple' ? 'Simple Queue' : 'Queue Tree'})`, rosVersion), step1Text, '', step2Text].join('\n');
+
+  return {
+    step1: step1Text,
+    step2: step2Text,
+    offlineScript: offlineLines.join('\n'),
+    fullScript: fullText,
+  };
+}
+

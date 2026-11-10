@@ -683,7 +683,7 @@ export default function NewOrderPage() {
       <div>
         <nav className="flex items-center space-x-2 text-xs text-slate-500 mb-2">
           <Link href="/queue" className="hover:text-blue-600 font-medium">
-            Dashboard Antrean
+            List Antrean
           </Link>
           <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
           <span className="text-slate-700 font-semibold">Registrasi Layanan Baru</span>

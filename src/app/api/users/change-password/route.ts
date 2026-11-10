@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword, hashPassword, verifySessionToken } from "@/lib/auth";
+import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 
 export async function POST(request: NextRequest) {
   try {
@@ -59,6 +60,18 @@ export async function POST(request: NextRequest) {
       where: { id: user.id },
       data: { password_hash: newHash },
     });
+
+    // Catat ke Log Aplikasi
+    const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
+    const userAgent = parseUserAgent(request.headers.get("user-agent"));
+    recordActivity({
+      nama_lengkap: user.nama,
+      ip_address: clientIp,
+      tipe: "PASSWORD_CHANGE",
+      aktifitas: `Memperbarui kata sandi akun ${user.nama} (${user.email})`,
+      detail: "Perubahan kata sandi akun mandiri berhasil",
+      user_agent: userAgent,
+    }).catch(() => {});
 
     return NextResponse.json({
       success: true,

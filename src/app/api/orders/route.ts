@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateTicketNumber } from "@/lib/ticketUtils";
 import { buildPayloadForOrder, dispatchSheetsSync } from "@/lib/sheetsSync";
+import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,11 +18,11 @@ export async function GET(request: NextRequest) {
 
     const andConditions: any[] = [];
 
-    if (isQueue) {
-      // Dashboard Antrian excludes Completed orders
-      andConditions.push({ status: { not: "Completed" } });
-    } else if (status && status !== "Semua") {
+    if (status && status !== "Semua") {
       andConditions.push({ status });
+    } else if (isQueue) {
+      // Dashboard Antrian excludes Completed and Cancelled orders
+      andConditions.push({ status: { notIn: ["Completed", "Cancelled"] } });
     }
 
     if (tipeOrder && tipeOrder !== "Semua") {
@@ -95,19 +96,21 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Queue antrian statistics (strictly active, excluding Completed)
+    // Queue antrian statistics (strictly active tasks, excluding Completed and Cancelled)
+    const activeScope = { status: { notIn: ["Completed", "Cancelled"] } };
     const queueCounts = {
-      total: await prisma.popSiteOrder.count({ where: { status: { not: "Completed" } } }),
-      aktivasi: await prisma.popSiteOrder.count({ where: { tipe_order: "Aktivasi Baru", status: { not: "Completed" } } }),
-      upgrade: await prisma.popSiteOrder.count({ where: { tipe_order: "Upgrade", status: { not: "Completed" } } }),
-      downgrade: await prisma.popSiteOrder.count({ where: { tipe_order: "Downgrade", status: { not: "Completed" } } }),
-      isolir: await prisma.popSiteOrder.count({ where: { tipe_order: "Isolir", status: { not: "Completed" } } }),
-      unisolir: await prisma.popSiteOrder.count({ where: { tipe_order: "Unisolir", status: { not: "Completed" } } }),
-      terminate: await prisma.popSiteOrder.count({ where: { tipe_order: "Terminate", status: { not: "Completed" } } }),
+      total: await prisma.popSiteOrder.count({ where: activeScope }),
+      aktivasi: await prisma.popSiteOrder.count({ where: { tipe_order: "Aktivasi Baru", ...activeScope } }),
+      upgrade: await prisma.popSiteOrder.count({ where: { tipe_order: "Upgrade", ...activeScope } }),
+      downgrade: await prisma.popSiteOrder.count({ where: { tipe_order: "Downgrade", ...activeScope } }),
+      isolir: await prisma.popSiteOrder.count({ where: { tipe_order: "Isolir", ...activeScope } }),
+      unisolir: await prisma.popSiteOrder.count({ where: { tipe_order: "Unisolir", ...activeScope } }),
+      unterminated: await prisma.popSiteOrder.count({ where: { tipe_order: { in: ["Unterminate", "Unterminated"] }, ...activeScope } }),
+      terminate: await prisma.popSiteOrder.count({ where: { tipe_order: "Terminate", ...activeScope } }),
+      cancelled: await prisma.popSiteOrder.count({ where: { status: "Cancelled" } }),
     };
 
     // Classification statistics for Active Queue
-    const activeScope = { status: { not: "Completed" } };
     const classificationCounts = {
       all: await prisma.popSiteOrder.count({ where: activeScope }),
       pop_site: await prisma.popSiteOrder.count({
@@ -381,6 +384,31 @@ export async function POST(request: NextRequest) {
         catatan_progress: "Tiket aktivasi baru dibuat dan masuk antrean.",
       },
     });
+
+    // Record application-wide activity log
+    prisma.user
+      .findUnique({ where: { id: creatorId } })
+      .then((u) => {
+        recordActivity({
+          nama_lengkap: u?.nama || nama_pic || "NOC User",
+          email: u?.email || null,
+          ip_address: request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63",
+          tipe: "CREATE_TICKET",
+          aktifitas: `Membuat tiket dengan nomor ${ticketNumber}`,
+          detail: JSON.stringify({ kategori_layanan, sub_layanan }),
+          user_agent: parseUserAgent(request.headers.get("user-agent")),
+        }).catch(() => {});
+      })
+      .catch(() => {
+        recordActivity({
+          nama_lengkap: nama_pic || "NOC User",
+          ip_address: request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63",
+          tipe: "CREATE_TICKET",
+          aktifitas: `Membuat tiket dengan nomor ${ticketNumber}`,
+          detail: JSON.stringify({ kategori_layanan, sub_layanan }),
+          user_agent: parseUserAgent(request.headers.get("user-agent")),
+        }).catch(() => {});
+      });
 
     // Trigger async sync to Google Spreadsheet (non-blocking)
     buildPayloadForOrder(newOrder.id, "CREATE_ORDER", {

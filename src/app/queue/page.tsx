@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
+import { useCurrentUser } from "@/context/UserContext";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PageSizeSelector, PaginationNavigator } from "@/components/Pagination";
 import {
@@ -26,7 +27,14 @@ import {
   ShieldAlert,
   ShieldCheck,
   PowerOff,
+  RotateCcw,
   Radio,
+  Ban,
+  X,
+  AlertCircle,
+  CheckSquare,
+  Square,
+  Copy,
 } from "lucide-react";
 import { DEFAULT_SERVER_OPTIONS } from "@/lib/ticketUtils";
 
@@ -89,6 +97,7 @@ interface OrderItem {
 }
 
 export default function QueueBoardPage() {
+  const { currentUser } = useCurrentUser();
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -102,6 +111,24 @@ export default function QueueBoardPage() {
   const [availableServers, setAvailableServers] = useState<string[]>(DEFAULT_SERVER_OPTIONS);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMedia, setSelectedMedia] = useState("Semua");
+  const [selectedStatus, setSelectedStatus] = useState("Semua");
+
+  // Cancel Ticket Modal State
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState<OrderItem | null>(null);
+  const [cancelAlasan, setCancelAlasan] = useState("");
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelSuccessMessage, setCancelSuccessMessage] = useState<string | null>(null);
+
+  // Multi-Select State
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [copiedTickets, setCopiedTickets] = useState(false);
+  const [bulkCancelModalOpen, setBulkCancelModalOpen] = useState(false);
+  const [bulkCancelAlasan, setBulkCancelAlasan] = useState("");
+  const [isBulkCancelling, setIsBulkCancelling] = useState(false);
+  const [bulkCancelError, setBulkCancelError] = useState<string | null>(null);
+  const [bulkCancelSuccessMessage, setBulkCancelSuccessMessage] = useState<string | null>(null);
 
   const [queueCounts, setQueueCounts] = useState({
     total: 0,
@@ -111,6 +138,7 @@ export default function QueueBoardPage() {
     isolir: 0,
     unisolir: 0,
     terminate: 0,
+    unterminated: 0,
   });
 
   const [classificationCounts, setClassificationCounts] = useState({
@@ -140,6 +168,7 @@ export default function QueueBoardPage() {
       if (selectedServer !== "Semua") params.append("server", selectedServer);
       if (selectedTipe !== "Semua") params.append("tipe_order", selectedTipe);
       if (selectedMedia !== "Semua") params.append("media_koneksi", selectedMedia);
+      if (selectedStatus !== "Semua") params.append("status", selectedStatus);
       if (searchQuery.trim().length > 0) params.append("search", searchQuery.trim());
 
       const res = await fetch(`/api/orders?${params.toString()}`);
@@ -165,7 +194,57 @@ export default function QueueBoardPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedTipe, selectedKategori, selectedSubLayanan, selectedServer, selectedMedia, searchQuery]);
+  }, [selectedTipe, selectedKategori, selectedSubLayanan, selectedServer, selectedMedia, selectedStatus, searchQuery]);
+
+  // Handlers for Cancel Ticket
+  const handleOpenCancelModal = (order: OrderItem) => {
+    setOrderToCancel(order);
+    setCancelAlasan("");
+    setCancelError(null);
+    setCancelSuccessMessage(null);
+    setCancelModalOpen(true);
+  };
+
+  const handleConfirmCancel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!orderToCancel) return;
+
+    if (!cancelAlasan.trim()) {
+      setCancelError("Alasan pembatalan tiket wajib diisi.");
+      return;
+    }
+
+    setIsCancelling(true);
+    setCancelError(null);
+
+    try {
+      const res = await fetch(`/api/orders/${orderToCancel.id}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: currentUser?.id,
+          alasan: cancelAlasan.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Gagal membatalkan tiket.");
+      }
+
+      setCancelSuccessMessage(data.message || `Tiket ${orderToCancel.ticket_number} berhasil dibatalkan.`);
+      fetchOrders(true);
+      setTimeout(() => {
+        setCancelModalOpen(false);
+        setOrderToCancel(null);
+        setCancelSuccessMessage(null);
+      }, 1200);
+    } catch (err: any) {
+      setCancelError(err.message || "Terjadi kesalahan saat membatalkan tiket.");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
 
   // Pagination State
   const [pageSize, setPageSize] = useState(10);
@@ -177,13 +256,110 @@ export default function QueueBoardPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedTipe, selectedKategori, selectedSubLayanan, selectedServer, selectedMedia, searchQuery, pageSize]);
+  }, [selectedTipe, selectedKategori, selectedSubLayanan, selectedServer, selectedMedia, selectedStatus, searchQuery, pageSize]);
 
   const totalPages = Math.ceil(orders.length / pageSize) || 1;
   const paginatedOrders = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return orders.slice(start, start + pageSize);
   }, [orders, currentPage, pageSize]);
+
+  // Multi-Select Helpers
+  const isAllCurrentPageSelected = useMemo(() => {
+    if (paginatedOrders.length === 0) return false;
+    return paginatedOrders.every((o) => selectedOrderIds.includes(o.id));
+  }, [paginatedOrders, selectedOrderIds]);
+
+  const isSomeCurrentPageSelected = useMemo(() => {
+    return paginatedOrders.some((o) => selectedOrderIds.includes(o.id));
+  }, [paginatedOrders, selectedOrderIds]);
+
+  const handleToggleSelectOrder = (id: string) => {
+    setSelectedOrderIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSelectAllCurrentPage = () => {
+    if (isAllCurrentPageSelected) {
+      const pageIds = new Set(paginatedOrders.map((o) => o.id));
+      setSelectedOrderIds((prev) => prev.filter((id) => !pageIds.has(id)));
+    } else {
+      const pageIds = paginatedOrders.map((o) => o.id);
+      setSelectedOrderIds((prev) => Array.from(new Set([...prev, ...pageIds])));
+    }
+  };
+
+  const handleSelectAllFiltered = () => {
+    setSelectedOrderIds(orders.map((o) => o.id));
+  };
+
+  const handleCopySelectedTicketNumbers = () => {
+    const selectedTickets = orders
+      .filter((o) => selectedOrderIds.includes(o.id))
+      .map((o) => o.ticket_number);
+    if (selectedTickets.length === 0) return;
+    navigator.clipboard.writeText(selectedTickets.join(", "));
+    setCopiedTickets(true);
+    setTimeout(() => setCopiedTickets(false), 2000);
+  };
+
+  const cancellableSelectedOrders = useMemo(() => {
+    return orders.filter(
+      (o) => selectedOrderIds.includes(o.id) && o.status !== "Cancelled" && o.status !== "Completed"
+    );
+  }, [orders, selectedOrderIds]);
+
+  const handleOpenBulkCancelModal = () => {
+    setBulkCancelAlasan("");
+    setBulkCancelError(null);
+    setBulkCancelSuccessMessage(null);
+    setBulkCancelModalOpen(true);
+  };
+
+  const handleConfirmBulkCancel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (cancellableSelectedOrders.length === 0) return;
+    if (!bulkCancelAlasan.trim()) {
+      setBulkCancelError("Alasan pembatalan tiket wajib diisi.");
+      return;
+    }
+
+    setIsBulkCancelling(true);
+    setBulkCancelError(null);
+
+    try {
+      const results = await Promise.all(
+        cancellableSelectedOrders.map((order) =>
+          fetch(`/api/orders/${order.id}/cancel`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              user_id: currentUser?.id,
+              alasan: bulkCancelAlasan.trim(),
+            }),
+          }).then((res) => res.json())
+        )
+      );
+
+      const failures = results.filter((r) => !r.success);
+      if (failures.length > 0) {
+        throw new Error(`Sebagian tiket gagal dibatalkan (${failures.length} tiket gagal).`);
+      }
+
+      setBulkCancelSuccessMessage(`${cancellableSelectedOrders.length} tiket berhasil dibatalkan.`);
+      fetchOrders(true);
+      setTimeout(() => {
+        setBulkCancelModalOpen(false);
+        setSelectedOrderIds([]);
+        setBulkCancelSuccessMessage(null);
+      }, 1200);
+    } catch (err: any) {
+      setBulkCancelError(err.message || "Gagal membatalkan tiket terpilih.");
+    } finally {
+      setIsBulkCancelling(false);
+    }
+  };
 
   return (
     <div className="space-y-6 pb-12 animate-fadeIn">
@@ -225,8 +401,8 @@ export default function QueueBoardPage() {
         </div>
       </div>
 
-      {/* 7 requested Antrean Stat Cards (Excluding Complete, which goes to List POP Site) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5 2xl:gap-3.5">
+      {/* 8 requested Antrean Stat Cards (Excluding Complete, which goes to List POP Site) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 2xl:gap-3.5">
         {/* Total Antrean */}
         <div
           onClick={() => setSelectedTipe("Semua")}
@@ -357,6 +533,25 @@ export default function QueueBoardPage() {
           <p className="text-xl font-black mt-1.5">{queueCounts.terminate}</p>
           <p className={`text-[10px] mt-0.5 ${selectedTipe === "Terminate" ? "text-rose-100" : "text-slate-500 dark:text-slate-400"}`}>
             Penutupan layanan
+          </p>
+        </div>
+
+        {/* Antrian Unterminated */}
+        <div
+          onClick={() => setSelectedTipe("Unterminated")}
+          className={`p-3.5 rounded-2xl border transition-card cursor-pointer ${
+            selectedTipe === "Unterminated"
+              ? "bg-emerald-600 text-white border-emerald-700 shadow-md ring-2 ring-emerald-400"
+              : "bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 shadow-sm text-slate-800 dark:text-slate-200"
+          }`}
+        >
+          <div className="flex items-center justify-between text-xs font-semibold">
+            <span>Antrian Unterminated</span>
+            <RotateCcw className="w-4 h-4 text-emerald-500" />
+          </div>
+          <p className="text-xl font-black mt-1.5">{queueCounts.unterminated || 0}</p>
+          <p className={`text-[10px] mt-0.5 ${selectedTipe === "Unterminated" ? "text-emerald-100" : "text-slate-500 dark:text-slate-400"}`}>
+            Buka terminasi
           </p>
         </div>
       </div>
@@ -579,6 +774,24 @@ export default function QueueBoardPage() {
                 <option value="VSAT K-Band">VSAT K-Band</option>
               </select>
             </div>
+
+            {/* Filter Status Dropdown */}
+            <div className="relative min-w-[170px]">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 dark:text-slate-500">
+                <Clock className="w-3.5 h-3.5" />
+              </div>
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition shadow-xs outline-none bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100"
+              >
+                <option value="Semua">Semua Antrean Aktif</option>
+                <option value="Antrian Aktivasi">Antrian Aktivasi</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Pending Issue">Pending Issue</option>
+                <option value="Cancelled">Dibatalkan (Cancelled)</option>
+              </select>
+            </div>
           </div>
 
           {/* Sisi Kanan: Search Input (Paling Kanan) */}
@@ -597,7 +810,7 @@ export default function QueueBoardPage() {
         </div>
 
         {/* Active Filter Badges */}
-        {(selectedKategori !== "Semua" || selectedSubLayanan !== "Semua" || selectedTipe !== "Semua" || selectedServer !== "Semua" || selectedMedia !== "Semua") && (
+        {(selectedKategori !== "Semua" || selectedSubLayanan !== "Semua" || selectedTipe !== "Semua" || selectedServer !== "Semua" || selectedMedia !== "Semua" || selectedStatus !== "Semua") && (
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 pt-1">
             <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500">Filter Aktif:</span>
             {selectedKategori !== "Semua" && (
@@ -623,6 +836,11 @@ export default function QueueBoardPage() {
             {selectedMedia !== "Semua" && (
               <span className="px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-semibold text-[11px]">
                 Media: {selectedMedia}
+              </span>
+            )}
+            {selectedStatus !== "Semua" && (
+              <span className="px-2 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 font-semibold text-[11px]">
+                Status: {selectedStatus}
               </span>
             )}
           </div>
@@ -672,10 +890,91 @@ export default function QueueBoardPage() {
       ) : (
         /* Table View (Exclusive View) */
         <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm overflow-hidden">
+          {/* Multi-Select Action Toolbar */}
+          {selectedOrderIds.length > 0 && (
+            <div className="bg-blue-50/90 dark:bg-blue-950/80 border-b border-blue-200 dark:border-blue-900 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs text-blue-950 dark:text-blue-100 animate-fadeIn">
+              <div className="flex items-center space-x-3">
+                <span className="font-bold flex items-center text-blue-900 dark:text-blue-200">
+                  <CheckSquare className="w-4 h-4 mr-1.5 text-blue-600 dark:text-blue-400" />
+                  {selectedOrderIds.length} tiket dipilih
+                </span>
+                <span className="text-blue-300 dark:text-blue-700">&bull;</span>
+                <button
+                  type="button"
+                  onClick={handleToggleSelectAllCurrentPage}
+                  className="text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100 font-semibold underline underline-offset-2 transition cursor-pointer"
+                >
+                  {isAllCurrentPageSelected ? "Batal Pilih Halaman Ini" : `Pilih Semua di Halaman (${paginatedOrders.length})`}
+                </button>
+                {orders.length > paginatedOrders.length && (
+                  <>
+                    <span className="text-blue-300 dark:text-blue-700">&bull;</span>
+                    <button
+                      type="button"
+                      onClick={handleSelectAllFiltered}
+                      className="text-blue-700 dark:text-blue-300 hover:text-blue-900 dark:hover:text-blue-100 font-semibold underline underline-offset-2 transition cursor-pointer"
+                    >
+                      Pilih Semua Hasil Filter ({orders.length})
+                    </button>
+                  </>
+                )}
+              </div>
+
+              <div className="flex items-center space-x-2">
+                {/* Salin Nomor Tiket */}
+                <button
+                  type="button"
+                  onClick={handleCopySelectedTicketNumbers}
+                  className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition shadow-2xs cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5 mr-1 text-slate-500 dark:text-slate-400" />
+                  {copiedTickets ? "Tersalin!" : "Salin No. Tiket"}
+                </button>
+
+                {/* Batalkan Tiket Terpilih (Bulk Cancel) */}
+                {cancellableSelectedOrders.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleOpenBulkCancelModal}
+                    className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white transition shadow-2xs cursor-pointer"
+                  >
+                    <Ban className="w-3.5 h-3.5 mr-1" />
+                    Batalkan Tiket ({cancellableSelectedOrders.length})
+                  </button>
+                )}
+
+                {/* Reset / Deselect All */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrderIds([])}
+                  className="inline-flex items-center px-2 py-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-blue-100/60 dark:hover:bg-blue-900/40 transition cursor-pointer"
+                  title="Batal pilih semua"
+                >
+                  <X className="w-4 h-4 mr-0.5" />
+                  Batal Pilih
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-slate-900 dark:bg-slate-950 text-white font-semibold uppercase tracking-wider text-[11px]">
+                  <th className="py-3.5 pl-4 pr-2 w-10 text-center">
+                    <div className="flex items-center justify-center">
+                      <input
+                        type="checkbox"
+                        checked={isAllCurrentPageSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = isSomeCurrentPageSelected && !isAllCurrentPageSelected;
+                        }}
+                        onChange={handleToggleSelectAllCurrentPage}
+                        title="Pilih semua di halaman ini"
+                        className="w-4 h-4 rounded border-slate-400 dark:border-slate-600 text-blue-600 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-2 cursor-pointer transition-colors accent-blue-600"
+                      />
+                    </div>
+                  </th>
                   <th className="py-3.5 px-4">No. Tiket</th>
                   <th className="py-3.5 px-4">Tipe Antrean</th>
                   <th className="py-3.5 px-4">Status</th>
@@ -688,15 +987,35 @@ export default function QueueBoardPage() {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-medium text-slate-700 dark:text-slate-300">
                 {paginatedOrders.map((order) => {
+                  const isSelected = selectedOrderIds.includes(order.id);
                   let badgeColor = "bg-blue-100 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800";
                   if (order.tipe_order === "Upgrade") badgeColor = "bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800";
                   if (order.tipe_order === "Downgrade") badgeColor = "bg-sky-100 dark:bg-sky-950/70 text-sky-800 dark:text-sky-300 border-sky-200 dark:border-sky-800";
                   if (order.tipe_order === "Isolir") badgeColor = "bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800";
                   if (order.tipe_order === "Unisolir") badgeColor = "bg-teal-100 dark:bg-teal-950/70 text-teal-800 dark:text-teal-300 border-teal-200 dark:border-teal-800";
                   if (order.tipe_order === "Terminate") badgeColor = "bg-rose-100 dark:bg-rose-950/70 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800";
+                  if (order.tipe_order === "Unterminated" || order.tipe_order === "Unterminate") badgeColor = "bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800";
 
                   return (
-                    <tr key={order.id} className="hover:bg-slate-50/90 dark:hover:bg-slate-800/50 transition-colors">
+                    <tr
+                      key={order.id}
+                      className={`transition-colors ${
+                        isSelected
+                          ? "bg-blue-50/80 dark:bg-blue-950/40 hover:bg-blue-100/70 dark:hover:bg-blue-900/50"
+                          : "hover:bg-slate-50/90 dark:hover:bg-slate-800/50"
+                      }`}
+                    >
+                      <td className="py-3.5 pl-4 pr-2 text-center whitespace-nowrap">
+                        <div className="flex items-center justify-center">
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSelectOrder(order.id)}
+                            title={`Pilih ${order.ticket_number}`}
+                            className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-blue-600 focus:ring-blue-500 dark:focus:ring-blue-400 focus:ring-2 cursor-pointer transition-colors accent-blue-600"
+                          />
+                        </div>
+                      </td>
                       <td className="py-3.5 px-4 font-mono font-bold whitespace-nowrap">
                         <Link
                           href={`/orders/${order.id}/progress`}
@@ -787,13 +1106,27 @@ export default function QueueBoardPage() {
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                        <Link
-                          href={`/orders/${order.id}/progress`}
-                          className="inline-flex items-center text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200/80 dark:border-blue-800 px-3 py-1.5 rounded-lg transition"
-                        >
-                          Buka Desk
-                          <ExternalLink className="w-3.5 h-3.5 ml-1" />
-                        </Link>
+                        <div className="inline-flex items-center space-x-1.5 justify-end">
+                          <Link
+                            href={`/orders/${order.id}/progress`}
+                            className="inline-flex items-center text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/50 border border-blue-200/80 dark:border-blue-800 px-3 py-1.5 rounded-lg transition"
+                          >
+                            Buka Desk
+                            <ExternalLink className="w-3.5 h-3.5 ml-1" />
+                          </Link>
+
+                          {order.status !== "Cancelled" && order.status !== "Completed" && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCancelModal(order)}
+                              className="inline-flex items-center text-xs font-bold text-rose-600 dark:text-rose-400 hover:text-rose-800 dark:hover:text-rose-200 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 dark:hover:bg-rose-900/50 border border-rose-200/80 dark:border-rose-800 px-2.5 py-1.5 rounded-lg transition shadow-2xs cursor-pointer"
+                              title="Batalkan Tiket Ini"
+                            >
+                              <Ban className="w-3.5 h-3.5 mr-1" />
+                              Batal
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -811,6 +1144,235 @@ export default function QueueBoardPage() {
               pageSize={pageSize}
               onPageChange={(p) => setCurrentPage(p)}
             />
+          </div>
+        </div>
+      )}
+
+      {/* CANCEL TICKET MODAL */}
+      {cancelModalOpen && orderToCancel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-scaleUp">
+            {/* Header */}
+            <div className="px-6 py-4 bg-rose-600 text-white flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-white/20 text-white flex items-center justify-center">
+                  <Ban className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold">Batalkan Tiket Antrean</h3>
+                  <p className="text-xs text-rose-100 font-mono">
+                    {orderToCancel.ticket_number} &bull; {orderToCancel.tipe_order || "Aktivasi Baru"}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCancelModalOpen(false)}
+                className="text-rose-100 hover:text-white p-1 rounded-lg hover:bg-rose-700 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <form onSubmit={handleConfirmCancel} className="p-6 space-y-4 text-xs">
+              {cancelError && (
+                <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 flex items-start space-x-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  <span>{cancelError}</span>
+                </div>
+              )}
+
+              {cancelSuccessMessage && (
+                <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 flex items-start space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  <span>{cancelSuccessMessage}</span>
+                </div>
+              )}
+
+              <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 space-y-1">
+                <p className="font-bold flex items-center">
+                  <AlertTriangle className="w-4 h-4 mr-1 text-amber-600 dark:text-amber-400" />
+                  Perhatian: Tindakan Ini Akan Membatalkan Tiket
+                </p>
+                <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
+                  Tiket yang dibatalkan akan dihentikan dari antrean pengerjaan teknisi. Riwayat pembatalan akan dicatat ke dalam audit log sistem.
+                </p>
+              </div>
+
+              {/* Ticket Info Card */}
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-2">
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-slate-500 dark:text-slate-400">Pelanggan / PIC:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    {orderToCancel.nama_perusahaan ? `${orderToCancel.nama_perusahaan} (${orderToCancel.nama_pic})` : orderToCancel.nama_pic}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-slate-500 dark:text-slate-400">Layanan & Bandwidth:</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    {orderToCancel.layanan_dedicated || orderToCancel.kapasitas_layanan || "-"}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-slate-500 dark:text-slate-400">VLAN ID:</span>
+                  <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
+                    {orderToCancel.vlan ?? "-"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Input Alasan */}
+              <div className="space-y-1.5">
+                <label className="block text-slate-700 dark:text-slate-200 font-bold">
+                  Alasan Pembatalan Tiket <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={cancelAlasan}
+                  onChange={(e) => setCancelAlasan(e.target.value)}
+                  placeholder="Contoh: Permintaan pembatalan dari pelanggan, duplikasi nomor tiket, salah pilih paket layanan..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-rose-500 outline-none"
+                />
+                <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                  Alasan ini akan disimpan atas nama akun <strong>{currentUser?.nama || "Staff"}</strong>.
+                </p>
+              </div>
+
+              {/* Footer */}
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setCancelModalOpen(false)}
+                  className="px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-xl font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  Kembali
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isCancelling || !cancelAlasan.trim()}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                >
+                  <Ban className="w-4 h-4 mr-1.5" />
+                  {isCancelling ? "Membatalkan Tiket..." : "Konfirmasi Batalkan Tiket"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* BULK CANCEL TICKET MODAL */}
+      {bulkCancelModalOpen && cancellableSelectedOrders.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-lg w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden animate-scaleUp">
+            {/* Header */}
+            <div className="px-6 py-4 bg-rose-600 text-white flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-white/20 text-white flex items-center justify-center">
+                  <Ban className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold">Batalkan {cancellableSelectedOrders.length} Tiket Terpilih</h3>
+                  <p className="text-xs text-rose-100">
+                    Pembatalan massal tiket antrean
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setBulkCancelModalOpen(false)}
+                className="text-rose-100 hover:text-white p-1 rounded-lg hover:bg-rose-700 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <form onSubmit={handleConfirmBulkCancel} className="p-6 space-y-4 text-xs">
+              {bulkCancelError && (
+                <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 flex items-start space-x-2">
+                  <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  <span>{bulkCancelError}</span>
+                </div>
+              )}
+
+              {bulkCancelSuccessMessage && (
+                <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 flex items-start space-x-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  <span>{bulkCancelSuccessMessage}</span>
+                </div>
+              )}
+
+              <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 space-y-1">
+                <p className="font-bold flex items-center">
+                  <AlertTriangle className="w-4 h-4 mr-1 text-amber-600 dark:text-amber-400" />
+                  Perhatian: Tindakan Ini Akan Membatalkan {cancellableSelectedOrders.length} Tiket Sekaligus
+                </p>
+                <p className="text-[11px] text-amber-800 dark:text-amber-300 leading-relaxed">
+                  Semua tiket yang dipilih akan dihentikan dari antrean pengerjaan teknisi. Riwayat pembatalan akan dicatat ke dalam audit log sistem.
+                </p>
+              </div>
+
+              {/* Daftar Tiket yang Akan Dibatalkan */}
+              <div className="space-y-1.5">
+                <label className="block text-slate-700 dark:text-slate-200 font-bold">
+                  Daftar Tiket ({cancellableSelectedOrders.length}):
+                </label>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 max-h-32 overflow-y-auto flex flex-wrap gap-1.5">
+                  {cancellableSelectedOrders.map((o) => (
+                    <span
+                      key={o.id}
+                      className="px-2 py-0.5 rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono text-[11px] font-semibold text-slate-800 dark:text-slate-200"
+                    >
+                      {o.ticket_number}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Input Alasan */}
+              <div className="space-y-1.5">
+                <label className="block text-slate-700 dark:text-slate-200 font-bold">
+                  Alasan Pembatalan Bersama <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={bulkCancelAlasan}
+                  onChange={(e) => setBulkCancelAlasan(e.target.value)}
+                  placeholder="Masukkan alasan pembatalan untuk semua tiket terpilih..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-rose-500 outline-none"
+                />
+                <p className="text-[10px] text-slate-400 dark:text-slate-500">
+                  Alasan ini akan disimpan atas nama akun <strong>{currentUser?.nama || "Staff"}</strong>.
+                </p>
+              </div>
+
+              {/* Footer */}
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setBulkCancelModalOpen(false)}
+                  className="px-4 py-2 border border-slate-300 dark:border-slate-700 rounded-xl font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  Kembali
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isBulkCancelling || !bulkCancelAlasan.trim()}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                >
+                  <Ban className="w-4 h-4 mr-1.5" />
+                  {isBulkCancelling ? "Membatalkan..." : `Batalkan ${cancellableSelectedOrders.length} Tiket`}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

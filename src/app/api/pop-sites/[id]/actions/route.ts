@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateTicketNumber, parseBandwidthToMbps } from "@/lib/ticketUtils";
 import { buildPayloadForOrder, dispatchSheetsSync } from "@/lib/sheetsSync";
+import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 
 export async function POST(
   request: NextRequest,
@@ -20,7 +21,7 @@ export async function POST(
       user_id,
     } = body;
 
-    const validActions = ["Upgrade", "Downgrade", "Isolir", "Unisolir", "Terminate"];
+    const validActions = ["Upgrade", "Downgrade", "Isolir", "Unisolir", "Terminate", "Unterminate", "Unterminated"];
     if (!action_type || !validActions.includes(action_type)) {
       return NextResponse.json(
         { success: false, error: `Tipe aksi tidak valid. Pilihan: ${validActions.join(", ")}` },
@@ -129,6 +130,20 @@ export async function POST(
         catatan_progress: `Pengajuan tiket ${action_type} untuk POP Site [${site.site_id}]. Alasan: ${alasan || "-"}`,
       },
     });
+
+    // Catat ke Log Aplikasi
+    const actorUser = await prisma.user.findUnique({ where: { id: creatorId } }).catch(() => null);
+    const namaPelaku = actorUser?.nama || site.nama_pic || "NOC User";
+    const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
+    const userAgent = parseUserAgent(request.headers.get("user-agent"));
+    recordActivity({
+      nama_lengkap: namaPelaku,
+      ip_address: clientIp,
+      tipe: "CREATE_TICKET",
+      aktifitas: `Mengajukan tiket ${action_type} (${ticketNumber}) untuk layanan ${site.site_id} (${site.nama_perusahaan || site.nama_pic})`,
+      detail: fullNotes,
+      user_agent: userAgent,
+    }).catch(() => {});
 
     // Dispatch Sheets sync asynchronously
     buildPayloadForOrder(newOrder.id, "CREATE_ORDER", {

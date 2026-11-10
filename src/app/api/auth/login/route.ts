@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword, hashPassword, createSessionToken } from "@/lib/auth";
+import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+
+function getClientIp(req: NextRequest): string {
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  const realIp = req.headers.get("x-real-ip");
+  if (realIp) return realIp.trim();
+  return "103.155.196.63";
+}
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { email, password } = body;
+    const clientIp = getClientIp(request);
+    const userAgent = parseUserAgent(request.headers.get("user-agent"));
 
     if (!email || !password) {
       return NextResponse.json(
@@ -20,6 +31,15 @@ export async function POST(request: NextRequest) {
     });
 
     if (!user) {
+      recordActivity({
+        nama_lengkap: cleanEmail.split("@")[0] || cleanEmail,
+        email: cleanEmail,
+        ip_address: clientIp,
+        tipe: "LOGIN_FAILED",
+        aktifitas: `Login gagal — username ${cleanEmail.split("@")[0] || cleanEmail} — ${userAgent}`,
+        user_agent: userAgent,
+      }).catch(() => {});
+
       return NextResponse.json(
         { success: false, error: "Email atau password salah." },
         { status: 401 }
@@ -28,6 +48,15 @@ export async function POST(request: NextRequest) {
 
     const isValid = verifyPassword(password, user.password_hash, user.email);
     if (!isValid) {
+      recordActivity({
+        nama_lengkap: user.nama || cleanEmail.split("@")[0] || cleanEmail,
+        email: cleanEmail,
+        ip_address: clientIp,
+        tipe: "LOGIN_FAILED",
+        aktifitas: `Login gagal — username ${cleanEmail.split("@")[0] || cleanEmail} — ${userAgent}`,
+        user_agent: userAgent,
+      }).catch(() => {});
+
       return NextResponse.json(
         { success: false, error: "Email atau password salah." },
         { status: 401 }
@@ -54,6 +83,16 @@ export async function POST(request: NextRequest) {
     };
 
     const token = createSessionToken(sessionPayload);
+
+    // Record login success log
+    recordActivity({
+      nama_lengkap: user.nama,
+      email: user.email,
+      ip_address: clientIp,
+      tipe: "LOGIN_SUCCESS",
+      aktifitas: `Berhasil login ke aplikasi — ${userAgent}`,
+      user_agent: userAgent,
+    }).catch(() => {});
 
     const response = NextResponse.json({
       success: true,
