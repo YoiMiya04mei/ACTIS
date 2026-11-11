@@ -33,6 +33,7 @@ export function TopHeader({ onOpenMobileSidebar }: TopHeaderProps) {
     if (pathname.startsWith("/enterprise/")) return "Detail Administrasi & History Enterprise";
     if (pathname === "/orders/new") return "Pembuatan Surat / Registrasi Layanan";
     if (pathname.includes("/progress")) return "NOC Desk Workspace";
+    if (pathname.startsWith("/backups")) return "Network Config Backup & Google Drive Sync";
     if (pathname === "/admin/sync") return "Sinkronisasi Google Sheets & Admin";
     if (pathname === "/settings/users") return "Pengaturan User Akses & Keamanan Akun";
     return "ACTIS - ISP Provisioning System";

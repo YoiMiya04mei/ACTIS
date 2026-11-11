@@ -127,6 +127,7 @@ model PopSite {
   orders             PopSiteOrder[]
   data_change_logs   SiteDataChangeLog[]
   icmp_monitor       IcmpMonitor?
+  network_devices    NetworkDevice[]
 
   @@map("pop_sites")
 }
@@ -243,5 +244,71 @@ model AppActivityLog {
   @@index([nama_lengkap])
   @@index([tipe])
   @@map("app_activity_logs")
+}
+
+model NetworkDevice {
+  id                  String    @id @default(uuid())
+  name                String
+  host                String
+  port                Int       @default(22)
+  vendor              String    @default("mikrotik") // mikrotik, cisco, juniper, huawei, custom
+  platform            String?
+  protocol            String    @default("ssh") // ssh, manual
+  username            String?
+  password_enc        String?
+  enable_password_enc String?
+  ssh_private_key_enc String?   @db.Text
+  custom_command      String?
+  pre_command         String?
+  pop_site_id         String?
+  pop_site            PopSite?  @relation(fields: [pop_site_id], references: [id], onDelete: SetNull)
+  auto_backup_enabled Boolean   @default(true)
+  schedule_mode       String    @default("global") // global, 1d, 3d, 7d, 30d, custom_days
+  schedule_days       Int?
+  schedule_time       String?   // Optional HH:MM WIB
+  retention_count     Int       @default(30)
+  gdrive_sync_enabled Boolean   @default(true)
+  last_backup_at      DateTime?
+  last_auto_backup_at DateTime?
+  last_status         String    @default("IDLE") // IDLE, RUNNING, SUCCESS, FAILED
+  last_error          String?   @db.Text
+  created_by          String?
+  created_at          DateTime  @default(now())
+  updated_at          DateTime  @default(now()) @updatedAt
+
+  backups NetworkConfigBackup[]
+
+  @@index([vendor])
+  @@index([auto_backup_enabled])
+  @@map("network_devices")
+}
+
+model NetworkConfigBackup {
+  id                String        @id @default(uuid())
+  device_id         String
+  device            NetworkDevice @relation(fields: [device_id], references: [id], onDelete: Cascade)
+  backup_type       String        @default("manual") // auto, manual, upload
+  status            String        @default("SUCCESS") // SUCCESS, FAILED
+  config_content    String        @db.Text
+  config_hash       String
+  line_count        Int           @default(0)
+  size_bytes        Int           @default(0)
+  changed_from_prev Boolean       @default(true)
+  diff_added        Int           @default(0)
+  diff_removed      Int           @default(0)
+  command_used      String?
+  error_message     String?       @db.Text
+  triggered_by      String?
+  gdrive_status     String        @default("PENDING") // PENDING, SYNCED, FAILED, SKIPPED
+  gdrive_file_id    String?
+  gdrive_file_url   String?
+  gdrive_synced_at  DateTime?
+  gdrive_error      String?       @db.Text
+  created_at        DateTime      @default(now())
+
+  @@index([device_id, created_at])
+  @@index([status, created_at])
+  @@index([gdrive_status])
+  @@map("network_config_backups")
 }
 

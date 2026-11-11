@@ -3,9 +3,27 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
+  console.log('Checking ACTIS database before seeding...');
+
+  const forceSeed = process.env.FORCE_SEED === 'true';
+  if (!forceSeed) {
+    const [userCount, orderCount, siteCount] = await Promise.all([
+      prisma.user.count(),
+      prisma.popSiteOrder.count(),
+      prisma.popSite.count(),
+    ]);
+
+    if (userCount > 0 || orderCount > 0 || siteCount > 0) {
+      console.log(
+        `[ACTIS Seed] Database already contains existing data (${userCount} users, ${orderCount} orders, ${siteCount} pop_sites). Skipping seed to preserve existing records.`
+      );
+      return;
+    }
+  }
+
   console.log('Seeding ACTIS database...');
 
-  // 1. Clean existing records
+  // 1. Clean existing records (only reached on empty DB or explicit FORCE_SEED=true)
   await prisma.orderProgressLog.deleteMany();
   await prisma.testResult.deleteMany();
   await prisma.sheetsSyncLog.deleteMany();

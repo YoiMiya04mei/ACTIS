@@ -27,6 +27,7 @@ import {
   Wrench,
   Database,
   LayoutDashboard,
+  Archive,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -45,6 +46,8 @@ export function Sidebar({
   const pathname = usePathname();
   const { currentUser } = useCurrentUser();
   const isSuperAdmin = currentUser?.role === "admin";
+  const isBackupAllowed =
+    currentUser?.role === "admin" || currentUser?.role === "noc_engineer";
 
   // Collapsible Menu & Submenu states for:
   // 1. Layanan & Inventaris
@@ -68,7 +71,8 @@ export function Sidebar({
     pathname.startsWith("/pop-sites") ||
     pathname.startsWith("/enterprise") ||
     pathname.startsWith("/ipam") ||
-    pathname.startsWith("/monitoring");
+    pathname.startsWith("/monitoring") ||
+    pathname.startsWith("/backups");
 
   const isToolsActive = pathname.startsWith("/tools");
 
@@ -211,7 +215,7 @@ export function Sidebar({
                 {!isCollapsed && (
                   <div className="flex items-center space-x-1.5">
                     <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60">
-                      5
+                      {isBackupAllowed ? "6" : "5"}
                     </span>
                     <ChevronDown
                       className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
@@ -359,6 +363,35 @@ export function Sidebar({
                       </span>
                     )}
                   </Link>
+
+                  {isBackupAllowed && (
+                    <Link
+                      href="/backups"
+                      onClick={onCloseMobile}
+                      className={`group flex items-center px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                        pathname.startsWith("/backups")
+                          ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 font-bold shadow-xs"
+                          : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                      } ${isCollapsed ? "justify-center px-2" : "justify-between"}`}
+                      title="Backup Config Network & Google Drive Sync"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <Archive
+                          className={`w-5 h-5 shrink-0 ${
+                            pathname.startsWith("/backups")
+                              ? "text-indigo-600 dark:text-indigo-400"
+                              : "text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
+                          }`}
+                        />
+                        {!isCollapsed && <span>Backup Config</span>}
+                      </div>
+                      {!isCollapsed && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                          GDrive
+                        </span>
+                      )}
+                    </Link>
+                  )}
                 </div>
               )}
             </div>

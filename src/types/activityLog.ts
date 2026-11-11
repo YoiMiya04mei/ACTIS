@@ -18,6 +18,12 @@ export type ActivityType =
   | "DOCUMENT"
   | "DOCUMENT_GENERATE"
   | "SETTINGS"
+  | "BACKUP_AUTO"
+  | "BACKUP_MANUAL"
+  | "BACKUP_FAILED"
+  | "CREATE_DEVICE"
+  | "UPDATE_DATA"
+  | "DELETE_DATA"
   | "SYSTEM";
 
 export interface AppActivityLogItem {

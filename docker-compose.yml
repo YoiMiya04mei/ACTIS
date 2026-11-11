@@ -51,9 +51,12 @@ services:
       - GOOGLE_SERVICE_ACCOUNT_EMAIL=${GOOGLE_SERVICE_ACCOUNT_EMAIL}
       - GOOGLE_PRIVATE_KEY=${GOOGLE_PRIVATE_KEY}
       - INITIAL_SEED=${INITIAL_SEED:-false}
+      - SKIP_DB_SYNC=${SKIP_DB_SYNC:-false}
     volumes:
       # Persistent Volume untuk File Hasil Upload (Evidence Uji Jaringan, Speedtest, PDF)
       - ./uploads:/app/public/uploads
+      # Persistent Volume untuk data aplikasi lokal (activity_logs.json) agar aman saat rebuild
+      - app_data:/app/data
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/ || exit 1"]
       interval: 30s
@@ -70,3 +73,6 @@ volumes:
   # Persistent volume PostgreSQL agar data transaksi NOC & inventaris aman
   postgres_data:
     name: actis_postgres_data
+  # Persistent volume data lokal aplikasi (activity_logs.json)
+  app_data:
+    name: actis_app_data
