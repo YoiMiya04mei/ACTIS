@@ -3,7 +3,7 @@
 # ==============================================================================
 # STAGE 1: Base Alpine Image with Required System Libraries
 # ==============================================================================
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 RUN apk add --no-cache libc6-compat openssl
 
 # ==============================================================================
@@ -73,8 +73,8 @@ COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
 # Pastikan folder penyimpanan data dan upload memiliki hak akses yang benar
-RUN mkdir -p /app/prisma /app/public/uploads && \
-    chown -R nextjs:nodejs /app/prisma /app/public/uploads
+RUN mkdir -p /app/prisma /app/public/uploads /app/data && \
+    chown -R nextjs:nodejs /app/prisma /app/public/uploads /app/data
 
 USER nextjs
 

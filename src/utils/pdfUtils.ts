@@ -1,14 +1,3 @@
-import * as pdfjsLib from 'pdfjs-dist';
-
-// Configure worker URL for browser environment
-if (typeof window !== 'undefined') {
-  try {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-  } catch {
-    // fallback
-  }
-}
-
 export interface PdfExtractionResult {
   backgroundUrl: string; // Full A4 page rendered as PNG Data URL
   headerImageUrl?: string; // Top header portion (top ~18%)
@@ -28,6 +17,18 @@ export interface PdfExtractionResult {
  * for the document background, top header, and bottom footer.
  */
 export async function extractFromPdf(file: File): Promise<PdfExtractionResult> {
+  if (typeof window === 'undefined') {
+    throw new Error('Ekstraksi PDF hanya dapat dijalankan di browser.');
+  }
+
+  // Dynamic import ensures pdfjs-dist is only loaded in the browser (prevents SSR/prerender crashes)
+  const pdfjsLib = await import('pdfjs-dist');
+  try {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+  } catch {
+    // fallback
+  }
+
   const arrayBuffer = await file.arrayBuffer();
   const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
   const pdfDoc = await loadingTask.promise;
