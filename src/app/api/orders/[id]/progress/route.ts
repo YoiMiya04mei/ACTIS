@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { buildPayloadForOrder, dispatchSheetsSync } from "@/lib/sheetsSync";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { notifyOrderCompleted } from "@/lib/telegramService";
+import { syncDcimOnOrderCompletion } from "@/lib/dcimService";
 
 export async function POST(
   request: NextRequest,
@@ -121,6 +123,28 @@ export async function POST(
     }).then((payload) => {
       if (payload) dispatchSheetsSync(payload, orderId);
     });
+
+    // Trigger non-blocking Ticket Completed Telegram notification (separate bot from ICMP Ping)
+    if (statusSesudah === "Completed" && statusSebelum !== "Completed") {
+      syncDcimOnOrderCompletion({
+        orderId,
+        tipeOrder: order.tipe_order,
+        popSiteId: order.pop_site_id,
+      }).catch((err) => {
+        console.error("DCIM sync error upon progress completion:", err);
+      });
+
+      notifyOrderCompleted({
+        order,
+        popSiteId: order.pop_site_id,
+        completedBy: newLog.user?.nama || "NOC Engineer",
+        completionNote: newLog.catatan_progress,
+        testCount: order.test_results.length,
+        completedAt,
+      }).catch((err) => {
+        console.error("Ticket completed Telegram notification error:", err);
+      });
+    }
 
     return NextResponse.json({
       success: true,

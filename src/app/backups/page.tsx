@@ -25,12 +25,14 @@ import {
   HardDrive,
   FileArchive,
   Play,
+  ArrowRightLeft,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
 import { DeviceFormModal } from "@/components/backups/DeviceFormModal";
 import { GDriveSettingsModal } from "@/components/backups/GDriveSettingsModal";
 import { ConfigViewerDiffModal } from "@/components/backups/ConfigViewerDiffModal";
 import { ManualUploadModal } from "@/components/backups/ManualUploadModal";
+import { ConfigTranslatorModal } from "@/components/backups/ConfigTranslatorModal";
 import {
   formatBackupSize,
   formatJakartaDateTime,
@@ -120,6 +122,10 @@ export default function NetworkBackupsPage() {
   const [showManualModal, setShowManualModal] = useState(false);
   const [viewerBackupId, setViewerBackupId] = useState<string | null>(null);
   const [viewerTab, setViewerTab] = useState<"view" | "diff">("view");
+  const [showTranslatorModal, setShowTranslatorModal] = useState(false);
+  const [translatorBackupId, setTranslatorBackupId] = useState<string | null>(null);
+  const [translatorRawConfig, setTranslatorRawConfig] = useState<string | null>(null);
+  const [translatorDeviceName, setTranslatorDeviceName] = useState<string | null>(null);
 
   // Toast Banner
   const [banner, setBanner] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -441,6 +447,20 @@ export default function NetworkBackupsPage() {
           >
             <UploadCloud className="w-4 h-4 text-amber-500" />
             <span>Upload Manual</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setTranslatorBackupId(null);
+              setTranslatorRawConfig(null);
+              setTranslatorDeviceName(null);
+              setShowTranslatorModal(true);
+            }}
+            className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl border border-indigo-200 dark:border-indigo-800/80 bg-indigo-50/70 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-200 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-xs font-bold"
+          >
+            <ArrowRightLeft className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+            <span>Generate Vendor</span>
           </button>
 
           <a
@@ -1175,6 +1195,20 @@ export default function NetworkBackupsPage() {
                                 <GitCompare className="w-3.5 h-3.5" />
                               </button>
 
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setTranslatorBackupId(rec.id);
+                                  setTranslatorRawConfig(null);
+                                  setTranslatorDeviceName(rec.device?.name || null);
+                                  setShowTranslatorModal(true);
+                                }}
+                                title="Generate ke Vendor Lain (MikroTik / Cisco / Huawei / dll)"
+                                className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100"
+                              >
+                                <ArrowRightLeft className="w-3.5 h-3.5" />
+                              </button>
+
                               <a
                                 href={`/api/backups/records/${rec.id}/download`}
                                 title="Download File Config"
@@ -1249,6 +1283,22 @@ export default function NetworkBackupsPage() {
         backupId={viewerBackupId}
         initialTab={viewerTab}
         onClose={() => setViewerBackupId(null)}
+        onConvertVendor={({ backupId, rawConfig, deviceName }) => {
+          setTranslatorBackupId(backupId);
+          setTranslatorRawConfig(rawConfig);
+          setTranslatorDeviceName(deviceName);
+          setShowTranslatorModal(true);
+        }}
+      />
+
+      <ConfigTranslatorModal
+        isOpen={showTranslatorModal}
+        onClose={() => setShowTranslatorModal(false)}
+        devices={devices}
+        initialBackupId={translatorBackupId}
+        initialSourceConfig={translatorRawConfig}
+        initialSourceDeviceName={translatorDeviceName}
+        onSavedSnapshot={() => fetchBackupsData(true)}
       />
     </div>
   );

@@ -298,4 +298,15 @@ html.dark .hover\:bg-slate-100:hover:not([class*="dark:hover:bg-"]) {
   background-color: rgba(51, 65, 85, 0.4);
 }
 
+/* Native Modal Dialog: prevent page scroll behind modal & style top-layer backdrop */
+dialog:modal {
+  overscroll-behavior: contain;
+}
+dialog::backdrop {
+  background-color: rgba(2, 6, 23, 0.68);
+  backdrop-filter: blur(4px);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
 

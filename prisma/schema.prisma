@@ -63,6 +63,17 @@ model PopSiteOrder {
   ao                 String?
   nomor_order        String?
 
+  // Physical DCIM placement (3D Rack & 3D OTB)
+  rack_id            String?
+  rack               DataCenterRack? @relation(fields: [rack_id], references: [id], onDelete: SetNull)
+  rack_code          String?
+  rack_unit_start    Int?
+  rack_unit_end      Int?
+  otb_id             String?
+  otb                OpticalOtb?     @relation(fields: [otb_id], references: [id], onDelete: SetNull)
+  otb_code           String?
+  otb_core_numbers   String?         // JSON array of allocated core numbers, e.g. "[1,2]"
+
   waktu_aktivasi     DateTime?
   catatan_tambahan   String?
   status             String    @default("Antrian Aktivasi") // Antrian Aktivasi, In Progress, Pending Issue, Completed, Terminated
@@ -119,6 +130,18 @@ model PopSite {
   sid                String?
   ao                 String?
   nomor_order        String?
+
+  // Physical DCIM placement (3D Rack & 3D OTB)
+  rack_id            String?
+  rack               DataCenterRack? @relation(fields: [rack_id], references: [id], onDelete: SetNull)
+  rack_code          String?
+  rack_unit_start    Int?
+  rack_unit_end      Int?
+  otb_id             String?
+  otb                OpticalOtb?     @relation(fields: [otb_id], references: [id], onDelete: SetNull)
+  otb_code           String?
+  otb_core_numbers   String?
+
   status_layanan     String         @default("Active") // Active, Isolir, Terminated, Maintenance
   waktu_go_live      DateTime       @default(now())
   created_at         DateTime       @default(now())
@@ -310,5 +333,104 @@ model NetworkConfigBackup {
   @@index([status, created_at])
   @@index([gdrive_status])
   @@map("network_config_backups")
+}
+
+model DataCenterRack {
+  id                String               @id @default(uuid())
+  code              String               @unique // e.g. DC-CYBER1-R01
+  name              String
+  location          String
+  room_zone         String?
+  total_u           Int                  @default(42)
+  power_capacity_va Int?                 @default(5000)
+  status            String               @default("Active") // Active, Maintenance, Full, Decommissioned
+  notes             String?              @db.Text
+  created_at        DateTime             @default(now())
+  updated_at        DateTime             @default(now()) @updatedAt
+
+  slots     RackUnitAllocation[]
+  orders    PopSiteOrder[]
+  pop_sites PopSite[]
+
+  @@map("data_center_racks")
+}
+
+model RackUnitAllocation {
+  id              String         @id @default(uuid())
+  rack_id         String
+  rack            DataCenterRack @relation(fields: [rack_id], references: [id], onDelete: Cascade)
+  start_u         Int
+  unit_size       Int            @default(1)
+  end_u           Int
+  device_name     String
+  serial_number   String?
+  customer_name   String?
+  pic_name        String?
+  device_type     String         @default("Server") // Server, Switch, Router, Firewall, Storage, Patch Panel, PDU, Collocation Block, Other
+  power_draw_watt Int?           @default(450)
+  color_tag       String         @default("#3b82f6")
+  status          String         @default("Occupied") // Occupied, Reserved, Maintenance
+  order_id        String?
+  pop_site_id     String?
+  ticket_number   String?
+  site_code       String?
+  notes           String?        @db.Text
+  created_at      DateTime       @default(now())
+  updated_at      DateTime       @default(now()) @updatedAt
+
+  @@index([rack_id, start_u, end_u])
+  @@index([order_id])
+  @@index([pop_site_id])
+  @@map("rack_unit_allocations")
+}
+
+model OpticalOtb {
+  id             String         @id @default(uuid())
+  code           String         @unique // e.g. OTB-CYBER2-01
+  name           String
+  location       String
+  pop_node       String?
+  total_cores    Int            @default(48)
+  cores_per_tray Int            @default(12)
+  connector_type String         @default("SC/UPC") // SC/UPC, SC/APC, LC/UPC, LC/APC, FC/UPC
+  fiber_mode     String         @default("Single-Mode G.652D")
+  status         String         @default("Active") // Active, Maintenance, Full
+  notes          String?        @db.Text
+  created_at     DateTime       @default(now())
+  updated_at     DateTime       @default(now()) @updatedAt
+
+  ports     OtbCorePort[]
+  orders    PopSiteOrder[]
+  pop_sites PopSite[]
+
+  @@map("optical_otbs")
+}
+
+model OtbCorePort {
+  id              String     @id @default(uuid())
+  otb_id          String
+  otb             OpticalOtb @relation(fields: [otb_id], references: [id], onDelete: Cascade)
+  core_number     Int
+  tray_number     Int        @default(1)
+  tube_color      String
+  core_color      String
+  status          String     @default("Available") // Available, Reserved, Used, Damaged, Maintenance
+  route_pair      String?
+  destination_otb String?
+  customer_name   String?
+  attenuation_db  Float?
+  distance_km     Float?
+  order_id        String?
+  pop_site_id     String?
+  ticket_number   String?
+  site_code       String?
+  notes           String?
+  updated_at      DateTime   @default(now()) @updatedAt
+
+  @@unique([otb_id, core_number])
+  @@index([otb_id, tray_number])
+  @@index([order_id])
+  @@index([pop_site_id])
+  @@map("otb_core_ports")
 }
 

@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { formatRackPositionLabel, formatOtbCoreLabel } from "./dcimUtils";
 
 /**
  * Standard Dedicated Service Bandwidth Options:
@@ -174,6 +175,11 @@ export function generateNocCoordinationText(order: {
   sid?: string | null;
   ao?: string | null;
   nomor_order?: string | null;
+  rack_code?: string | null;
+  rack_unit_start?: number | null;
+  rack_unit_end?: number | null;
+  otb_code?: string | null;
+  otb_core_numbers?: string | null;
   waktu_aktivasi?: Date | string | null;
   catatan_tambahan?: string | null;
   status: string;
@@ -228,18 +234,20 @@ export function generateNocCoordinationText(order: {
 • Media Koneksi     : ${order.media_koneksi || "-"}
 • SN ONT            : ${order.sn_ont || "-"}`;
     } else if (order.sub_layanan === "Collocation Rack") {
+      const rackPos = formatRackPositionLabel(order.rack_code, order.rack_unit_start, order.rack_unit_end);
       text += `
 
 ⚡ *PARAMETER COLLOCATION RACK*
 • Tipe Layanan   : ${order.tipe_layanan_collo || "-"}
 • Nama Perangkat : ${order.nama_perangkat || "-"}
-• Serial Number  : ${order.sn_perangkat || "-"}`;
+• Serial Number  : ${order.sn_perangkat || "-"}${rackPos !== "-" ? `\n• Posisi Rack 3D : ${rackPos}` : ""}`;
     } else if (order.sub_layanan === "Dark Fiber") {
+      const otbPos = formatOtbCoreLabel(order.otb_code, order.otb_core_numbers);
       text += `
 
 ⚡ *PARAMETER DARK FIBER*
 • Layanan Core   : ${order.layanan_dedicated || "-"}
-• Server / Hub   : ${order.server || "-"}`;
+• Server / Hub   : ${order.server || "-"}${otbPos !== "-" ? `\n• Port OTB 3D    : ${otbPos}` : ""}`;
     } else if (order.sub_layanan === "Content") {
       let prefixStr = order.prefix_advertise || "-";
       try {

@@ -35,8 +35,10 @@ import {
   CheckSquare,
   Square,
   Copy,
+  Send,
 } from "lucide-react";
 import { DEFAULT_SERVER_OPTIONS } from "@/lib/ticketUtils";
+import TicketTelegramConfigModal from "@/components/TicketTelegramConfigModal";
 
 interface OrderItem {
   id: string;
@@ -112,6 +114,9 @@ export default function QueueBoardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedMedia, setSelectedMedia] = useState("Semua");
   const [selectedStatus, setSelectedStatus] = useState("Semua");
+
+  // Ticket Completion Telegram Bot Modal State
+  const [isTicketTelegramModalOpen, setIsTicketTelegramModalOpen] = useState(false);
 
   // Cancel Ticket Modal State
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
@@ -382,6 +387,16 @@ export default function QueueBoardPage() {
         </div>
 
         <div className="flex items-center space-x-2.5">
+          <button
+            type="button"
+            onClick={() => setIsTicketTelegramModalOpen(true)}
+            className="inline-flex items-center px-3.5 py-2.5 rounded-xl border border-sky-200 dark:border-sky-800/70 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/50 text-xs font-bold shadow-sm transition"
+            title="Konfigurasi Bot Telegram Notifikasi Tiket Selesai (Terpisah dari Bot ICMP)"
+          >
+            <Send className="w-3.5 h-3.5 mr-1.5" />
+            Bot Telegram Tiket
+          </button>
+
           <button
             onClick={() => fetchOrders(true)}
             disabled={refreshing}
@@ -1376,6 +1391,11 @@ export default function QueueBoardPage() {
           </div>
         </div>
       )}
+
+      <TicketTelegramConfigModal
+        isOpen={isTicketTelegramModalOpen}
+        onClose={() => setIsTicketTelegramModalOpen(false)}
+      />
     </div>
   );
 }

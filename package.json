@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.4.1",
+    "@types/three": "^0.187.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "diff": "^9.0.0",
@@ -29,7 +30,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "ssh2": "^1.17.0",
-    "tailwind-merge": "^3.0.2"
+    "tailwind-merge": "^3.0.2",
+    "three": "^0.187.0"
   },
   "devDependencies": {
     "@types/diff": "^7.0.2",

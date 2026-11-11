@@ -12,7 +12,6 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const [isOpenMobile, setIsOpenMobile] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
 
   // If on login page, render bare without navigation chrome
   if (pathname === "/login") {
@@ -25,16 +24,10 @@ export function AppShell({ children }: AppShellProps) {
       <Sidebar
         isOpenMobile={isOpenMobile}
         onCloseMobile={() => setIsOpenMobile(false)}
-        isCollapsed={isCollapsed}
-        onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
       />
 
       {/* Main Content Area */}
-      <div
-        className={`flex-1 flex flex-col min-w-0 w-full transition-all duration-300 ease-in-out ${
-          isCollapsed ? "md:ml-20" : "md:ml-64 lg:ml-72"
-        }`}
-      >
+      <div className="flex-1 flex flex-col min-w-0 w-full transition-all duration-300 ease-in-out md:ml-64 lg:ml-72">
         {/* Top Header */}
         <TopHeader onOpenMobileSidebar={() => setIsOpenMobile(true)} />
 

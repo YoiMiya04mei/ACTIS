@@ -1,5 +1,29 @@
 "use client";
 
+import {
+  Rack3DPickerModal,
+  type RackSelectionResult,
+} from "@/components/dcim/Rack3DPickerModal";
+import {
+  Otb3DPickerModal,
+  type OtbSelectionResult,
+} from "@/components/dcim/Otb3DPickerModal";
+import {
+  DataCenterRackItem,
+  OpticalOtbItem,
+  parseColloUnitsNeeded,
+  parseDarkFiberCoresNeeded,
+  formatRackPositionLabel,
+  getTiaColorForCore,
+} from "@/lib/dcimUtils";
+import {
+  Server as DcimRackIcon,
+  Cable as DcimOtbIcon,
+  Maximize2 as DcimMaximizeIcon,
+  CheckCircle2 as DcimCheckIcon,
+  X as DcimClearIcon,
+} from "lucide-react";
+
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -327,6 +351,16 @@ export default function NewOrderPage() {
   const [layananDarkFiber, setLayananDarkFiber] = useState("2 Core (1 Pair) Single-Mode G.652D");
   const [serverDarkFiber, setServerDarkFiber] = useState("POP Menara Cyber 2 -> POP Gedung Tifa");
 
+  // DCIM 3D Placement State (Collocation Rack & Dark Fiber OTB)
+  const [selectedRack, setSelectedRack] = useState<DataCenterRackItem | null>(null);
+  const [selectedRackStartU, setSelectedRackStartU] = useState<number | null>(null);
+  const [selectedRackEndU, setSelectedRackEndU] = useState<number | null>(null);
+  const [isRackModalOpen, setIsRackModalOpen] = useState(false);
+
+  const [selectedOtb, setSelectedOtb] = useState<OpticalOtbItem | null>(null);
+  const [selectedOtbCores, setSelectedOtbCores] = useState<number[]>([]);
+  const [isOtbModalOpen, setIsOtbModalOpen] = useState(false);
+
   // 5. Enterprise - Content Specific State
   const [alamatContent, setAlamatContent] = useState("IDC Duren Tiga, Lt. 2 Ruang Peering OpenIXP");
   const [vlanContent, setVlanContent] = useState("2100");
@@ -556,6 +590,9 @@ export default function NewOrderPage() {
           tipe_layanan_collo: tipeLayananCollo.trim(),
           nama_perangkat: namaPerangkat.trim(),
           sn_perangkat: snPerangkat.trim(),
+          rack_id: selectedRack?.id || null,
+          rack_unit_start: selectedRackStartU || null,
+          rack_unit_end: selectedRackEndU || null,
         };
       } else if (subLayanan === "Dark Fiber") {
         if (!layananDarkFiber.trim() || !serverDarkFiber.trim()) {
@@ -567,6 +604,8 @@ export default function NewOrderPage() {
           ...payload,
           layanan_dedicated: layananDarkFiber.trim(),
           server: serverDarkFiber.trim(),
+          otb_id: selectedOtb?.id || null,
+          otb_core_numbers: selectedOtbCores,
         };
       } else if (subLayanan === "Content") {
         const validPrefix = prefixList.map((p) => p.trim()).filter((p) => p.length > 0);
@@ -1888,6 +1927,75 @@ export default function NewOrderPage() {
                   />
                 </div>
               </div>
+
+              {/* DCIM Rack 3D Selector */}
+              <div className="mt-4 p-4 rounded-2xl border border-blue-200 bg-linear-to-br from-blue-50/90 to-indigo-50/70 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                      <DcimRackIcon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-extrabold text-slate-900 flex items-center gap-2">
+                        Alokasi Posisi Rack 3D (DCIM)
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">
+                          Kebutuhan: {parseColloUnitsNeeded(tipeLayananCollo)}U
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600">
+                        Pilih cabinet & slot Unit (U) kosong secara visual via model Rack 3D interaktif.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {selectedRack && selectedRackStartU && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedRack(null);
+                          setSelectedRackStartU(null);
+                          setSelectedRackEndU(null);
+                        }}
+                        className="px-2.5 py-2 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-600 hover:bg-slate-100 flex items-center gap-1"
+                      >
+                        <DcimClearIcon className="w-3.5 h-3.5" /> Reset
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsRackModalOpen(true)}
+                      className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 transition"
+                    >
+                      <DcimMaximizeIcon className="w-3.5 h-3.5" />
+                      {selectedRack ? "Ganti Posisi Rack 3D" : "Pilih Posisi di Rack 3D"}
+                    </button>
+                  </div>
+                </div>
+
+                {selectedRack && selectedRackStartU && (
+                  <div className="p-3 rounded-xl bg-white border border-emerald-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <DcimCheckIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div>
+                        <span className="font-mono font-extrabold text-blue-700">
+                          {formatRackPositionLabel(
+                            selectedRack.code,
+                            selectedRackStartU,
+                            selectedRackEndU
+                          )}
+                        </span>
+                        <span className="text-slate-600 ml-2 font-semibold">
+                          — {selectedRack.name} ({selectedRack.location})
+                        </span>
+                      </div>
+                    </div>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                      Auto-Reserved saat Submit
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -2032,6 +2140,89 @@ export default function NewOrderPage() {
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-purple-500 outline-none font-medium"
                   />
                 </div>
+              </div>
+
+              {/* DCIM OTB 3D Selector */}
+              <div className="mt-4 p-4 rounded-2xl border border-purple-200 bg-linear-to-br from-purple-50/90 to-fuchsia-50/70 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                      <DcimOtbIcon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-extrabold text-slate-900 flex items-center gap-2">
+                        Alokasi Core OTB 3D (TIA-598 Fiber)
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200">
+                          Kebutuhan: {parseDarkFiberCoresNeeded(layananDarkFiber)} Core
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600">
+                        Pilih panel OTB & nomor core fiber kosong secara interaktif di kaset OTB 3D.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {selectedOtb && selectedOtbCores.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedOtb(null);
+                          setSelectedOtbCores([]);
+                        }}
+                        className="px-2.5 py-2 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-600 hover:bg-slate-100 flex items-center gap-1"
+                      >
+                        <DcimClearIcon className="w-3.5 h-3.5" /> Reset
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsOtbModalOpen(true)}
+                      className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 transition"
+                    >
+                      <DcimMaximizeIcon className="w-3.5 h-3.5" />
+                      {selectedOtb && selectedOtbCores.length > 0
+                        ? "Ganti Core OTB 3D"
+                        : "Pilih Core di OTB 3D"}
+                    </button>
+                  </div>
+                </div>
+
+                {selectedOtb && selectedOtbCores.length > 0 && (
+                  <div className="p-3 rounded-xl bg-white border border-emerald-200 space-y-2 text-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <DcimCheckIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span className="font-mono font-extrabold text-purple-700">
+                          {selectedOtb.code} ({selectedOtb.connector_type})
+                        </span>
+                        <span className="text-slate-600 font-semibold">
+                          — {selectedOtb.name}
+                        </span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                        Auto-Reserved saat Submit
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedOtbCores.map((cNum) => {
+                        const tia = getTiaColorForCore(cNum, selectedOtb.cores_per_tray);
+                        return (
+                          <span
+                            key={cNum}
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold bg-slate-50 border border-slate-200 text-slate-800"
+                          >
+                            <span
+                              className="w-2.5 h-2.5 rounded-full border border-slate-400/50"
+                              style={{ backgroundColor: tia.hex }}
+                            />
+                            Core #{cNum} ({tia.labelId})
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -2811,6 +3002,55 @@ export default function NewOrderPage() {
           </button>
         </div>
       </form>
+
+      {/* Modal Seleksi Rack 3D & OTB 3D */}
+      <Rack3DPickerModal
+        isOpen={isRackModalOpen}
+        onClose={() => setIsRackModalOpen(false)}
+        mode="select"
+        requiredUnits={parseColloUnitsNeeded(tipeLayananCollo)}
+        initialRackId={selectedRack?.id || null}
+        initialStartU={selectedRackStartU}
+        initialEndU={selectedRackEndU}
+        onConfirmSelection={(result: RackSelectionResult) => {
+          setSelectedRack(result.rack);
+          setSelectedRackStartU(result.startU);
+          setSelectedRackEndU(result.endU);
+          if (
+            !alamatCollo.trim() ||
+            alamatCollo.trim() === "Gedung Cyber 1 Lt. 3, Jl. Kuningan Barat No. 8, Jakarta Selatan"
+          ) {
+            setAlamatCollo(
+              `${result.rack.location}${
+                result.rack.room_zone ? ` (${result.rack.room_zone})` : ""
+              } — ${result.rack.code} [U${result.startU}–U${result.endU}]`
+            );
+          }
+        }}
+      />
+
+      <Otb3DPickerModal
+        isOpen={isOtbModalOpen}
+        onClose={() => setIsOtbModalOpen(false)}
+        mode="select"
+        requiredCores={parseDarkFiberCoresNeeded(layananDarkFiber)}
+        initialOtbId={selectedOtb?.id || null}
+        initialSelectedCores={selectedOtbCores}
+        onConfirmSelection={(result: OtbSelectionResult) => {
+          setSelectedOtb(result.otb);
+          setSelectedOtbCores(result.coreNumbers);
+          if (
+            !serverDarkFiber.trim() ||
+            serverDarkFiber.trim() === "POP Menara Cyber 2 -> POP Gedung Tifa"
+          ) {
+            setServerDarkFiber(
+              `${result.otb.pop_node || result.otb.code} (${result.otb.code} Core ${result.coreNumbers
+                .map((c) => `#${c}`)
+                .join(",")})`
+            );
+          }
+        }}
+      />
     </div>
   );
 }

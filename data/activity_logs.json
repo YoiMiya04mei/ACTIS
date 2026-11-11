@@ -1,5 +1,27 @@
 [
   {
+    "id": "log-1794396534135-q5vnu",
+    "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
+    "email": null,
+    "ip_address": "::1",
+    "tipe": "CREATE_DEVICE",
+    "aktifitas": "Menambahkan OTB 3D baru OOOO (144 Core SC/UPC)",
+    "detail": "POP Menara Cyber 2 Lt. 12, Jakarta Selatan",
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-11T11:28:54.135Z"
+  },
+  {
+    "id": "log-1794396459669-n34t3",
+    "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
+    "email": null,
+    "ip_address": "::1",
+    "tipe": "UPDATE_DATA",
+    "aktifitas": "Memperbarui data Rack DC-BDG-POP-R04",
+    "detail": "48U · POP Bandung (BBU), Jl. Asia Afrika No. 45, Bandung",
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-11T11:27:39.669Z"
+  },
+  {
     "id": "log-1794322435207-0pmwv",
     "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
     "email": "admin.noc@isp-enterprise.net",

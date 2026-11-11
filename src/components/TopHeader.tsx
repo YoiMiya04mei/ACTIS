@@ -1,22 +1,41 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCurrentUser } from "@/context/UserContext";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { NotificationBell } from "@/components/NotificationBell";
 import {
   Menu,
   PlusCircle,
   ShieldCheck,
   LogOut,
   ChevronDown,
-  KeyRound,
-  User,
+  Clock,
+  CircleUser,
 } from "lucide-react";
 
 interface TopHeaderProps {
   onOpenMobileSidebar: () => void;
+}
+
+function formatWibDateTime(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Jakarta",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "00";
+
+  return `${get("day")}/${get("month")}/${get("year")} ${get("hour")}:${get("minute")}:${get("second")} WIB`;
 }
 
 export function TopHeader({ onOpenMobileSidebar }: TopHeaderProps) {
@@ -24,20 +43,15 @@ export function TopHeader({ onOpenMobileSidebar }: TopHeaderProps) {
   const router = useRouter();
   const { currentUser, logout } = useCurrentUser();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [now, setNow] = useState<Date | null>(null);
 
-  const getPageTitle = () => {
-    if (pathname === "/queue" || pathname === "/") return "Board Antrean Layanan ISP";
-    if (pathname === "/pop-sites") return "Inventaris & Riwayat Master POP Site";
-    if (pathname.startsWith("/pop-sites/")) return "Detail Administrasi & History POP Site";
-    if (pathname === "/enterprise") return "Inventaris & Riwayat Master Enterprise";
-    if (pathname.startsWith("/enterprise/")) return "Detail Administrasi & History Enterprise";
-    if (pathname === "/orders/new") return "Pembuatan Surat / Registrasi Layanan";
-    if (pathname.includes("/progress")) return "NOC Desk Workspace";
-    if (pathname.startsWith("/backups")) return "Network Config Backup & Google Drive Sync";
-    if (pathname === "/admin/sync") return "Sinkronisasi Google Sheets & Admin";
-    if (pathname === "/settings/users") return "Pengaturan User Akses & Keamanan Akun";
-    return "ACTIS - ISP Provisioning System";
-  };
+  useEffect(() => {
+    setNow(new Date());
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleLogout = async () => {
     setIsUserMenuOpen(false);
@@ -46,23 +60,30 @@ export function TopHeader({ onOpenMobileSidebar }: TopHeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/90 dark:border-slate-800 h-16 px-4 sm:px-6 lg:px-8 2xl:px-10 flex items-center justify-between shadow-xs w-full transition-colors duration-150">
-      {/* Left: Mobile Toggle & Page Context */}
-      <div className="flex items-center space-x-3">
+    <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/90 dark:border-slate-800 h-16 px-4 sm:px-6 lg:px-8 2xl:px-10 flex items-center justify-between gap-3 shadow-xs w-full transition-colors duration-150">
+      {/* Left: Mobile Toggle & Live WIB Date/Time + Logged-in User */}
+      <div className="flex items-center space-x-3 min-w-0">
         <button
           type="button"
           onClick={onOpenMobileSidebar}
-          className="md:hidden p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition focus:outline-none"
+          className="md:hidden shrink-0 p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition focus:outline-none"
           title="Buka Menu"
         >
           <Menu className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center space-x-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <h1 className="text-sm sm:text-base font-black text-slate-900 dark:text-slate-100 tracking-tight">
-            {getPageTitle()}
-          </h1>
+        <div className="flex flex-wrap items-center gap-x-3.5 gap-y-0.5 min-w-0 text-xs sm:text-sm text-slate-700 dark:text-slate-200">
+          <div className="flex items-center space-x-1.5 font-mono font-medium whitespace-nowrap tabular-nums">
+            <Clock className="w-4 h-4 shrink-0 text-slate-600 dark:text-slate-300" />
+            <span>{now ? formatWibDateTime(now) : "--/--/---- --:--:-- WIB"}</span>
+          </div>
+
+          <div className="flex items-center space-x-1.5 font-medium min-w-0">
+            <CircleUser className="w-4 h-4 shrink-0 text-slate-700 dark:text-slate-200" />
+            <span className="truncate max-w-[140px] sm:max-w-[260px]">
+              {currentUser?.nama || "-"}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -83,6 +104,9 @@ export function TopHeader({ onOpenMobileSidebar }: TopHeaderProps) {
           <span className="hidden xs:inline">+ Registrasi POP Site</span>
           <span className="xs:hidden">+ Baru</span>
         </Link>
+
+        {/* Notification Center Bell */}
+        <NotificationBell />
 
         {/* Current User Dropdown Menu */}
         <div className="relative">

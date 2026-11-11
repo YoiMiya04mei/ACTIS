@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   Cloud,
   ExternalLink,
+  ArrowRightLeft,
 } from "lucide-react";
 import { formatBackupSize, formatJakartaDateTime } from "@/lib/backupVendorProfiles";
 
@@ -20,12 +21,19 @@ interface ConfigViewerDiffModalProps {
   backupId: string | null;
   initialTab?: "view" | "diff";
   onClose: () => void;
+  onConvertVendor?: (payload: {
+    backupId: string;
+    rawConfig: string;
+    vendor: string;
+    deviceName: string;
+  }) => void;
 }
 
 export function ConfigViewerDiffModal({
   backupId,
   initialTab = "view",
   onClose,
+  onConvertVendor,
 }: ConfigViewerDiffModalProps) {
   const [tab, setTab] = useState<"view" | "diff">(initialTab);
   const [loading, setLoading] = useState(true);
@@ -136,6 +144,25 @@ export function ConfigViewerDiffModal({
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copied ? "Tersalin" : "Salin"}</span>
             </button>
+
+            {backup?.status === "SUCCESS" && backup?.config_content && onConvertVendor && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onConvertVendor({
+                    backupId: backup.id,
+                    rawConfig: backup.config_content,
+                    vendor: backup.device.vendor,
+                    deviceName: backup.device.name,
+                  });
+                }}
+                className="inline-flex items-center space-x-1.5 px-3.5 py-2 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/70 text-indigo-700 dark:text-indigo-200 text-xs font-bold"
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5" />
+                <span>Generate ke Vendor Lain</span>
+              </button>
+            )}
 
             {backup?.status === "SUCCESS" && (
               <a

@@ -323,6 +323,106 @@ async function main() {
     ],
   });
 
+  // Seed Sample DCIM 3D Racks & OTBs (idempotent)
+  const existingRackCount = await prisma.dataCenterRack.count();
+  if (existingRackCount === 0) {
+    await prisma.dataCenterRack.create({
+      data: {
+        code: 'DC-CYBER1-R01',
+        name: 'Rack Collo Cyber 1 - R01',
+        location: 'Gedung Cyber 1 Lt. 3, Ruang DC-02, Jakarta Selatan',
+        room_zone: 'Row A / Cold Aisle',
+        total_u: 42,
+        power_capacity_va: 6000,
+        status: 'Active',
+        notes: 'Rack Collocation utama Gedung Cyber 1.',
+        slots: {
+          create: [
+            {
+              start_u: 1,
+              unit_size: 2,
+              end_u: 2,
+              device_name: 'APC Smart-UPS & Dual PDU A/B',
+              serial_number: 'PDU-APC-9901A',
+              customer_name: 'Internal DC Infrastructure',
+              device_type: 'PDU / UPS',
+              power_draw_watt: 120,
+              color_tag: '#f59e0b',
+              status: 'Occupied',
+            },
+            {
+              start_u: 15,
+              unit_size: 2,
+              end_u: 16,
+              device_name: 'Server Dell PowerEdge R740',
+              serial_number: 'SN-DELL-740881',
+              customer_name: 'PT FinTech Nusantara',
+              pic_name: 'Ibu Rina Suryani',
+              device_type: 'Server',
+              power_draw_watt: 550,
+              color_tag: '#3b82f6',
+              status: 'Occupied',
+            },
+            {
+              start_u: 40,
+              unit_size: 2,
+              end_u: 41,
+              device_name: 'Core BGP Router Juniper MX204',
+              serial_number: 'JNPR-MX204-7712',
+              customer_name: 'Internal NOC Backbone',
+              device_type: 'Router',
+              power_draw_watt: 420,
+              color_tag: '#8b5cf6',
+              status: 'Occupied',
+            },
+          ],
+        },
+      },
+    });
+  }
+
+  const existingOtbCount = await prisma.opticalOtb.count();
+  if (existingOtbCount === 0) {
+    const tiaCoreNames = [
+      'Biru', 'Oranye', 'Hijau', 'Cokelat', 'Abu-abu', 'Putih',
+      'Merah', 'Hitam', 'Kuning', 'Ungu', 'Pink', 'Aqua / Tosca',
+    ];
+    const otb1 = await prisma.opticalOtb.create({
+      data: {
+        code: 'OTB-CYB1-CORE01',
+        name: 'OTB Backbone Cyber 1 -> POP Tifa (48C)',
+        location: 'Gedung Cyber 1 Lt. 3, MMP Room, Jakarta Selatan',
+        pop_node: 'POP-CYBER1',
+        total_cores: 48,
+        cores_per_tray: 12,
+        connector_type: 'SC/UPC',
+        fiber_mode: 'Single-Mode G.652D',
+        status: 'Active',
+        notes: 'Panel OTB utama jalur Dark Fiber Metro Selatan.',
+      },
+    });
+    const portsData = [];
+    for (let c = 1; c <= 48; c++) {
+      const trayNum = Math.ceil(c / 12);
+      const colorName = tiaCoreNames[(c - 1) % 12];
+      const tubeName = tiaCoreNames[(trayNum - 1) % 12];
+      portsData.push({
+        otb_id: otb1.id,
+        core_number: c,
+        tray_number: trayNum,
+        tube_color: tubeName,
+        core_color: colorName,
+        status: c <= 2 ? 'Used' : 'Available',
+        route_pair: c <= 2 ? 'POP Cyber 1 -> POP Gedung Tifa (Trunk A)' : null,
+        destination_otb: c <= 2 ? 'OTB-TIFA-01' : null,
+        customer_name: c <= 2 ? 'Backbone Metro Ring 100G' : null,
+        attenuation_db: c <= 2 ? -11.4 : null,
+        distance_km: c <= 2 ? 2.4 : null,
+      });
+    }
+    await prisma.otbCorePort.createMany({ data: portsData });
+  }
+
   console.log('Seeding completed successfully!');
 }
 

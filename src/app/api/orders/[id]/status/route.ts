@@ -4,6 +4,8 @@ import { buildPayloadForOrder, dispatchSheetsSync } from "@/lib/sheetsSync";
 import { generateSiteCode } from "@/lib/ticketUtils";
 import { ensureIcmpMonitorForSite } from "@/lib/icmpMonitorService";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { notifyOrderCompleted } from "@/lib/telegramService";
+import { syncDcimOnOrderCompletion } from "@/lib/dcimService";
 
 export async function POST(
   request: NextRequest,
@@ -75,6 +77,7 @@ export async function POST(
     const waktuAktivasi = status === "Completed" ? (order.waktu_aktivasi || new Date()) : order.waktu_aktivasi;
 
     let targetPopSiteId = order.pop_site_id;
+    let completedSiteCode: string | null = null;
 
     // POP SITE INVENTORY LIFECYCLE MANAGEMENT
     if (status === "Completed") {
@@ -112,11 +115,19 @@ export async function POST(
             sid: order.sid,
             ao: order.ao,
             nomor_order: order.nomor_order,
+            rack_id: order.rack_id,
+            rack_code: order.rack_code,
+            rack_unit_start: order.rack_unit_start,
+            rack_unit_end: order.rack_unit_end,
+            otb_id: order.otb_id,
+            otb_code: order.otb_code,
+            otb_core_numbers: order.otb_core_numbers,
             status_layanan: "Active",
             waktu_go_live: completedAt || new Date(),
           },
         });
         targetPopSiteId = createdSite.id;
+        completedSiteCode = createdSite.site_id;
       } else {
         // Lifecycle ticket completion (Upgrade, Downgrade, Isolir, Terminate)
         if (order.tipe_order === "Upgrade" || order.tipe_order === "Downgrade") {
@@ -168,6 +179,18 @@ export async function POST(
       });
     }
 
+    // SYNC DCIM 3D RACK / 3D OTB UPON COMPLETION OR TERMINATE
+    if (status === "Completed") {
+      syncDcimOnOrderCompletion({
+        orderId,
+        tipeOrder: order.tipe_order,
+        popSiteId: targetPopSiteId,
+        siteCode: completedSiteCode,
+      }).catch((err) => {
+        console.error("DCIM sync error upon completion:", err);
+      });
+    }
+
     // Formulate default note
     let progressNote = note;
     if (!progressNote) {
@@ -212,6 +235,21 @@ export async function POST(
     }).then((payload) => {
       if (payload) dispatchSheetsSync(payload, orderId);
     });
+
+    // Trigger non-blocking Ticket Completed Telegram notification (separate bot from ICMP Ping)
+    if (status === "Completed" && previousStatus !== "Completed") {
+      notifyOrderCompleted({
+        order: updatedOrder,
+        siteCode: completedSiteCode,
+        popSiteId: targetPopSiteId,
+        completedBy: userName,
+        completionNote: progressNote,
+        testCount: order.test_results.length,
+        completedAt: updatedOrder.completed_at,
+      }).catch((err) => {
+        console.error("Ticket completed Telegram notification error:", err);
+      });
+    }
 
     return NextResponse.json({
       success: true,

@@ -1,5 +1,17 @@
 "use client";
 
+import { Rack3DPickerModal } from "@/components/dcim/Rack3DPickerModal";
+import { Otb3DPickerModal } from "@/components/dcim/Otb3DPickerModal";
+import {
+  formatRackPositionLabel,
+  parseCoreNumbersJson,
+  getTiaColorForCore,
+} from "@/lib/dcimUtils";
+import {
+  Box as DcimOrderBoxIcon,
+  Cable as DcimOrderCableIcon,
+} from "lucide-react";
+
 import React, { useState, useEffect, useCallback, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -60,6 +72,13 @@ interface OrderDetail {
   tipe_layanan_collo?: string | null;
   nama_perangkat?: string | null;
   sn_perangkat?: string | null;
+  rack_id?: string | null;
+  rack_code?: string | null;
+  rack_unit_start?: number | null;
+  rack_unit_end?: number | null;
+  otb_id?: string | null;
+  otb_code?: string | null;
+  otb_core_numbers?: string | null;
   prefix_advertise?: string | null;
   as_number?: string | null;
   sid?: string | null;
@@ -166,6 +185,10 @@ export default function NocWorkspacePage({
   useEffect(() => {
     fetchOrderDetail();
   }, [fetchOrderDetail]);
+
+  // DCIM 3D Inspect Modals
+  const [inspectRackOpen, setInspectRackOpen] = useState(false);
+  const [inspectOtbOpen, setInspectOtbOpen] = useState(false);
 
   // Quick Copy Config Handler
   const handleCopyConfig = () => {
@@ -636,6 +659,29 @@ export default function NocWorkspacePage({
                       <span className="text-[10px] text-slate-400 font-bold block">Serial Number (SN)</span>
                       <span className="font-mono font-bold text-slate-900">{order.sn_perangkat || "-"}</span>
                     </div>
+                    {order.rack_id && (
+                      <div className="bg-blue-50/70 p-2.5 rounded-xl border border-blue-200 col-span-2 flex items-center justify-between gap-2">
+                        <div>
+                          <span className="text-[10px] text-blue-600 font-bold block">
+                            Alokasi Rack 3D
+                          </span>
+                          <span className="font-mono font-extrabold text-blue-900">
+                            {formatRackPositionLabel(
+                              order.rack_code,
+                              order.rack_unit_start,
+                              order.rack_unit_end
+                            )}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setInspectRackOpen(true)}
+                          className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold flex items-center gap-1 shrink-0"
+                        >
+                          <DcimOrderBoxIcon className="w-3.5 h-3.5" /> Lihat di Rack 3D
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -649,6 +695,44 @@ export default function NocWorkspacePage({
                       <span className="text-[10px] text-slate-400 font-bold block">Server / Point of Presence Hub</span>
                       <span className="font-semibold text-slate-800">{order.server || "-"}</span>
                     </div>
+                    {order.otb_id && (
+                      <div className="bg-purple-50/70 p-2.5 rounded-xl border border-purple-200 col-span-2 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <span className="text-[10px] text-purple-600 font-bold block">
+                              Alokasi Core OTB 3D
+                            </span>
+                            <span className="font-mono font-extrabold text-purple-900">
+                              {order.otb_code || "OTB"}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setInspectOtbOpen(true)}
+                            className="px-2.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold flex items-center gap-1 shrink-0"
+                          >
+                            <DcimOrderCableIcon className="w-3.5 h-3.5" /> Lihat di OTB 3D
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {parseCoreNumbersJson(order.otb_core_numbers).map((cNum) => {
+                            const tia = getTiaColorForCore(cNum);
+                            return (
+                              <span
+                                key={cNum}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white border border-purple-200 text-[10px] font-mono font-bold text-slate-800"
+                              >
+                                <span
+                                  className="w-2 h-2 rounded-full"
+                                  style={{ backgroundColor: tia.hex }}
+                                />
+                                #{cNum} ({tia.labelId})
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1293,6 +1377,24 @@ export default function NocWorkspacePage({
           </div>
         </div>
       )}
+
+      {/* Inspect Rack 3D & OTB 3D Modals */}
+      <Rack3DPickerModal
+        isOpen={inspectRackOpen}
+        onClose={() => setInspectRackOpen(false)}
+        mode="inspect"
+        initialRackId={order.rack_id || null}
+        initialStartU={order.rack_unit_start || null}
+        initialEndU={order.rack_unit_end || null}
+      />
+
+      <Otb3DPickerModal
+        isOpen={inspectOtbOpen}
+        onClose={() => setInspectOtbOpen(false)}
+        mode="inspect"
+        initialOtbId={order.otb_id || null}
+        initialSelectedCores={parseCoreNumbersJson(order.otb_core_numbers)}
+      />
     </div>
   );
 }

@@ -1,5 +1,17 @@
 "use client";
 
+import { Rack3DPickerModal } from "@/components/dcim/Rack3DPickerModal";
+import { Otb3DPickerModal } from "@/components/dcim/Otb3DPickerModal";
+import {
+  formatRackPositionLabel,
+  parseCoreNumbersJson,
+  getTiaColorForCore,
+} from "@/lib/dcimUtils";
+import {
+  Box as DcimSiteBoxIcon,
+  Cable as DcimSiteCableIcon,
+} from "lucide-react";
+
 import React, { useState, useEffect, useCallback, use, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -144,6 +156,13 @@ interface EnterpriseSiteDetail {
   tipe_layanan_collo?: string | null;
   nama_perangkat?: string | null;
   sn_perangkat?: string | null;
+  rack_id?: string | null;
+  rack_code?: string | null;
+  rack_unit_start?: number | null;
+  rack_unit_end?: number | null;
+  otb_id?: string | null;
+  otb_code?: string | null;
+  otb_core_numbers?: string | null;
   prefix_advertise?: string | null;
   as_number?: string | null;
   server?: string | null;
@@ -197,6 +216,10 @@ export default function EnterpriseSiteDetailPage({
   const [site, setSite] = useState<EnterpriseSiteDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // DCIM 3D Inspect Modals
+  const [inspectRackOpen, setInspectRackOpen] = useState(false);
+  const [inspectOtbOpen, setInspectOtbOpen] = useState(false);
 
   // History classification tab on the right
   const [historyTab, setHistoryTab] = useState("Semua");
@@ -880,6 +903,29 @@ export default function EnterpriseSiteDetailPage({
                     <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Serial Number (SN)</span>
                     <span className="font-mono text-slate-800 dark:text-slate-200 font-semibold">{site.sn_perangkat || "-"}</span>
                   </div>
+                  {site.rack_id && (
+                    <div className="bg-blue-50/70 dark:bg-blue-950/40 p-2.5 rounded-xl border border-blue-200 dark:border-blue-800 col-span-2 flex items-center justify-between gap-2">
+                      <div>
+                        <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold block">
+                          Posisi Rack 3D
+                        </span>
+                        <span className="font-mono font-extrabold text-blue-900 dark:text-blue-200">
+                          {formatRackPositionLabel(
+                            site.rack_code,
+                            site.rack_unit_start,
+                            site.rack_unit_end
+                          )}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setInspectRackOpen(true)}
+                        className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold flex items-center gap-1 shrink-0"
+                      >
+                        <DcimSiteBoxIcon className="w-3.5 h-3.5" /> Lihat di Rack 3D
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -893,6 +939,44 @@ export default function EnterpriseSiteDetailPage({
                     <span className="text-[10px] text-slate-400 dark:text-slate-400 font-bold block">Server / Rute Core</span>
                     <span className="font-medium text-slate-800 dark:text-slate-200">{site.server || "-"}</span>
                   </div>
+                  {site.otb_id && (
+                    <div className="bg-purple-50/70 dark:bg-purple-950/40 p-2.5 rounded-xl border border-purple-200 dark:border-purple-800 col-span-2 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold block">
+                            Alokasi Core OTB 3D
+                          </span>
+                          <span className="font-mono font-extrabold text-purple-900 dark:text-purple-200">
+                            {site.otb_code || "OTB"}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setInspectOtbOpen(true)}
+                          className="px-2.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold flex items-center gap-1 shrink-0"
+                        >
+                          <DcimSiteCableIcon className="w-3.5 h-3.5" /> Lihat di OTB 3D
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {parseCoreNumbersJson(site.otb_core_numbers).map((cNum) => {
+                          const tia = getTiaColorForCore(cNum);
+                          return (
+                            <span
+                              key={cNum}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-800 text-[10px] font-mono font-bold text-slate-800 dark:text-slate-200"
+                            >
+                              <span
+                                className="w-2 h-2 rounded-full"
+                                style={{ backgroundColor: tia.hex }}
+                              />
+                              #{cNum} ({tia.labelId})
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2118,6 +2202,24 @@ export default function EnterpriseSiteDetailPage({
           </div>
         </div>
       )}
+
+      {/* Inspect Rack 3D & OTB 3D Modals */}
+      <Rack3DPickerModal
+        isOpen={inspectRackOpen}
+        onClose={() => setInspectRackOpen(false)}
+        mode="inspect"
+        initialRackId={site.rack_id || null}
+        initialStartU={site.rack_unit_start || null}
+        initialEndU={site.rack_unit_end || null}
+      />
+
+      <Otb3DPickerModal
+        isOpen={inspectOtbOpen}
+        onClose={() => setInspectOtbOpen(false)}
+        mode="inspect"
+        initialOtbId={site.otb_id || null}
+        initialSelectedCores={parseCoreNumbersJson(site.otb_core_numbers)}
+      />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useCurrentUser } from "@/context/UserContext";
+import { DashboardNotifAndLogRow } from "@/components/DashboardNotifAndLogRow";
 import {
   Boxes,
   Wrench,
@@ -23,7 +24,6 @@ import {
   ShieldAlert,
   ShieldCheck,
   CheckCircle2,
-  Clock,
   Calendar,
   AlertTriangle,
   Flame,
@@ -333,17 +333,19 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const fetchStats = useCallback(async (isManualRefresh = false) => {
-    if (isManualRefresh) setRefreshing(true);
+    if (isManualRefresh) {
+      setRefreshing(true);
+      setRefreshTrigger((prev) => prev + 1);
+    }
     try {
       const res = await fetch("/api/dashboard/stats", { cache: "no-store" });
       const json = await res.json();
       if (json.success && json.data) {
         setStats(json.data);
-        setLastUpdated(new Date());
         setError(null);
       } else {
         setError(json.error || "Gagal memuat data statistik dashboard");
@@ -408,34 +410,6 @@ export default function DashboardPage() {
               <PlusCircle className="w-4 h-4" />
               <span>Buka List Antrean</span>
             </Link>
-          </div>
-        </div>
-
-        {/* Live Status Indicators Banner */}
-        <div className="relative z-10 mt-6 pt-5 border-t border-white/10 flex flex-wrap items-center justify-between text-xs text-slate-300 gap-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-              </span>
-              <span className="font-medium text-emerald-300">Sistem Dual-DB & Layanan Aktif</span>
-            </div>
-
-            <span className="text-slate-500">•</span>
-
-            <div className="flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
-              <span>
-                Pembaruan: {lastUpdated.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })} WIB
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white/15 text-white border border-white/10">
-              Role: {currentUser?.role?.toUpperCase() || "ENGINEER"}
-            </span>
           </div>
         </div>
       </div>
@@ -689,6 +663,11 @@ export default function DashboardPage() {
           totalPrefixes={stats?.ipam?.totalPrefixes ?? 0}
         />
       </section>
+
+      {/* ========================================================================= */}
+      {/* BARIS NOTIFIKASI SISTEM & LOG APLIKASI (1 BARIS 2 KOLOM) */}
+      {/* ========================================================================= */}
+      <DashboardNotifAndLogRow refreshTrigger={refreshTrigger} />
 
       {/* ========================================================================= */}
       {/* PILAR 2: TOOLS & GENERATOR */}

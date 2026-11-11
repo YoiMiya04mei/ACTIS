@@ -3,6 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { generateTicketNumber } from "@/lib/ticketUtils";
 import { buildPayloadForOrder, dispatchSheetsSync } from "@/lib/sheetsSync";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import {
+  isRackRangeFree,
+  parseColloUnitsNeeded,
+  parseCoreNumbersJson,
+} from "@/lib/dcimUtils";
+import { reserveRackSlotForOrder, reserveOtbCoresForOrder } from "@/lib/dcimService";
 
 export async function GET(request: NextRequest) {
   try {
@@ -207,6 +213,11 @@ export async function POST(request: NextRequest) {
       waktu_aktivasi,
       catatan_tambahan,
       created_by,
+      rack_id,
+      rack_unit_start,
+      rack_unit_end,
+      otb_id,
+      otb_core_numbers,
     } = body;
 
     // Validate PIC Name
@@ -326,6 +337,86 @@ export async function POST(request: NextRequest) {
       finalNomorOrder = String(nomor_order).trim();
     }
 
+    // Validate optional 3D Rack / OTB reservations before ticket creation
+    let finalRackId: string | null = null;
+    let finalRackCode: string | null = null;
+    let finalRackUnitStart: number | null = null;
+    let finalRackUnitEnd: number | null = null;
+
+    if (rack_id && rack_unit_start !== undefined && rack_unit_start !== null) {
+      const rackRecord = await prisma.dataCenterRack.findUnique({
+        where: { id: String(rack_id) },
+        include: { slots: true },
+      });
+      if (!rackRecord) {
+        return NextResponse.json(
+          { success: false, error: "Data Center Rack 3D yang dipilih tidak ditemukan." },
+          { status: 400 }
+        );
+      }
+      const startU = Number(rack_unit_start);
+      const parsedEnd = rack_unit_end !== undefined && rack_unit_end !== null ? Number(rack_unit_end) : 0;
+      const unitSize =
+        parsedEnd >= startU
+          ? parsedEnd - startU + 1
+          : parseColloUnitsNeeded(tipe_layanan_collo);
+      const check = isRackRangeFree(rackRecord.total_u, rackRecord.slots, startU, unitSize);
+      if (!check.valid) {
+        return NextResponse.json(
+          { success: false, error: check.reason || "Slot Rack 3D tidak tersedia." },
+          { status: 409 }
+        );
+      }
+      finalRackId = rackRecord.id;
+      finalRackCode = rackRecord.code;
+      finalRackUnitStart = startU;
+      finalRackUnitEnd = check.endU;
+    }
+
+    let finalOtbId: string | null = null;
+    let finalOtbCode: string | null = null;
+    let finalOtbCores: number[] = [];
+
+    if (otb_id && otb_core_numbers) {
+      const parsedCores = Array.from(new Set(parseCoreNumbersJson(otb_core_numbers))).sort(
+        (a, b) => a - b
+      );
+      if (parsedCores.length > 0) {
+        const otbRecord = await prisma.opticalOtb.findUnique({
+          where: { id: String(otb_id) },
+          include: { ports: true },
+        });
+        if (!otbRecord) {
+          return NextResponse.json(
+            { success: false, error: "Database OTB 3D yang dipilih tidak ditemukan." },
+            { status: 400 }
+          );
+        }
+        const portMap = new Map(otbRecord.ports.map((p) => [p.core_number, p]));
+        for (const coreNum of parsedCores) {
+          const port = portMap.get(coreNum);
+          if (!port) {
+            return NextResponse.json(
+              { success: false, error: `Core #${coreNum} tidak ada pada ${otbRecord.code}.` },
+              { status: 400 }
+            );
+          }
+          if (port.status !== "Available") {
+            return NextResponse.json(
+              {
+                success: false,
+                error: `Core #${coreNum} pada ${otbRecord.code} sedang berstatus ${port.status}.`,
+              },
+              { status: 409 }
+            );
+          }
+        }
+        finalOtbId = otbRecord.id;
+        finalOtbCode = otbRecord.code;
+        finalOtbCores = parsedCores;
+      }
+    }
+
     // Find or fallback creator user
     let creatorId = created_by;
     if (!creatorId) {
@@ -368,10 +459,43 @@ export async function POST(request: NextRequest) {
         nomor_order: finalNomorOrder,
         waktu_aktivasi: waktu_aktivasi ? new Date(waktu_aktivasi) : null,
         catatan_tambahan: catatan_tambahan ? String(catatan_tambahan).trim() : null,
+        rack_id: finalRackId,
+        rack_code: finalRackCode,
+        rack_unit_start: finalRackUnitStart,
+        rack_unit_end: finalRackUnitEnd,
+        otb_id: finalOtbId,
+        otb_code: finalOtbCode,
+        otb_core_numbers: finalOtbCores.length > 0 ? JSON.stringify(finalOtbCores) : null,
         status: "Antrian Aktivasi",
         created_by: creatorId,
       },
     });
+
+    // Apply physical DCIM Reservations for Rack 3D & OTB 3D
+    if (finalRackId && finalRackUnitStart && finalRackUnitEnd) {
+      await reserveRackSlotForOrder({
+        rackId: finalRackId,
+        startU: finalRackUnitStart,
+        unitSize: finalRackUnitEnd - finalRackUnitStart + 1,
+        deviceName: nama_perangkat ? String(nama_perangkat).trim() : tipe_layanan_collo || "Collocation Server",
+        serialNumber: sn_perangkat ? String(sn_perangkat).trim() : null,
+        customerName: nama_perusahaan ? String(nama_perusahaan).trim() : String(nama_pic).trim(),
+        picName: String(nama_pic).trim(),
+        orderId: newOrder.id,
+        ticketNumber,
+      });
+    }
+
+    if (finalOtbId && finalOtbCores.length > 0) {
+      await reserveOtbCoresForOrder({
+        otbId: finalOtbId,
+        coreNumbers: finalOtbCores,
+        customerName: nama_perusahaan ? String(nama_perusahaan).trim() : String(nama_pic).trim(),
+        routePair: server ? String(server).trim() : null,
+        orderId: newOrder.id,
+        ticketNumber,
+      });
+    }
 
     // Immutable initial audit log
     await prisma.orderProgressLog.create({

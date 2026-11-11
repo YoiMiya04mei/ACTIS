@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { verifySessionToken } from "@/lib/auth";
 import { buildPayloadForOrder, dispatchSheetsSync } from "@/lib/sheetsSync";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { releaseDcimForOrder } from "@/lib/dcimService";
 
 export async function POST(
   request: NextRequest,
@@ -72,6 +73,11 @@ export async function POST(
       data: {
         status: "Cancelled",
       },
+    });
+
+    // Release reserved 3D Rack / 3D OTB slots belonging to this cancelled ticket
+    releaseDcimForOrder(orderId, order.pop_site_id, true).catch((err) => {
+      console.error("Failed to release DCIM reservation on ticket cancel:", err);
     });
 
     // Record immutable audit progress log

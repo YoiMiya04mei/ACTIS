@@ -3,6 +3,8 @@ import {
   getTelegramConfig,
   saveTelegramConfig,
   sendTestNotification,
+  maskBotToken,
+  isMaskedTokenInput,
 } from "@/lib/telegramService";
 import { verifySessionToken } from "@/lib/auth";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
@@ -16,15 +18,7 @@ export async function GET() {
     const config = await getTelegramConfig();
 
     // Mask bot token demi keamanan di frontend
-    let maskedToken = "";
-    if (config.bot_token) {
-      const parts = config.bot_token.split(":");
-      if (parts.length === 2) {
-        maskedToken = `${parts[0]}:${"*".repeat(Math.min(parts[1].length - 4, 16))}${parts[1].slice(-4)}`;
-      } else {
-        maskedToken = "••••••••••••••••";
-      }
-    }
+    const maskedToken = maskBotToken(config.bot_token);
 
     return NextResponse.json({
       success: true,
@@ -104,7 +98,7 @@ export async function POST(request: NextRequest) {
     const payloadToSave: any = {};
     if (bot_token !== undefined) {
       // Hanya simpan jika bukan token yang di-mask
-      if (!bot_token.includes("••••") && !bot_token.includes("***")) {
+      if (!isMaskedTokenInput(bot_token)) {
         payloadToSave.bot_token = bot_token.trim();
       }
     }
