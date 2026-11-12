@@ -1,5 +1,27 @@
 [
   {
+    "id": "log-1794470219318-fvicm",
+    "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
+    "email": null,
+    "ip_address": "103.155.196.63",
+    "tipe": "BACKUP_MANUAL",
+    "aktifitas": "Backup config test (HUAWEI) [manual]",
+    "detail": "2005 baris, 61050 bytes, GDrive: SKIPPED",
+    "user_agent": null,
+    "created_at": "2026-11-12T07:56:59.318Z"
+  },
+  {
+    "id": "log-1794470205078-6btli",
+    "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
+    "email": "admin.noc@isp-enterprise.net",
+    "ip_address": "::1",
+    "tipe": "CREATE_DEVICE",
+    "aktifitas": "Menambahkan perangkat backup config: test (HUAWEI - 103.155.196.10)",
+    "detail": null,
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-12T07:56:45.078Z"
+  },
+  {
     "id": "log-1794396534135-q5vnu",
     "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
     "email": null,

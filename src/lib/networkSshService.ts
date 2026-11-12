@@ -64,12 +64,16 @@ const SUPPORTED_ALGORITHMS: ConnectConfig["algorithms"] = {
   ],
 };
 
-function stripAnsiAndPager(input: string): string {
+function stripAnsi(input: string): string {
   return input
     .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "")
     .replace(/\x1b\][^\x07]*\x07/g, "")
     .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "")
+    .replace(/\r/g, "");
+}
+
+function stripAnsiAndPager(input: string): string {
+  return stripAnsi(input)
     .replace(/----\s*More\s*----[\s\x08]*/gi, "")
     .replace(/--More--[\s\x08]*/gi, "")
     .replace(/---\(more(?:\s+\d+%)?\)---[\s\x08]*/gi, "")
@@ -236,7 +240,28 @@ function cleanInteractiveCapture(raw: string, command: string): string {
   return lines.join("\n").trim();
 }
 
-function runInteractiveShell(
+const CLI_PROMPT_LINE_REGEX = /^[<\[\w.@()\/:-]+[>#%$]\s*$/;
+const INITIAL_YN_PROMPT_REGEX = /(\[(?:y\/n|yes\/no)\]|\((?:y\/n|yes\/no)\))\s*:?\s*$/i;
+const PASSWORD_CHANGE_PROMPT_REGEX =
+  /(password needs to be changed|change now\?\s*\[y\/n\]|enter old password|must change your password)/i;
+
+/** Check whether the trailing non-empty line looks like a network CLI prompt (e.g. `<HUAWEI>`, `Router#`). */
+function isCliPromptTail(recentOutput: string): boolean {
+  const trimmed = recentOutput.trim();
+  if (!trimmed) return false;
+  const lastLine = trimmed.split("\n").pop()?.trim() || "";
+  return CLI_PROMPT_LINE_REGEX.test(lastLine);
+}
+
+/** Check whether the trailing line asks an interactive `[Y/N]` confirmation during SSH login. */
+function isInitialYnPrompt(recentOutput: string): boolean {
+  const trimmed = recentOutput.trim();
+  if (!trimmed) return false;
+  const lastLine = trimmed.split("\n").pop()?.trim() || "";
+  return INITIAL_YN_PROMPT_REGEX.test(lastLine);
+}
+
+export function runInteractiveShell(
   conn: Client,
   params: {
     preCommands: string[];
@@ -258,6 +283,8 @@ function runInteractiveShell(
       let captureStartIdx = -1;
       let stage: "INIT" | "ENABLE_PW" | "PRE_CMDS" | "MAIN_CMD" | "DONE" = "INIT";
       let preCmdIdx = 0;
+      let initYnReplies = 0;
+      let initPendingYnResponse = false;
       let idleTimer: NodeJS.Timeout | null = null;
       let settled = false;
 
@@ -271,11 +298,42 @@ function runInteractiveShell(
         settled = true;
         cleanup();
         try {
-          stream.write("\nquit\nexit\n");
+          stream.write("\rquit\rexit\r");
           stream.end();
         } catch {}
-        const slice = captureStartIdx >= 0 ? rawBuffer.slice(captureStartIdx) : rawBuffer;
-        resolve(cleanInteractiveCapture(slice, params.command));
+
+        const strippedRaw = stripAnsiAndPager(rawBuffer);
+        if (captureStartIdx < 0) {
+          if (PASSWORD_CHANGE_PROMPT_REGEX.test(strippedRaw)) {
+            reject(
+              new Error(
+                "Perangkat meminta penggantian initial password (Change now? [Y/N]) dan menolak melewati prompt dengan 'N'. Silakan ganti initial password user SSH sekali di router lalu perbarui di ACTIS."
+              )
+            );
+            return;
+          }
+          const preview = strippedRaw.trim().slice(-180);
+          reject(
+            new Error(
+              `Sesi shell SSH tertutup sebelum perintah backup dijalankan${preview ? `: ${preview}` : "."}`
+            )
+          );
+          return;
+        }
+
+        const cleaned = cleanInteractiveCapture(rawBuffer.slice(captureStartIdx), params.command);
+        if (
+          (cleaned.length < 15 && PASSWORD_CHANGE_PROMPT_REGEX.test(strippedRaw)) ||
+          (cleaned.length < 400 && PASSWORD_CHANGE_PROMPT_REGEX.test(cleaned))
+        ) {
+          reject(
+            new Error(
+              "Perangkat meminta penggantian initial password (Change now? [Y/N]) dan menolak melewati prompt dengan 'N'. Silakan ganti initial password user SSH sekali di router lalu perbarui di ACTIS."
+            )
+          );
+          return;
+        }
+        resolve(cleaned);
       };
 
       const overallTimer = setTimeout(() => {
@@ -289,9 +347,24 @@ function runInteractiveShell(
         }
       }, timeoutMs);
 
+      const getIdleDelayMs = () => {
+        const recent = stripAnsiAndPager(rawBuffer.slice(-260));
+        if (stage === "INIT") {
+          if (!recent.trim() || initPendingYnResponse) return 3000;
+          if (isCliPromptTail(recent)) return 450;
+          return 2000;
+        }
+        if (stage === "PRE_CMDS" || stage === "ENABLE_PW") {
+          return isCliPromptTail(recent) ? 450 : 1200;
+        }
+        const capturedLen = captureStartIdx >= 0 ? rawBuffer.length - captureStartIdx : 0;
+        // Allow slower devices (e.g. Huawei ATN910) time to build config before first lines arrive
+        return capturedLen <= params.command.length + 30 ? 10000 : 5000;
+      };
+
       const resetMainIdleTimer = () => {
         if (idleTimer) clearTimeout(idleTimer);
-        const delay = stage === "MAIN_CMD" ? 2200 : 800;
+        const delay = getIdleDelayMs();
         idleTimer = setTimeout(() => {
           if (settled) return;
 
@@ -299,7 +372,8 @@ function runInteractiveShell(
             const tail = stripAnsiAndPager(rawBuffer).slice(-120).trim();
             if (params.enablePassword && tail.endsWith(">")) {
               stage = "ENABLE_PW";
-              stream.write("enable\n");
+              stream.write("enable\r");
+              resetMainIdleTimer();
               return;
             }
             stage = "PRE_CMDS";
@@ -312,13 +386,13 @@ function runInteractiveShell(
           if (stage === "PRE_CMDS") {
             if (preCmdIdx < params.preCommands.length) {
               const cmd = params.preCommands[preCmdIdx++];
-              stream.write(`${cmd}\n`);
+              stream.write(`${cmd}\r`);
               resetMainIdleTimer();
               return;
             }
             stage = "MAIN_CMD";
             captureStartIdx = rawBuffer.length;
-            stream.write(`${params.command}\n`);
+            stream.write(`${params.command}\r`);
             resetMainIdleTimer();
             return;
           }
@@ -331,20 +405,35 @@ function runInteractiveShell(
       };
 
       stream.on("data", (chunk: Buffer) => {
+        if (settled) return;
         const text = chunk.toString("utf8");
         rawBuffer += text;
-        const recent = stripAnsiAndPager(rawBuffer.slice(-200));
+        const recentRaw = stripAnsi(rawBuffer.slice(-260));
+        const recent = stripAnsiAndPager(rawBuffer.slice(-260));
+
+        // Automatically answer "N" to Huawei/VRP initial login [Y/N] prompts (e.g. "Change now? [Y/N]:")
+        if (stage === "INIT" && initYnReplies < 3 && isInitialYnPrompt(recent)) {
+          initYnReplies += 1;
+          initPendingYnResponse = true;
+          stream.write("N\r");
+          resetMainIdleTimer();
+          return;
+        }
+
+        if (stage === "INIT" && initPendingYnResponse && isCliPromptTail(recent)) {
+          initPendingYnResponse = false;
+        }
 
         // Handle enable password prompt
         if (stage === "ENABLE_PW" && /password[:\s]*$/i.test(recent.trim())) {
-          stream.write(`${params.enablePassword || ""}\n`);
+          stream.write(`${params.enablePassword || ""}\r`);
           stage = "PRE_CMDS";
           resetMainIdleTimer();
           return;
         }
 
         // Handle pager prompts automatically just in case paging wasn't disabled
-        if (/(----\s*more\s*----|--more--|---\(more(?:\s+\d+%)?\)---)\s*$/i.test(recent.trim())) {
+        if (/(----\s*more\s*----|--more--|---\(more(?:\s+\d+%)?\)---)\s*$/i.test(recentRaw.trim())) {
           stream.write(" ");
           resetMainIdleTimer();
           return;
@@ -355,7 +444,8 @@ function runInteractiveShell(
           stage === "MAIN_CMD" &&
           captureStartIdx >= 0 &&
           rawBuffer.length - captureStartIdx > params.command.length + 20 &&
-          /\n[^\n]{1,64}[>#]\s*$/.test(stripAnsiAndPager(rawBuffer.slice(-140)))
+          rawBuffer.slice(-140).includes("\n") &&
+          isCliPromptTail(stripAnsiAndPager(rawBuffer.slice(-140)))
         ) {
           if (idleTimer) clearTimeout(idleTimer);
           idleTimer = setTimeout(() => {
@@ -397,6 +487,12 @@ function validatePulledConfig(output: string, vendor: string) {
   }
 
   const lower = trimmed.toLowerCase();
+  if (trimmed.length < 400 && PASSWORD_CHANGE_PROMPT_REGEX.test(trimmed)) {
+    throw new Error(
+      `Perangkat (${vendor}) meminta penggantian initial password sebelum akses CLI diizinkan: ${trimmed.slice(0, 180)}`
+    );
+  }
+
   if (
     trimmed.length < 300 &&
     (lower.includes("syntax error") ||

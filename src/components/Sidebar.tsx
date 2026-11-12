@@ -155,15 +155,6 @@ export function Sidebar({
                   />
                   <span>Dashboard</span>
                 </div>
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    pathname === "/dashboard"
-                      ? "bg-white/20 text-white border border-white/20"
-                      : "bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800"
-                  }`}
-                >
-                  Utama
-                </span>
               </Link>
             </div>
 
@@ -189,16 +180,11 @@ export function Sidebar({
                   />
                   <span>LAYANAN & INVENTARIS</span>
                 </div>
-                <div className="flex items-center space-x-1.5">
-                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60">
-                    7
-                  </span>
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-                      openSections.layanan ? "rotate-0" : "-rotate-90"
-                    }`}
-                  />
-                </div>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                    openSections.layanan ? "rotate-0" : "-rotate-90"
+                  }`}
+                />
               </button>
 
               {/* Submenu: Layanan & Inventaris */}
@@ -224,9 +210,6 @@ export function Sidebar({
                       />
                       <span>List Antrean</span>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                      Queue
-                    </span>
                   </Link>
 
                   <Link
@@ -249,9 +232,6 @@ export function Sidebar({
                       />
                       <span>List POP Site</span>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                      Aset Aktif
-                    </span>
                   </Link>
 
                   <Link
@@ -274,9 +254,6 @@ export function Sidebar({
                       />
                       <span>List Enterprise</span>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                      Enterprise
-                    </span>
                   </Link>
 
                   <Link
@@ -299,9 +276,6 @@ export function Sidebar({
                       />
                       <span>Prefix IP Public</span>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                      phpIPAM
-                    </span>
                   </Link>
 
                   <Link
@@ -324,9 +298,6 @@ export function Sidebar({
                       />
                       <span>ICMP Ping Monitor</span>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                      Uptime
-                    </span>
                   </Link>
 
                   <Link
@@ -349,9 +320,6 @@ export function Sidebar({
                       />
                       <span>Database Rack 3D</span>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                      3D Rack
-                    </span>
                   </Link>
 
                   <Link
@@ -374,9 +342,6 @@ export function Sidebar({
                       />
                       <span>Database OTB 3D</span>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                      3D OTB
-                    </span>
                   </Link>
                 </div>
               )}
@@ -404,16 +369,11 @@ export function Sidebar({
                   />
                   <span>TOOLS & GENERATOR</span>
                 </div>
-                <div className="flex items-center space-x-1.5">
-                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60">
-                    {isSuperAdmin ? "6" : "4"}
-                  </span>
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-                      openSections.tools ? "rotate-0" : "-rotate-90"
-                    }`}
-                  />
-                </div>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                    openSections.tools ? "rotate-0" : "-rotate-90"
+                  }`}
+                />
               </button>
 
               {/* Submenu: Tools & Generator */}
@@ -439,9 +399,6 @@ export function Sidebar({
                       />
                       <span>MikroTik Tools</span>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                      16 Tools
-                    </span>
                   </Link>
 
                   <Link
@@ -464,9 +421,6 @@ export function Sidebar({
                       />
                       <span>Traffic QoS</span>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                      QoS
-                    </span>
                   </Link>
 
                   {isSuperAdmin && (
@@ -490,9 +444,6 @@ export function Sidebar({
                         />
                         <span>Aktivasi Huawei</span>
                       </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                        Super Admin
-                      </span>
                     </Link>
                   )}
 
@@ -516,9 +467,6 @@ export function Sidebar({
                       />
                       <span>Dokumen & Surat</span>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                      NOC Doc
-                    </span>
                   </Link>
 
                   {isSuperAdmin && (
@@ -542,9 +490,6 @@ export function Sidebar({
                         />
                         <span>Template Surat</span>
                       </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                        Super Admin
-                      </span>
                     </Link>
                   )}
 
@@ -568,9 +513,6 @@ export function Sidebar({
                       />
                       <span>Arsip Dokumen</span>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                      Arsip
-                    </span>
                   </Link>
                 </div>
               )}
@@ -599,16 +541,11 @@ export function Sidebar({
                     />
                     <span>BACKUP CONFIG</span>
                   </div>
-                  <div className="flex items-center space-x-1.5">
-                    <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60">
-                      1
-                    </span>
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-                        openSections.backup ? "rotate-0" : "-rotate-90"
-                      }`}
-                    />
-                  </div>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                      openSections.backup ? "rotate-0" : "-rotate-90"
+                    }`}
+                  />
                 </button>
 
                 {openSections.backup && (
@@ -633,9 +570,6 @@ export function Sidebar({
                         />
                         <span>Backup Config</span>
                       </div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                        GDrive
-                      </span>
                     </Link>
                   </div>
                 )}
@@ -664,16 +598,11 @@ export function Sidebar({
                   />
                   <span>INTEGRASI & SISTEM</span>
                 </div>
-                <div className="flex items-center space-x-1.5">
-                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200/60 dark:border-slate-700/60">
-                    3
-                  </span>
-                  <ChevronDown
-                    className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-                      openSections.integrasi ? "rotate-0" : "-rotate-90"
-                    }`}
-                  />
-                </div>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                    openSections.integrasi ? "rotate-0" : "-rotate-90"
+                  }`}
+                />
               </button>
 
               {/* Submenu: Integrasi & Sistem */}
@@ -699,9 +628,6 @@ export function Sidebar({
                       />
                       <span>Sheets Sync & Admin</span>
                     </div>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                      Sync
-                    </span>
                   </Link>
 
                   <Link
@@ -724,9 +650,6 @@ export function Sidebar({
                       />
                       <span>Pengaturan User Akses</span>
                     </div>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                      Akses
-                    </span>
                   </Link>
 
                   <Link
@@ -749,9 +672,6 @@ export function Sidebar({
                       />
                       <span>Log Aplikasi</span>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                      Audit
-                    </span>
                   </Link>
                 </div>
               )}
