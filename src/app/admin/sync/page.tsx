@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useCurrentUser } from "@/context/UserContext";
+import { useDialog } from "@/context/DialogContext";
 import {
   FileSpreadsheet,
   RefreshCw,
@@ -31,6 +32,7 @@ interface SyncLog {
 
 export default function AdminSyncPage() {
   const { currentUser } = useCurrentUser();
+  const { confirm: confirmDialog, alert: alertDialog } = useDialog();
 
   const [webhookUrl, setWebhookUrl] = useState("");
   const [isConfigured, setIsConfigured] = useState(false);
@@ -116,7 +118,7 @@ export default function AdminSyncPage() {
       fetchSyncStatus();
       setTimeout(() => setSaveMessage(null), 3000);
     } catch (err: any) {
-      alert(err.message || "Gagal menyimpan URL");
+      void alertDialog(err.message || "Gagal menyimpan URL");
     } finally {
       setIsSavingUrl(false);
     }
@@ -124,7 +126,7 @@ export default function AdminSyncPage() {
 
   // Handle Manual Force Sync to Sheets
   const handleForceSync = async () => {
-    if (!confirm("Jalankan Force Sync seluruh antrean tiket ke Google Spreadsheet?")) return;
+    if (!(await confirmDialog("Jalankan Force Sync seluruh antrean tiket ke Google Spreadsheet?"))) return;
 
     setIsForceSyncing(true);
     setForceSyncResult(null);
@@ -146,7 +148,7 @@ export default function AdminSyncPage() {
       setForceSyncResult(data);
       fetchSyncStatus();
     } catch (err: any) {
-      alert(err.message || "Gagal memproses sync");
+      void alertDialog(err.message || "Gagal memproses sync");
     } finally {
       setIsForceSyncing(false);
     }

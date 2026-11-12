@@ -28,6 +28,7 @@ import {
   ArrowRightLeft,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
+import { useDialog } from "@/context/DialogContext";
 import { DeviceFormModal } from "@/components/backups/DeviceFormModal";
 import { GDriveSettingsModal } from "@/components/backups/GDriveSettingsModal";
 import { ConfigViewerDiffModal } from "@/components/backups/ConfigViewerDiffModal";
@@ -73,6 +74,7 @@ const VENDOR_BADGE_MAP: Record<string, string> = {
 
 export default function NetworkBackupsPage() {
   const { currentUser } = useCurrentUser();
+  const { confirm: confirmDialog } = useDialog();
   const isAdmin = currentUser?.role === "admin";
   const isAuthorizedRole = currentUser?.role === "admin" || currentUser?.role === "noc_engineer";
 
@@ -297,7 +299,7 @@ export default function NetworkBackupsPage() {
 
   const handleDeleteDevice = async (dev: any) => {
     if (!isAdmin) return;
-    if (!confirm(`Hapus perangkat '${dev.name}' (${dev.host}) beserta seluruh riwayat backup-nya di database?`)) {
+    if (!(await confirmDialog(`Hapus perangkat '${dev.name}' (${dev.host}) beserta seluruh riwayat backup-nya di database?`))) {
       return;
     }
     try {
@@ -314,7 +316,7 @@ export default function NetworkBackupsPage() {
 
   const handleDeleteRecord = async (recId: string) => {
     if (!isAdmin) return;
-    if (!confirm("Hapus snapshot backup ini dari database VPS?")) return;
+    if (!(await confirmDialog("Hapus snapshot backup ini dari database VPS?"))) return;
     try {
       const res = await fetch(`/api/backups/records/${recId}`, { method: "DELETE" });
       const json = await res.json();

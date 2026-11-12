@@ -34,6 +34,7 @@ import {
 } from '@/utils/suratTugasUtils';
 import { suratTugasStorage } from '@/services/suratTugasStorage';
 import { toDateInputString } from '@/utils/dateFormatter';
+import { useDialog } from '@/context/DialogContext';
 
 interface CreateSuratTugasPageProps {
   template: RFOTemplate;
@@ -62,6 +63,7 @@ export const CreateSuratTugasPage: React.FC<CreateSuratTugasPageProps> = ({
   onSaved,
   currentUser,
 }) => {
+  const { confirm: confirmDialog } = useDialog();
   // Form State
   const [createdDate, setCreatedDate] = useState<string>(toDateInputString());
   const [letterLocation, setLetterLocation] = useState<string>(
@@ -350,7 +352,7 @@ export const CreateSuratTugasPage: React.FC<CreateSuratTugasPageProps> = ({
   };
 
   const handleResetForm = async () => {
-    if (window.confirm('Reset formulir surat tugas ke kondisi awal?')) {
+    if (await confirmDialog('Reset formulir surat tugas ke kondisi awal?')) {
       setEditingId(null);
       const nextSeq = await suratTugasStorage.getNextSequenceNumber();
       setSequenceNumber(nextSeq);

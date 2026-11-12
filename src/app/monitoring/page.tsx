@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { TelegramConfigModal } from "@/components/TelegramConfigModal";
 import { UptimeKumaResponseChart } from "@/components/UptimeKumaResponseChart";
+import { useDialog } from "@/context/DialogContext";
 import {
   IcmpMonitor,
   IcmpHeartbeat,
@@ -48,6 +49,7 @@ const TIMEFRAME_OPTIONS: { label: string; value: TimeframePreset; desc: string }
 ];
 
 export default function MonitoringDashboardPage() {
+  const { alert: alertDialog } = useDialog();
   const [monitors, setMonitors] = useState<IcmpMonitor[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPingingAll, setIsPingingAll] = useState(false);
@@ -142,7 +144,7 @@ export default function MonitoringDashboardPage() {
       }
       await fetchMonitors(true);
     } catch (err: any) {
-      alert(err.message || "Terjadi kesalahan saat ping massal.");
+      void alertDialog(err.message || "Terjadi kesalahan saat ping massal.");
     } finally {
       setIsPingingAll(false);
     }
@@ -167,7 +169,7 @@ export default function MonitoringDashboardPage() {
       }
       setMonitors((prev) => prev.map((m) => (m.id === monitorId ? data.data : m)));
     } catch (err: any) {
-      alert(err.message || "Terjadi kesalahan saat ping.");
+      void alertDialog(err.message || "Terjadi kesalahan saat ping.");
     } finally {
       setPingingMonitorId(null);
     }

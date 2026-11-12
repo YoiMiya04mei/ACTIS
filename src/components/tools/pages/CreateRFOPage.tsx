@@ -26,6 +26,7 @@ import { RFOService } from '@/services/rfoService';
 import { storageService } from '@/services/storageService';
 import type { ToastMessage } from '@/components/tools/Toast';
 import type { UserAccount } from '@/types/auth';
+import { useDialog } from '@/context/DialogContext';
 
 interface CreateRFOPageProps {
   template: RFOTemplate;
@@ -81,6 +82,7 @@ export const CreateRFOPage: React.FC<CreateRFOPageProps> = ({
   onSaved,
   currentUser,
 }) => {
+  const { confirm: confirmDialog } = useDialog();
   // Form State
   const [startTime, setStartTime] = useState<string>('');
   const [endTime, setEndTime] = useState<string>('');
@@ -300,9 +302,9 @@ export const CreateRFOPage: React.FC<CreateRFOPageProps> = ({
   };
 
   // Reset form
-  const handleResetForm = () => {
+  const handleResetForm = async () => {
     if (
-      window.confirm('Apakah Anda yakin ingin mengosongkan form? Draft akan dibersihkan.')
+      await confirmDialog('Apakah Anda yakin ingin mengosongkan form? Draft akan dibersihkan.')
     ) {
       const now = new Date();
       const threeHoursAgo = new Date(now.getTime() - 3.5 * 60 * 60 * 1000);

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useCurrentUser } from "@/context/UserContext";
+import { useDialog } from "@/context/DialogContext";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LightboxModal } from "@/components/LightboxModal";
 import { SearchableSelect } from "@/components/SearchableSelect";
@@ -138,6 +139,7 @@ interface PopSiteItem {
 
 export default function PopSitesListPage() {
   const { currentUser } = useCurrentUser();
+  const { alert: alertDialog } = useDialog();
   const isSuperAdmin = currentUser?.role === "admin" || currentUser?.role === "superadmin";
 
   const [sites, setSites] = useState<PopSiteItem[]>([]);
@@ -329,11 +331,11 @@ export default function PopSitesListPage() {
 
   const handleOpenDeleteSingle = (site: PopSiteItem) => {
     if (!isSuperAdmin) {
-      alert("Akses ditolak: Hanya akun level Super Admin yang memiliki hak untuk menghapus POP Site.");
+      void alertDialog("Akses ditolak: Hanya akun level Super Admin yang memiliki hak untuk menghapus POP Site.");
       return;
     }
     if (site.status_layanan !== "Terminated") {
-      alert(`Hanya POP Site berstatus Terminated yang dapat dihapus. Sirkuit [${site.site_id}] saat ini masih berstatus ${site.status_layanan}.`);
+      void alertDialog(`Hanya POP Site berstatus Terminated yang dapat dihapus. Sirkuit [${site.site_id}] saat ini masih berstatus ${site.status_layanan}.`);
       return;
     }
     setSiteToDelete(site);
@@ -343,11 +345,11 @@ export default function PopSitesListPage() {
 
   const handleOpenDeleteBulk = () => {
     if (!isSuperAdmin) {
-      alert("Akses ditolak: Hanya akun level Super Admin yang memiliki hak untuk menghapus POP Site.");
+      void alertDialog("Akses ditolak: Hanya akun level Super Admin yang memiliki hak untuk menghapus POP Site.");
       return;
     }
     if (!areAllSelectedTerminated) {
-      alert("Hapus massal hanya dapat dilakukan jika SELURUH sirkuit yang dipilih berstatus Terminated. Harap hilangkan pilihan sirkuit Active / Isolir terlebih dahulu.");
+      void alertDialog("Hapus massal hanya dapat dilakukan jika SELURUH sirkuit yang dipilih berstatus Terminated. Harap hilangkan pilihan sirkuit Active / Isolir terlebih dahulu.");
       return;
     }
     setSiteToDelete(null);
@@ -357,7 +359,7 @@ export default function PopSitesListPage() {
 
   const handleConfirmDelete = async () => {
     if (!isSuperAdmin) {
-      alert("Akses ditolak: Hanya akun level Super Admin yang memiliki hak untuk menghapus POP Site.");
+      void alertDialog("Akses ditolak: Hanya akun level Super Admin yang memiliki hak untuk menghapus POP Site.");
       return;
     }
 
@@ -378,7 +380,7 @@ export default function PopSitesListPage() {
           throw new Error(data.error || "Gagal menghapus POP Site secara massal.");
         }
 
-        alert(data.message || "POP Site berstatus Terminated berhasil dihapus permanen.");
+        await alertDialog(data.message || "POP Site berstatus Terminated berhasil dihapus permanen.");
         setSelectedSiteIds([]);
       } else if (siteToDelete) {
         const res = await fetch(`/api/pop-sites/${siteToDelete.id}?user_id=${currentUser?.id}`, {
@@ -390,7 +392,7 @@ export default function PopSitesListPage() {
           throw new Error(data.error || "Gagal menghapus POP Site.");
         }
 
-        alert(data.message || `POP Site ${siteToDelete.site_id} berhasil dihapus permanen.`);
+        await alertDialog(data.message || `POP Site ${siteToDelete.site_id} berhasil dihapus permanen.`);
       }
 
       setDeleteModalOpen(false);
@@ -398,7 +400,7 @@ export default function PopSitesListPage() {
       setIsBulkDelete(false);
       fetchSites(true);
     } catch (err: any) {
-      alert(err.message || "Terjadi kesalahan saat menghapus data.");
+      void alertDialog(err.message || "Terjadi kesalahan saat menghapus data.");
     } finally {
       setIsDeleting(false);
     }
@@ -406,7 +408,7 @@ export default function PopSitesListPage() {
 
   const handleOpenBulkAction = (type: "Upgrade" | "Downgrade" | "Isolir" | "Terminate") => {
     if ((type === "Upgrade" || type === "Downgrade") && hasIsolirOrTerminatedSelected) {
-      alert("Upgrade dan Downgrade massal tidak dapat dilakukan karena terdapat sirkuit dengan status Isolir atau Terminated yang dipilih. Pastikan seluruh sirkuit terpilih berstatus Active.");
+      void alertDialog("Upgrade dan Downgrade massal tidak dapat dilakukan karena terdapat sirkuit dengan status Isolir atau Terminated yang dipilih. Pastikan seluruh sirkuit terpilih berstatus Active.");
       return;
     }
     setBulkActionType(type);
@@ -427,11 +429,11 @@ export default function PopSitesListPage() {
     if (!bulkActionType || selectedSiteIds.length === 0) return;
 
     if ((bulkActionType === "Upgrade" || bulkActionType === "Downgrade") && !bulkNewLayanan) {
-      alert("Silakan tentukan paket / kapasitas layanan baru.");
+      void alertDialog("Silakan tentukan paket / kapasitas layanan baru.");
       return;
     }
     if (!bulkAlasan.trim()) {
-      alert(`Silakan isi alasan pengajuan ${bulkActionType}.`);
+      void alertDialog(`Silakan isi alasan pengajuan ${bulkActionType}.`);
       return;
     }
 
@@ -464,7 +466,7 @@ export default function PopSitesListPage() {
       });
       fetchSites(true);
     } catch (err: any) {
-      alert(err.message || "Terjadi kesalahan saat memproses aksi massal.");
+      void alertDialog(err.message || "Terjadi kesalahan saat memproses aksi massal.");
     } finally {
       setIsSubmittingBulkAction(false);
     }
@@ -524,18 +526,18 @@ export default function PopSitesListPage() {
 
     if (actionType === "Upgrade" || actionType === "Downgrade") {
       if (!newLayanan) {
-        alert("Silakan pilih layanan & bandwidth baru.");
+        void alertDialog("Silakan pilih layanan & bandwidth baru.");
         return;
       }
       const currentMbps = parseBandwidthToMbps(selectedSite.layanan_dedicated || selectedSite.kapasitas_layanan);
       const targetMbps = parseBandwidthToMbps(newLayanan);
 
       if (actionType === "Upgrade" && currentMbps > 0 && targetMbps <= currentMbps) {
-        alert(`Untuk Upgrade, layanan baru (${newLayanan}) harus memiliki nilai lebih tinggi dari layanan saat ini (${selectedSite.layanan_dedicated || "-"}).`);
+        void alertDialog(`Untuk Upgrade, layanan baru (${newLayanan}) harus memiliki nilai lebih tinggi dari layanan saat ini (${selectedSite.layanan_dedicated || "-"}).`);
         return;
       }
       if (actionType === "Downgrade" && currentMbps > 0 && targetMbps >= currentMbps) {
-        alert(`Untuk Downgrade, layanan baru (${newLayanan}) harus memiliki nilai lebih rendah dari layanan saat ini (${selectedSite.layanan_dedicated || "-"}).`);
+        void alertDialog(`Untuk Downgrade, layanan baru (${newLayanan}) harus memiliki nilai lebih rendah dari layanan saat ini (${selectedSite.layanan_dedicated || "-"}).`);
         return;
       }
     }
@@ -568,7 +570,7 @@ export default function PopSitesListPage() {
       setCreatedTicketId(data.data.id);
       fetchSites(true);
     } catch (err: any) {
-      alert(err.message || "Terjadi kesalahan");
+      void alertDialog(err.message || "Terjadi kesalahan");
     } finally {
       setIsSubmittingAction(false);
     }

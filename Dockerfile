@@ -4,7 +4,7 @@
 # STAGE 1: Base Alpine Image with Required System Libraries
 # ==============================================================================
 FROM node:22-alpine AS base
-RUN apk add --no-cache libc6-compat openssl
+RUN apk add --no-cache libc6-compat openssl libcap
 
 # ==============================================================================
 # STAGE 2: Dependencies Installation
@@ -113,7 +113,8 @@ RUN chmod +x ./docker-entrypoint.sh
 
 # Pastikan folder penyimpanan data dan upload memiliki hak akses yang benar
 RUN mkdir -p /app/prisma /app/public/uploads /app/data && \
-    chown -R nextjs:nodejs /app/prisma /app/public/uploads /app/data /app/node_modules/.bin
+    chown -R nextjs:nodejs /app/prisma /app/public/uploads /app/data /app/node_modules/.bin && \
+    setcap 'cap_net_bind_service=+ep' /usr/local/bin/node || true
 
 USER nextjs
 
@@ -122,7 +123,7 @@ RUN DATABASE_URL="postgresql://postgres:postgres@localhost:5432/actis_db?schema=
     node /opt/prisma/node_modules/prisma/build/index.js validate --schema=./prisma/schema.prisma && \
     node -e "require('@prisma/client')"
 
-EXPOSE 3000
+EXPOSE 3000 49
 
 ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["node", "server.js"]

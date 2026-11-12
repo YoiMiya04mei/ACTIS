@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { storageService } from '@/services/storageService';
 import type { ToastMessage } from '@/components/tools/Toast';
+import { useDialog } from '@/context/DialogContext';
 
 
 interface SettingsPageProps {
@@ -22,6 +23,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   addToast,
   onRefreshData,
 }) => {
+  const { confirm: confirmDialog } = useDialog();
   const [activeRole, setActiveRole] = useState<'NOC' | 'Customer Service' | 'Admin'>('NOC');
 
   // Export all RFO and Template data to JSON file
@@ -88,9 +90,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   };
 
   // Clear data
-  const handleClearAll = () => {
+  const handleClearAll = async () => {
     if (
-      window.confirm(
+      await confirmDialog(
         'PERINGATAN: Seluruh arsip RFO dan draft di browser ini akan dihapus permanen. Lanjutkan?'
       )
     ) {

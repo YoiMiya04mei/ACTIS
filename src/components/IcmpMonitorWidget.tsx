@@ -21,6 +21,7 @@ import {
   UptimeBarSlot,
   MonitorTimeframeStats,
 } from "@/lib/icmpMonitorService";
+import { useDialog } from "@/context/DialogContext";
 
 export interface Heartbeat {
   id: string;
@@ -67,6 +68,7 @@ export function IcmpMonitorWidget({
   title = "ICMP Ping Monitoring (Uptime Kuma Engine)",
   compact = false,
 }: IcmpMonitorWidgetProps) {
+  const { alert: alertDialog } = useDialog();
   const [monitor, setMonitor] = useState<MonitorData | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPinging, setIsPinging] = useState(false);
@@ -133,7 +135,7 @@ export function IcmpMonitorWidget({
       }
       setMonitor(data.data);
     } catch (err: any) {
-      alert(err.message || "Terjadi kesalahan saat ping");
+      void alertDialog(err.message || "Terjadi kesalahan saat ping");
     } finally {
       setIsPinging(false);
     }

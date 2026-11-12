@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useCurrentUser } from "@/context/UserContext";
+import { useDialog } from "@/context/DialogContext";
 import {
   ShieldCheck,
   UserPlus,
@@ -34,6 +35,7 @@ import {
 
 export default function UserSettingsPage() {
   const { currentUser, users, addUser, updateUser, deleteUser, changePassword, fetchUsers } = useCurrentUser();
+  const { confirm: confirmDialog } = useDialog();
 
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState("");
@@ -822,8 +824,8 @@ export default function UserSettingsPage() {
                   <span>{srv}</span>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (confirm(`Hapus server "${srv}" dari daftar pilihan?`)) {
+                    onClick={async () => {
+                      if (await confirmDialog(`Hapus server "${srv}" dari daftar pilihan?`)) {
                         handleAdminDeleteServer(srv);
                       }
                     }}
@@ -897,8 +899,8 @@ export default function UserSettingsPage() {
                   <span>{infra}</span>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (confirm(`Hapus infrastruktur "${infra}" dari daftar pilihan?`)) {
+                    onClick={async () => {
+                      if (await confirmDialog(`Hapus infrastruktur "${infra}" dari daftar pilihan?`)) {
                         handleAdminDeleteInfra(infra);
                       }
                     }}
@@ -972,8 +974,8 @@ export default function UserSettingsPage() {
                   <span>{media}</span>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (confirm(`Hapus media koneksi "${media}" dari daftar pilihan?`)) {
+                    onClick={async () => {
+                      if (await confirmDialog(`Hapus media koneksi "${media}" dari daftar pilihan?`)) {
                         handleAdminDeleteMedia(media);
                       }
                     }}

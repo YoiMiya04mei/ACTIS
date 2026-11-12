@@ -1,5 +1,38 @@
 [
   {
+    "id": "log-1794479728878-mobdu",
+    "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
+    "email": "admin.noc@isp-enterprise.net",
+    "ip_address": "::1",
+    "tipe": "TACACS_CLIENT",
+    "aktifitas": "Mengimpor 1 perangkat dari Backup Devices ke TACACS+ NAS Clients",
+    "detail": null,
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-12T10:35:28.883Z"
+  },
+  {
+    "id": "log-1794479511895-isdci",
+    "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
+    "email": "admin.noc@isp-enterprise.net",
+    "ip_address": "::1",
+    "tipe": "TACACS_SERVER",
+    "aktifitas": "TACACS+ Server START (RUNNING)",
+    "detail": "Port 49 | Status: RUNNING",
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-12T10:31:51.895Z"
+  },
+  {
+    "id": "log-1794479510560-7vkp8",
+    "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
+    "email": "admin.noc@isp-enterprise.net",
+    "ip_address": "::1",
+    "tipe": "TACACS_SERVER",
+    "aktifitas": "TACACS+ Server STOP (STOPPED)",
+    "detail": "Port 49 | Status: STOPPED",
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-12T10:31:50.560Z"
+  },
+  {
     "id": "log-1794470219318-fvicm",
     "nama_lengkap": "Ahmad Fauzi (Head of NOC)",
     "email": null,

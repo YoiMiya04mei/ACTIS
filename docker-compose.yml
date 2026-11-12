@@ -39,9 +39,13 @@ services:
         condition: service_healthy
     ports:
       - "${PORT:-3000}:3000"
+      - "${TACACS_PORT:-49}:${TACACS_PORT:-49}"
+    cap_add:
+      - NET_BIND_SERVICE
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - TACACS_PORT=${TACACS_PORT:-49}
       - HOSTNAME=0.0.0.0
       # Koneksi internal container ke service postgres (port 5432 internal)
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-actis_db}?schema=public

@@ -20,6 +20,7 @@ import { authService } from '@/services/authService';
 import type { UserAccount, UserRole } from '@/types/auth';
 import { ROLE_LABELS, ROLE_PERMISSIONS } from '@/types/auth';
 import type { ToastMessage } from '@/components/tools/Toast';
+import { useDialog } from '@/context/DialogContext';
 
 interface UsersPageProps {
   currentUser: UserAccount;
@@ -34,6 +35,7 @@ export const UsersPage: React.FC<UsersPageProps> = ({
   onUserChanged,
   onCurrentUserUpdated,
 }) => {
+  const { confirm: confirmDialog } = useDialog();
   const [userList, setUserList] = useState<UserAccount[]>(authService.getUsers());
   const [showAddModal, setShowAddModal] = useState<boolean>(false);
 
@@ -152,7 +154,7 @@ export const UsersPage: React.FC<UsersPageProps> = ({
     }
   };
 
-  const handleDeleteUser = (user: UserAccount) => {
+  const handleDeleteUser = async (user: UserAccount) => {
     if (!isAdmin) {
       addToast('error', 'Akses Ditolak', 'Hanya Super Admin yang dapat menghapus akun.');
       return;
@@ -163,7 +165,7 @@ export const UsersPage: React.FC<UsersPageProps> = ({
       return;
     }
 
-    if (window.confirm(`Yakin ingin menghapus akun @${user.username} (${user.name})?`)) {
+    if (await confirmDialog(`Yakin ingin menghapus akun @${user.username} (${user.name})?`)) {
       const res = authService.deleteUser(user.id);
       if (res.success) {
         addToast('info', 'Akun Dihapus', `Akun @${user.username} telah dihapus.`);

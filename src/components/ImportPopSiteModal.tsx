@@ -23,6 +23,7 @@ import {
   generatePopSiteCsvTemplate,
   PopSiteImportRow,
 } from "@/lib/popSiteImportService";
+import { useDialog } from "@/context/DialogContext";
 
 interface ImportPopSiteModalProps {
   isOpen: boolean;
@@ -35,6 +36,7 @@ export function ImportPopSiteModal({
   onClose,
   onSuccess,
 }: ImportPopSiteModalProps) {
+  const { alert: alertDialog } = useDialog();
   const [activeTab, setActiveTab] = useState<"file" | "paste">("file");
   const [csvText, setCsvText] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
@@ -84,7 +86,7 @@ export function ImportPopSiteModal({
   // Handle File Input
   const processFile = async (file: File) => {
     if (!file.name.endsWith(".csv") && !file.name.endsWith(".txt")) {
-      alert("Format file tidak didukung. Harap unggah file .csv");
+      void alertDialog("Format file tidak didukung. Harap unggah file .csv");
       return;
     }
     setFileName(file.name);
@@ -166,7 +168,7 @@ export function ImportPopSiteModal({
 
       setImportResult(data.data);
     } catch (err: any) {
-      alert(err.message || "Terjadi kesalahan saat memproses import");
+      void alertDialog(err.message || "Terjadi kesalahan saat memproses import");
     } finally {
       setIsSubmitting(false);
     }

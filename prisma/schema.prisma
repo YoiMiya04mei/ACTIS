@@ -434,3 +434,94 @@ model OtbCorePort {
   @@map("otb_core_ports")
 }
 
+// ============================================================================
+// TACACS+ AAA SERVER MODELS (RFC 8907)
+// ============================================================================
+
+model TacacsGroup {
+  id              String       @id @default(uuid())
+  name            String       @unique
+  description     String?
+  privilege_level Int          @default(15) // 0..15
+  default_policy  String       @default("deny") // permit, deny
+  command_rules   String       @default("[]") @db.Text // JSON array of { id, action, pattern, description }
+  service_attrs   String?      @db.Text // JSON array of { key, value } e.g. Mikrotik-Group=full
+  is_active       Boolean      @default(true)
+  created_at      DateTime     @default(now())
+  updated_at      DateTime     @default(now()) @updatedAt
+
+  users TacacsUser[]
+
+  @@map("tacacs_groups")
+}
+
+model TacacsUser {
+  id                   String       @id @default(uuid())
+  username             String       @unique
+  full_name            String?
+  password_hash        String
+  chap_secret_enc      String?      // AES-256-GCM encrypted password for CHAP/MS-CHAP support
+  enable_password_hash String?      // Optional separate enable password hash
+  privilege_level      Int?         // Optional override (0..15); null inherits from group
+  group_id             String?
+  group                TacacsGroup? @relation(fields: [group_id], references: [id], onDelete: SetNull)
+  is_active            Boolean      @default(true)
+  expires_at           DateTime?
+  last_login_at        DateTime?
+  last_login_ip        String?
+  notes                String?      @db.Text
+  created_by           String?
+  created_at           DateTime     @default(now())
+  updated_at           DateTime     @default(now()) @updatedAt
+
+  @@index([group_id])
+  @@index([is_active])
+  @@map("tacacs_users")
+}
+
+model TacacsClient {
+  id                String    @id @default(uuid())
+  name              String
+  ip_or_cidr        String    // Single IP (e.g. 10.10.1.1) or CIDR (e.g. 10.10.0.0/24)
+  vendor            String    @default("cisco") // cisco, mikrotik, juniper, huawei, arista, fortinet, custom
+  shared_secret_enc String    // AES-256-GCM encrypted TACACS+ shared key
+  network_device_id String?   // Optional reference to NetworkDevice.id
+  pop_site_id       String?   // Optional reference to PopSite.id
+  is_active         Boolean   @default(true)
+  description       String?
+  last_seen_at      DateTime?
+  created_at        DateTime  @default(now())
+  updated_at        DateTime  @default(now()) @updatedAt
+
+  @@index([is_active])
+  @@index([vendor])
+  @@map("tacacs_clients")
+}
+
+model TacacsAuditLog {
+  id          String   @id @default(uuid())
+  event_type  String   // AUTHEN, AUTHOR, ACCT
+  status      String   // PASS, FAIL, ERROR, START, STOP, UPDATE
+  username    String
+  client_ip   String
+  client_name String?
+  remote_addr String?
+  port        String?
+  authen_type String?  // ASCII, PAP, CHAP, ENABLE
+  service     String?  // shell, exec, ppp, etc.
+  priv_lvl    Int?
+  command     String?  @db.Text
+  args_json   String?  @db.Text
+  session_id  String?
+  elapsed_sec Int?
+  detail      String?  @db.Text
+  created_at  DateTime @default(now())
+
+  @@index([created_at])
+  @@index([event_type, created_at])
+  @@index([username, created_at])
+  @@index([client_ip])
+  @@map("tacacs_audit_logs")
+}
+
+

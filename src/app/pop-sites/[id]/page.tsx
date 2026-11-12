@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, use, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/context/UserContext";
+import { useDialog } from "@/context/DialogContext";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LightboxModal } from "@/components/LightboxModal";
 import { SearchableSelect } from "@/components/SearchableSelect";
@@ -195,6 +196,7 @@ export default function PopSiteDetailPage({
   const router = useRouter();
   const { id } = use(params);
   const { currentUser } = useCurrentUser();
+  const { alert: alertDialog } = useDialog();
 
   const [site, setSite] = useState<PopSiteDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -282,11 +284,11 @@ export default function PopSiteDetailPage({
   const handleDeleteSite = async () => {
     if (!site) return;
     if (!isSuperAdmin) {
-      alert("Akses ditolak: Hanya akun level Super Admin yang dapat menghapus POP Site.");
+      void alertDialog("Akses ditolak: Hanya akun level Super Admin yang dapat menghapus POP Site.");
       return;
     }
     if (site.status_layanan !== "Terminated") {
-      alert(`Hanya POP Site berstatus Terminated yang dapat dihapus. Status saat ini: ${site.status_layanan}`);
+      void alertDialog(`Hanya POP Site berstatus Terminated yang dapat dihapus. Status saat ini: ${site.status_layanan}`);
       return;
     }
 
@@ -301,10 +303,10 @@ export default function PopSiteDetailPage({
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Gagal menghapus POP Site.");
       }
-      alert(`POP Site [${site.site_id}] berhasil dihapus secara permanen.`);
+      await alertDialog(`POP Site [${site.site_id}] berhasil dihapus secara permanen.`);
       router.push("/pop-sites");
     } catch (err: any) {
-      alert(err.message || "Gagal menghapus POP Site");
+      void alertDialog(err.message || "Gagal menghapus POP Site");
     } finally {
       setIsDeleting(false);
       setDeleteModalOpen(false);
@@ -388,18 +390,18 @@ export default function PopSiteDetailPage({
 
     if (actionType === "Upgrade" || actionType === "Downgrade") {
       if (!newLayanan) {
-        alert("Silakan pilih layanan & bandwidth baru.");
+        void alertDialog("Silakan pilih layanan & bandwidth baru.");
         return;
       }
       const currentMbps = parseBandwidthToMbps(site.layanan_dedicated || site.kapasitas_layanan);
       const targetMbps = parseBandwidthToMbps(newLayanan);
 
       if (actionType === "Upgrade" && currentMbps > 0 && targetMbps <= currentMbps) {
-        alert(`Untuk Upgrade, layanan baru (${newLayanan}) harus memiliki nilai lebih tinggi dari layanan saat ini (${site.layanan_dedicated || "-"}).`);
+        void alertDialog(`Untuk Upgrade, layanan baru (${newLayanan}) harus memiliki nilai lebih tinggi dari layanan saat ini (${site.layanan_dedicated || "-"}).`);
         return;
       }
       if (actionType === "Downgrade" && currentMbps > 0 && targetMbps >= currentMbps) {
-        alert(`Untuk Downgrade, layanan baru (${newLayanan}) harus memiliki nilai lebih rendah dari layanan saat ini (${site.layanan_dedicated || "-"}).`);
+        void alertDialog(`Untuk Downgrade, layanan baru (${newLayanan}) harus memiliki nilai lebih rendah dari layanan saat ini (${site.layanan_dedicated || "-"}).`);
         return;
       }
     }
@@ -432,7 +434,7 @@ export default function PopSiteDetailPage({
       setCreatedTicketId(data.data.id);
       fetchSiteDetail();
     } catch (err: any) {
-      alert(err.message || "Terjadi kesalahan");
+      void alertDialog(err.message || "Terjadi kesalahan");
     } finally {
       setIsSubmittingAction(false);
     }

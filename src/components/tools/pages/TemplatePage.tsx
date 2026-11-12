@@ -33,6 +33,7 @@ import { SignatureBlock } from '@/components/tools/SignatureBlock';
 import { SuratTugasTemplateEditor } from '@/components/tools/SuratTugasTemplateEditor';
 import { BeritaAcaraTemplateEditor } from '@/components/tools/BeritaAcaraTemplateEditor';
 import { PermitBarangTemplateEditor } from '@/components/tools/PermitBarangTemplateEditor';
+import { useDialog } from '@/context/DialogContext';
 import { processImageFile } from '@/utils/imageUtils';
 import { extractFromDocx } from '@/utils/docxUtils';
 import { extractFromPdf } from '@/utils/pdfUtils';
@@ -65,6 +66,7 @@ export const TemplatePage: React.FC<TemplatePageProps> = ({
   currentUser,
   initialSubTab = 'rfo',
 }) => {
+  const { confirm: confirmDialog } = useDialog();
   const isAdmin = !currentUser || currentUser.role === 'admin' || (currentUser as any).role === 'noc_engineer';
   const [activeSubTab, setActiveSubTab] = useState<'rfo' | 'surat-tugas' | 'berita-acara' | 'permit-barang'>(initialSubTab);
   const [formData, setFormData] = useState<RFOTemplate>({ ...template });
@@ -157,7 +159,7 @@ export const TemplatePage: React.FC<TemplatePageProps> = ({
     }
 
     if (
-      window.confirm(
+      await confirmDialog(
         'Apakah Anda yakin ingin mengembalikan template ke konfigurasi standar PT Jembatan Data Pangrango?'
       )
     ) {

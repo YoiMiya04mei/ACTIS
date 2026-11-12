@@ -28,6 +28,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
+import { useDialog } from "@/context/DialogContext";
 import {
   SubnetSummary,
   IpamGlobalSummary,
@@ -37,6 +38,7 @@ import {
 
 export default function IpamPage() {
   const { currentUser } = useCurrentUser();
+  const { confirm: confirmDialog, alert: alertDialog } = useDialog();
   const isAdmin = currentUser?.role === "admin";
 
   const [loading, setLoading] = useState(true);
@@ -123,7 +125,7 @@ export default function IpamPage() {
   };
 
   const handleDeletePrefix = async (cidr: string) => {
-    if (!confirm(`Hapus prefix '${cidr}' dari manajemen IPAM?`)) return;
+    if (!(await confirmDialog(`Hapus prefix '${cidr}' dari manajemen IPAM?`))) return;
 
     try {
       const res = await fetch(`/api/ipam/prefixes?cidr=${encodeURIComponent(cidr)}`, {
@@ -138,15 +140,15 @@ export default function IpamPage() {
       }
       await fetchIpamData();
     } catch (err: any) {
-      alert(err.message || "Gagal menghapus prefix");
+      void alertDialog(err.message || "Gagal menghapus prefix");
     }
   };
 
   const handleResetDefaults = async () => {
     if (
-      !confirm(
+      !(await confirmDialog(
         "Kembalikan seluruh konfigurasi prefix IP Public ke 5 blok prefix default sistem?"
-      )
+      ))
     )
       return;
 
@@ -159,7 +161,7 @@ export default function IpamPage() {
       setSelectedPrefixCidr("ALL");
       await fetchIpamData();
     } catch (err: any) {
-      alert(err.message || "Gagal mereset prefix");
+      void alertDialog(err.message || "Gagal mereset prefix");
     }
   };
 
@@ -217,7 +219,7 @@ export default function IpamPage() {
   // Export CSV handler
   const handleExportCsv = () => {
     if (displayedUsedIps.length === 0) {
-      alert("Tidak ada data IP untuk diexport.");
+      void alertDialog("Tidak ada data IP untuk diexport.");
       return;
     }
 

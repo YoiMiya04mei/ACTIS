@@ -5,6 +5,11 @@ export async function register() {
   ) {
     const { ensureBackupSchedulerStarted } = await import("@/lib/backupSchedulerService");
     ensureBackupSchedulerStarted(60);
+
+    const { ensureTacacsServerStarted } = await import("@/lib/tacacs/server");
+    ensureTacacsServerStarted().catch((err) => {
+      console.error("[TACACS+] Startup bootstrap error:", err);
+    });
   }
 }
 

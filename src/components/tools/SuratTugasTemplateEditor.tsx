@@ -29,6 +29,7 @@ import { processImageFile } from '@/utils/imageUtils';
 import { extractFromPdf } from '@/utils/pdfUtils';
 import { extractFromDocx } from '@/utils/docxUtils';
 import type { ToastMessage } from './Toast';
+import { useDialog } from '@/context/DialogContext';
 
 interface SuratTugasTemplateEditorProps {
   template: SuratTugasTemplate;
@@ -43,6 +44,7 @@ export const SuratTugasTemplateEditor: React.FC<SuratTugasTemplateEditorProps> =
   addToast,
   currentUser,
 }) => {
+  const { confirm: confirmDialog } = useDialog();
   const isAdmin = !currentUser || currentUser.role === 'admin' || (currentUser as any).role === 'noc_engineer';
   const [formData, setFormData] = useState<SuratTugasTemplate>(() => {
     const initial = { ...template };
@@ -159,7 +161,7 @@ export const SuratTugasTemplateEditor: React.FC<SuratTugasTemplateEditorProps> =
     }
 
     if (
-      window.confirm(
+      await confirmDialog(
         'Apakah Anda yakin ingin mengembalikan template Surat Tugas ke konfigurasi standar PT Jembatan Data Pangrango?'
       )
     ) {

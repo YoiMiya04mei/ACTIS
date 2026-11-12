@@ -40,6 +40,7 @@ import {
 import { permitBarangStorage } from '@/services/permitBarangStorage';
 import { PDFService } from '@/services/pdfService';
 import { toDateInputString } from '@/utils/dateFormatter';
+import { useDialog } from '@/context/DialogContext';
 
 interface CreatePermitBarangPageProps {
   template: RFOTemplate;
@@ -78,6 +79,7 @@ export const CreatePermitBarangPage: React.FC<CreatePermitBarangPageProps> = ({
   onSaved,
   currentUser,
 }) => {
+  const { confirm: confirmDialog } = useDialog();
   // Form State
   const [permitType, setPermitType] = useState<PermitType>(
     initialEditData?.permitType || 'keluar'
@@ -452,7 +454,7 @@ export const CreatePermitBarangPage: React.FC<CreatePermitBarangPageProps> = ({
   };
 
   const handleResetForm = async () => {
-    if (window.confirm('Reset formulir surat permit barang ke data awal?')) {
+    if (await confirmDialog('Reset formulir surat permit barang ke data awal?')) {
       setEditingId(null);
       setPermitType('keluar');
       setSubject('Permit Keluar Barang');

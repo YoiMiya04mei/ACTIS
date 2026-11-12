@@ -16,6 +16,7 @@ import React, { useState, useEffect, useCallback, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/context/UserContext";
+import { useDialog } from "@/context/DialogContext";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LightboxModal } from "@/components/LightboxModal";
 import {
@@ -132,6 +133,7 @@ export default function NocWorkspacePage({
   const router = useRouter();
   const { id } = use(params);
   const { currentUser } = useCurrentUser();
+  const { confirm: confirmDialog, alert: alertDialog } = useDialog();
 
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [configDispatchText, setConfigDispatchText] = useState("");
@@ -228,7 +230,7 @@ export default function NocWorkspacePage({
       setProgressInput("");
       fetchOrderDetail();
     } catch (err: any) {
-      alert(err.message || "Gagal mengirim log");
+      void alertDialog(err.message || "Gagal mengirim log");
     } finally {
       setIsSubmittingLog(false);
     }
@@ -258,7 +260,7 @@ export default function NocWorkspacePage({
 
       fetchOrderDetail();
     } catch (err: any) {
-      alert(err.message || "Gagal memperbarui status");
+      void alertDialog(err.message || "Gagal memperbarui status");
     } finally {
       setIsUpdatingStatus(false);
     }
@@ -277,7 +279,7 @@ export default function NocWorkspacePage({
       return;
     }
 
-    if (!confirm(`Konfirmasi Go-Live untuk tiket ${order.ticket_number}?`)) return;
+    if (!(await confirmDialog(`Konfirmasi Go-Live untuk tiket ${order.ticket_number}?`))) return;
 
     setIsUpdatingStatus(true);
     try {
@@ -331,7 +333,7 @@ export default function NocWorkspacePage({
 
       fetchOrderDetail();
     } catch (err: any) {
-      alert(err.message || "Gagal mengunggah file hasil test");
+      void alertDialog(err.message || "Gagal mengunggah file hasil test");
     } finally {
       setIsUploading(false);
     }

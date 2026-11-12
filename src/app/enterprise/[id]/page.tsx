@@ -16,6 +16,7 @@ import React, { useState, useEffect, useCallback, use, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/context/UserContext";
+import { useDialog } from "@/context/DialogContext";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LightboxModal } from "@/components/LightboxModal";
 import { SearchableSelect } from "@/components/SearchableSelect";
@@ -212,6 +213,7 @@ export default function EnterpriseSiteDetailPage({
   const router = useRouter();
   const { id } = use(params);
   const { currentUser } = useCurrentUser();
+  const { alert: alertDialog } = useDialog();
 
   const [site, setSite] = useState<EnterpriseSiteDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -385,18 +387,18 @@ export default function EnterpriseSiteDetailPage({
 
     if (actionType === "Upgrade" || actionType === "Downgrade") {
       if (!newLayanan) {
-        alert("Silakan tentukan paket / kapasitas baru.");
+        void alertDialog("Silakan tentukan paket / kapasitas baru.");
         return;
       }
       const currentMbps = parseBandwidthToMbps(site.layanan_dedicated || site.kapasitas_layanan);
       const targetMbps = parseBandwidthToMbps(newLayanan);
 
       if (actionType === "Upgrade" && currentMbps > 0 && targetMbps <= currentMbps) {
-        alert(`Untuk Upgrade, layanan baru (${newLayanan}) harus memiliki nilai lebih tinggi dari layanan saat ini (${site.layanan_dedicated || site.kapasitas_layanan || "-"}).`);
+        void alertDialog(`Untuk Upgrade, layanan baru (${newLayanan}) harus memiliki nilai lebih tinggi dari layanan saat ini (${site.layanan_dedicated || site.kapasitas_layanan || "-"}).`);
         return;
       }
       if (actionType === "Downgrade" && currentMbps > 0 && targetMbps >= currentMbps) {
-        alert(`Untuk Downgrade, layanan baru (${newLayanan}) harus memiliki nilai lebih rendah dari layanan saat ini (${site.layanan_dedicated || site.kapasitas_layanan || "-"}).`);
+        void alertDialog(`Untuk Downgrade, layanan baru (${newLayanan}) harus memiliki nilai lebih rendah dari layanan saat ini (${site.layanan_dedicated || site.kapasitas_layanan || "-"}).`);
         return;
       }
     }
@@ -429,7 +431,7 @@ export default function EnterpriseSiteDetailPage({
       setCreatedTicketId(data.data.id);
       fetchSiteDetail();
     } catch (err: any) {
-      alert(err.message || "Terjadi kesalahan");
+      void alertDialog(err.message || "Terjadi kesalahan");
     } finally {
       setIsSubmittingAction(false);
     }

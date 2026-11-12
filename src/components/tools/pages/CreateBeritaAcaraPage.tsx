@@ -41,6 +41,7 @@ import {
 import { beritaAcaraStorage } from '@/services/beritaAcaraStorage';
 import { toDateInputString } from '@/utils/dateFormatter';
 import { compressDocumentationPhoto, compressBase64Image } from '@/utils/imageUtils';
+import { useDialog } from '@/context/DialogContext';
 
 interface CreateBeritaAcaraPageProps {
   template: RFOTemplate;
@@ -79,6 +80,7 @@ export const CreateBeritaAcaraPage: React.FC<CreateBeritaAcaraPageProps> = ({
   onSaved,
   currentUser,
 }) => {
+  const { confirm: confirmDialog } = useDialog();
   // Form State
   const [createdDate, setCreatedDate] = useState<string>(toDateInputString());
   const [letterLocation, setLetterLocation] = useState<string>(
@@ -459,7 +461,7 @@ export const CreateBeritaAcaraPage: React.FC<CreateBeritaAcaraPageProps> = ({
   };
 
   const handleResetForm = async () => {
-    if (window.confirm('Reset formulir Berita Acara ke kondisi awal?')) {
+    if (await confirmDialog('Reset formulir Berita Acara ke kondisi awal?')) {
       setEditingId(null);
       const nextSeq = await beritaAcaraStorage.getNextSequenceNumber();
       setSequenceNumber(nextSeq);

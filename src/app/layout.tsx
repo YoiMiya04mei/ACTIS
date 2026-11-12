@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { UserProvider } from "@/context/UserContext";
 import { ThemeProvider } from "@/context/ThemeContext";
+import { DialogProvider } from "@/context/DialogContext";
 import { AppShell } from "@/components/AppShell";
 
 export const metadata: Metadata = {
@@ -53,7 +54,9 @@ export default function RootLayout({
       <body className="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 antialiased min-h-full w-full flex flex-col transition-colors duration-150">
         <ThemeProvider>
           <UserProvider>
-            <AppShell>{children}</AppShell>
+            <DialogProvider>
+              <AppShell>{children}</AppShell>
+            </DialogProvider>
           </UserProvider>
         </ThemeProvider>
       </body>

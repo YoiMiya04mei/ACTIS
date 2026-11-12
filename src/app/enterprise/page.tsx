@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useCurrentUser } from "@/context/UserContext";
+import { useDialog } from "@/context/DialogContext";
 import { StatusBadge } from "@/components/StatusBadge";
 import { LightboxModal } from "@/components/LightboxModal";
 import { SearchableSelect } from "@/components/SearchableSelect";
@@ -135,6 +136,7 @@ interface EnterpriseSiteItem {
 
 export default function EnterpriseListPage() {
   const { currentUser } = useCurrentUser();
+  const { alert: alertDialog } = useDialog();
 
   const [sites, setSites] = useState<EnterpriseSiteItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -307,7 +309,7 @@ export default function EnterpriseListPage() {
 
   const handleOpenBulkAction = (type: "Upgrade" | "Downgrade" | "Isolir" | "Terminate") => {
     if ((type === "Upgrade" || type === "Downgrade") && hasIsolirOrTerminatedSelected) {
-      alert("Upgrade dan Downgrade massal tidak dapat dilakukan karena terdapat sirkuit dengan status Isolir atau Terminated yang dipilih. Pastikan seluruh sirkuit terpilih berstatus Active.");
+      void alertDialog("Upgrade dan Downgrade massal tidak dapat dilakukan karena terdapat sirkuit dengan status Isolir atau Terminated yang dipilih. Pastikan seluruh sirkuit terpilih berstatus Active.");
       return;
     }
     setBulkActionType(type);
@@ -328,11 +330,11 @@ export default function EnterpriseListPage() {
     if (!bulkActionType || selectedSiteIds.length === 0) return;
 
     if ((bulkActionType === "Upgrade" || bulkActionType === "Downgrade") && !bulkNewLayanan) {
-      alert("Silakan tentukan paket / kapasitas layanan baru.");
+      void alertDialog("Silakan tentukan paket / kapasitas layanan baru.");
       return;
     }
     if (!bulkAlasan.trim()) {
-      alert(`Silakan isi alasan pengajuan ${bulkActionType}.`);
+      void alertDialog(`Silakan isi alasan pengajuan ${bulkActionType}.`);
       return;
     }
 
@@ -365,7 +367,7 @@ export default function EnterpriseListPage() {
       });
       fetchSites(true);
     } catch (err: any) {
-      alert(err.message || "Terjadi kesalahan saat memproses aksi massal.");
+      void alertDialog(err.message || "Terjadi kesalahan saat memproses aksi massal.");
     } finally {
       setIsSubmittingBulkAction(false);
     }
@@ -426,18 +428,18 @@ export default function EnterpriseListPage() {
 
     if (actionType === "Upgrade" || actionType === "Downgrade") {
       if (!newLayanan) {
-        alert("Silakan tentukan paket / kapasitas baru.");
+        void alertDialog("Silakan tentukan paket / kapasitas baru.");
         return;
       }
       const currentMbps = parseBandwidthToMbps(selectedSite.layanan_dedicated || selectedSite.kapasitas_layanan);
       const targetMbps = parseBandwidthToMbps(newLayanan);
 
       if (actionType === "Upgrade" && currentMbps > 0 && targetMbps <= currentMbps) {
-        alert(`Untuk Upgrade, layanan baru (${newLayanan}) harus memiliki nilai lebih tinggi dari layanan saat ini (${selectedSite.layanan_dedicated || selectedSite.kapasitas_layanan || "-"}).`);
+        void alertDialog(`Untuk Upgrade, layanan baru (${newLayanan}) harus memiliki nilai lebih tinggi dari layanan saat ini (${selectedSite.layanan_dedicated || selectedSite.kapasitas_layanan || "-"}).`);
         return;
       }
       if (actionType === "Downgrade" && currentMbps > 0 && targetMbps >= currentMbps) {
-        alert(`Untuk Downgrade, layanan baru (${newLayanan}) harus memiliki nilai lebih rendah dari layanan saat ini (${selectedSite.layanan_dedicated || selectedSite.kapasitas_layanan || "-"}).`);
+        void alertDialog(`Untuk Downgrade, layanan baru (${newLayanan}) harus memiliki nilai lebih rendah dari layanan saat ini (${selectedSite.layanan_dedicated || selectedSite.kapasitas_layanan || "-"}).`);
         return;
       }
     }
@@ -470,7 +472,7 @@ export default function EnterpriseListPage() {
       setCreatedTicketId(data.data.id);
       fetchSites(true);
     } catch (err: any) {
-      alert(err.message || "Terjadi kesalahan sistem.");
+      void alertDialog(err.message || "Terjadi kesalahan sistem.");
     } finally {
       setIsSubmittingAction(false);
     }

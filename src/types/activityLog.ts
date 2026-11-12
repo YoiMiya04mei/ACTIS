@@ -22,6 +22,11 @@ export type ActivityType =
   | "BACKUP_MANUAL"
   | "BACKUP_FAILED"
   | "CREATE_DEVICE"
+  | "TACACS_SERVER"
+  | "TACACS_USER"
+  | "TACACS_GROUP"
+  | "TACACS_CLIENT"
+  | "TACACS_CONFIG"
   | "UPDATE_DATA"
   | "DELETE_DATA"
   | "SYSTEM";

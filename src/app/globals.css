@@ -303,10 +303,76 @@ dialog:modal {
   overscroll-behavior: contain;
 }
 dialog::backdrop {
-  background-color: rgba(2, 6, 23, 0.68);
-  backdrop-filter: blur(4px);
+  background-color: rgba(2, 6, 23, 0.58);
+  backdrop-filter: blur(5px);
   overflow: hidden;
   overscroll-behavior: contain;
 }
+
+/* Top-layer entry/exit animation for global ACTIS confirmation & alert dialogs */
+dialog.actis-dialog {
+  opacity: 0;
+  transition-property: opacity, transform, display, overlay;
+  transition-duration: 0.22s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  transition-behavior: allow-discrete;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  dialog.actis-dialog {
+    transform: scale(0.94) translateY(8px);
+  }
+}
+
+dialog.actis-dialog[open]:where(:not([data-closing])) {
+  opacity: 1;
+}
+
+@starting-style {
+  dialog.actis-dialog[open]:where(:not([data-closing])) {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  dialog.actis-dialog[open]:where(:not([data-closing])) {
+    transform: scale(1) translateY(0);
+  }
+
+  @starting-style {
+    dialog.actis-dialog[open]:where(:not([data-closing])) {
+      transform: scale(0.94) translateY(8px);
+    }
+  }
+}
+
+dialog.actis-dialog::backdrop {
+  background-color: rgba(2, 6, 23, 0);
+  backdrop-filter: blur(0px);
+  transition-property: background-color, backdrop-filter, display, overlay;
+  transition-duration: 0.22s;
+  transition-timing-function: ease-out;
+  transition-behavior: allow-discrete;
+}
+
+dialog.actis-dialog[open]:where(:not([data-closing]))::backdrop {
+  background-color: rgba(2, 6, 23, 0.62);
+  backdrop-filter: blur(5px);
+}
+
+@starting-style {
+  dialog.actis-dialog[open]:where(:not([data-closing]))::backdrop {
+    background-color: rgba(2, 6, 23, 0);
+    backdrop-filter: blur(0px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog.actis-dialog,
+  dialog.actis-dialog::backdrop {
+    transition-duration: 0.1s;
+  }
+}
+
 
 
