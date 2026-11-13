@@ -6,26 +6,19 @@ import {
   maskBotToken,
   isMaskedTokenInput,
 } from "@/lib/telegramService";
-import { verifySessionToken } from "@/lib/auth";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { requireAuth } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
-
-function resolveRequestMeta(request: NextRequest) {
-  const sessionCookie = request.cookies.get("actis_session")?.value;
-  const sessionUser = verifySessionToken(sessionCookie);
-  const actorName = sessionUser?.nama || "Administrator";
-  const clientIp =
-    request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
-  const userAgent = parseUserAgent(request.headers.get("user-agent"));
-  return { actorName, clientIp, userAgent };
-}
 
 /**
  * GET /api/orders/telegram
  * Mendapatkan konfigurasi Bot Telegram khusus notifikasi tiket selesai (token disamarkan)
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const config = await getTicketTelegramConfig();
 
@@ -73,9 +66,14 @@ export async function POST(request: NextRequest) {
       include_notes?: boolean;
     };
 
-    const { actorName, clientIp, userAgent } = resolveRequestMeta(request);
-
     if (action === "test") {
+      const auth = await requireAuth(request);
+      if (!auth.ok) return auth.response;
+
+      const actorName = auth.user.nama;
+      const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
+      const userAgent = parseUserAgent(request.headers.get("user-agent"));
+
       const testToken = typeof bot_token === "string" ? bot_token.trim() : undefined;
       const testChatId = typeof chat_id === "string" ? chat_id.trim() : undefined;
 
@@ -110,6 +108,14 @@ export async function POST(request: NextRequest) {
         message: "Pesan tes notifikasi tiket selesai berhasil terkirim ke Telegram!",
       });
     }
+
+    // Saving settings requires admin role
+    const adminAuth = await requireAuth(request, { requireAdmin: true });
+    if (!adminAuth.ok) return adminAuth.response;
+
+    const actorName = adminAuth.user.nama;
+    const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
+    const userAgent = parseUserAgent(request.headers.get("user-agent"));
 
     const updated = await saveTicketTelegramConfig({
       ...(typeof bot_token === "string" && !isMaskedTokenInput(bot_token)

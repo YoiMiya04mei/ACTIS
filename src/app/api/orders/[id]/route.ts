@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateNocCoordinationText } from "@/lib/ticketUtils";
+import { requireAuth } from "@/lib/security";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const { id } = await params;
 
@@ -47,9 +53,8 @@ export async function GET(
   } catch (err: any) {
     console.error("GET /api/orders/[id] error:", err);
     return NextResponse.json(
-      { success: false, error: err.message || "Failed to load order" },
+      { success: false, error: "Failed to load order" },
       { status: 500 }
     );
   }
 }
-

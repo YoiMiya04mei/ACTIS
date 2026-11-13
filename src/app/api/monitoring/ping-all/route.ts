@@ -1,7 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { pingAllMonitors } from "@/lib/icmpMonitorService";
+import { requireAuth } from "@/lib/security";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const result = await pingAllMonitors();
     return NextResponse.json({

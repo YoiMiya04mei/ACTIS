@@ -7,6 +7,7 @@ import { testDeviceSshConnection } from "@/lib/networkSshService";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 import { serializeDeviceSafe } from "@/lib/backupSerializer";
 import { getBackupGlobalSettings } from "@/lib/backupSchedulerService";
+import { isRestrictedNetworkTarget } from "@/lib/security";
 
 export async function POST(request: NextRequest) {
   const auth = await requireBackupAuth(request);
@@ -24,10 +25,18 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      const targetHost = String(body.host).trim();
+      if (isRestrictedNetworkTarget(targetHost)) {
+        return NextResponse.json(
+          { success: false, error: "Akses host ditolak: Alamat IP link-local, cloud metadata, atau loopback diblokir demi keamanan." },
+          { status: 400 }
+        );
+      }
+
       const res = await testDeviceSshConnection({
         id: "unsaved-test",
         name: body.name || body.host,
-        host: String(body.host).trim(),
+        host: targetHost,
         port: parseInt(String(body.port || 22), 10) || 22,
         vendor: String(body.vendor || "mikrotik"),
         platform: body.platform || null,
@@ -51,6 +60,13 @@ export async function POST(request: NextRequest) {
     if (!name || !host) {
       return NextResponse.json(
         { success: false, error: "Nama perangkat dan IP / Hostname wajib diisi." },
+        { status: 400 }
+      );
+    }
+
+    if (isRestrictedNetworkTarget(host)) {
+      return NextResponse.json(
+        { success: false, error: "Akses host ditolak: Alamat IP link-local, cloud metadata, atau loopback diblokir demi keamanan." },
         { status: 400 }
       );
     }

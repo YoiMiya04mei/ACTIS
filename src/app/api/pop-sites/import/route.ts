@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifySessionToken } from "@/lib/auth";
 import {
   parseAndValidatePopSiteCsv,
   generatePopSiteCsvTemplate,
@@ -8,12 +7,16 @@ import {
 } from "@/lib/popSiteImportService";
 import { ensureIcmpMonitorForSite } from "@/lib/icmpMonitorService";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { requireAuth } from "@/lib/security";
 
 /**
  * GET /api/pop-sites/import
  * Mengunduh file template CSV resmi untuk import POP Site.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const csvContent = generatePopSiteCsvTemplate();
 
@@ -39,25 +42,13 @@ export async function GET() {
  * Menerima list data baris POP Site (JSON atau CSV FormData) untuk migrasi massal.
  */
 export async function POST(request: NextRequest) {
-  try {
-    // 1. Resolve user actor
-    let actorId = "usr-admin-001";
-    let actorName = "Admin System";
+  const auth = await requireAuth(request, { requireAdmin: true });
+  if (!auth.ok) return auth.response;
 
-    const sessionCookie = request.cookies.get("actis_session")?.value;
-    const sessionUser = verifySessionToken(sessionCookie);
-    if (sessionUser?.id) {
-      actorId = sessionUser.id;
-      actorName = sessionUser.nama || sessionUser.email || "User";
-    } else {
-      const defaultUser = await prisma.user.findFirst({
-        where: { role: "admin" },
-      });
-      if (defaultUser) {
-        actorId = defaultUser.id;
-        actorName = defaultUser.nama;
-      }
-    }
+  try {
+    // 1. Resolve user actor from authenticated admin session
+    const actorId = auth.user.id;
+    const actorName = auth.user.nama;
 
     // 2. Parse request payload (JSON or Multipart Form)
     let rawSites: PopSiteImportRow[] = [];

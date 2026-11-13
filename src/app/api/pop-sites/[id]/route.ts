@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifySessionToken } from "@/lib/auth";
 import { updateIcmpMonitorIp } from "@/lib/icmpMonitorService";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { requireAuth } from "@/lib/security";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const { id } = await params;
 
@@ -55,6 +58,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const { id } = await params;
     const body = await request.json();
@@ -70,20 +76,8 @@ export async function PATCH(
       );
     }
 
-    // Resolve user (from session token or body)
-    let actorId = body.user_id;
-    const sessionCookie = request.cookies.get("actis_session")?.value;
-    const sessionUser = verifySessionToken(sessionCookie);
-    if (sessionUser?.id) {
-      actorId = sessionUser.id;
-    }
-
-    if (!actorId) {
-      const defaultUser = await prisma.user.findFirst({
-        where: { role: "admin" },
-      });
-      actorId = defaultUser?.id || "usr-admin-001";
-    }
+    // Resolve user strictly from verified session
+    const actorId = auth.user.id;
 
     // List of editable fields (EXCLUDING layanan_dedicated!)
     const fieldDefinitions: Array<{
@@ -276,41 +270,12 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth(request, { requireAdmin: true });
+  if (!auth.ok) return auth.response;
+
   try {
     const { id } = await params;
-
-    // Check user & superadmin authorization
-    const { searchParams } = new URL(request.url);
-    const userIdQuery = searchParams.get("user_id");
-
-    let actorId = userIdQuery;
-    if (!actorId) {
-      const authHeader = request.headers.get("authorization");
-      const cookieToken = request.cookies.get("actis_session")?.value;
-      const token = authHeader?.replace("Bearer ", "") || cookieToken;
-      if (token) {
-        const payload = verifySessionToken(token);
-        if (payload?.id) actorId = payload.id;
-      }
-    }
-
-    if (!actorId) {
-      return NextResponse.json(
-        { success: false, error: "Identifikasi akun pengguna diperlukan untuk melakukan penghapusan." },
-        { status: 401 }
-      );
-    }
-
-    const actorUser = await prisma.user.findUnique({
-      where: { id: actorId },
-    });
-
-    if (!actorUser || (actorUser.role !== "admin" && actorUser.role !== "superadmin")) {
-      return NextResponse.json(
-        { success: false, error: "Akses ditolak. Fitur hapus POP Site hanya diizinkan untuk level akun Super Admin." },
-        { status: 403 }
-      );
-    }
+    const actorUser = auth.user;
 
     const site = await prisma.popSite.findUnique({
       where: { id },

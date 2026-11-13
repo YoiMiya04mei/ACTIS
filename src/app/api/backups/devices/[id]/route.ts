@@ -6,6 +6,7 @@ import { resolveIntervalDays } from "@/lib/backupVendorProfiles";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 import { serializeDeviceSafe } from "@/lib/backupSerializer";
 import { getBackupGlobalSettings } from "@/lib/backupSchedulerService";
+import { isRestrictedNetworkTarget } from "@/lib/security";
 
 function resolveSecretUpdate(incoming: unknown, existing: string | null): string | null {
   if (incoming === undefined) return existing;
@@ -42,6 +43,13 @@ export async function PATCH(
           );
 
     const protocol = body.protocol !== undefined ? (body.protocol === "manual" ? "manual" : "ssh") : existing.protocol;
+
+    if (body.host !== undefined && isRestrictedNetworkTarget(String(body.host))) {
+      return NextResponse.json(
+        { success: false, error: "Alamat host tidak diizinkan: IP loopback atau cloud metadata dilarang demi keamanan." },
+        { status: 400 }
+      );
+    }
 
     const updated = await prisma.networkDevice.update({
       where: { id },

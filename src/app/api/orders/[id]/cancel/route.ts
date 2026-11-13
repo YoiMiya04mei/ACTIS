@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifySessionToken } from "@/lib/auth";
+import { requireAuth } from "@/lib/security";
 import { buildPayloadForOrder, dispatchSheetsSync } from "@/lib/sheetsSync";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 import { releaseDcimForOrder } from "@/lib/dcimService";
@@ -9,10 +9,13 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const { id: orderId } = await params;
     const body = await request.json();
-    const { alasan, user_id } = body;
+    const { alasan } = body;
 
     if (!alasan || !alasan.trim()) {
       return NextResponse.json(
@@ -46,23 +49,8 @@ export async function POST(
       );
     }
 
-    // Resolve user (from session token or body)
-    let authorId = user_id;
-    const sessionCookie = request.cookies.get("actis_session")?.value;
-    const sessionUser = verifySessionToken(sessionCookie);
-    if (sessionUser?.id) {
-      authorId = sessionUser.id;
-    }
-
-    if (!authorId) {
-      const defaultUser = await prisma.user.findFirst({
-        where: { role: "noc_engineer" },
-      });
-      authorId = defaultUser?.id || "usr-noc-001";
-    }
-
-    const user = await prisma.user.findUnique({ where: { id: authorId } });
-    const userName = user?.nama || "Staff NOC";
+    const authorId = auth.user.id;
+    const userName = auth.user.nama;
 
     const previousStatus = order.status;
     const cleanAlasan = alasan.trim();
@@ -81,7 +69,7 @@ export async function POST(
     });
 
     // Record immutable audit progress log
-    const progressNote = `Tiket dibatalkan oleh ${userName} (${user?.role || "Staff"}). Alasan: "${cleanAlasan}"`;
+    const progressNote = `Tiket dibatalkan oleh ${userName} (${auth.user.role}). Alasan: "${cleanAlasan}"`;
     await prisma.orderProgressLog.create({
       data: {
         order_id: orderId,
@@ -96,7 +84,7 @@ export async function POST(
     // Record application-wide activity log
     recordActivity({
       nama_lengkap: userName,
-      email: user?.email || null,
+      email: auth.user.email || null,
       ip_address: request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63",
       tipe: "UPDATE_ORDER",
       aktifitas: `Membatalkan tiket ${order.ticket_number} — Alasan: "${cleanAlasan}"`,

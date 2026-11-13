@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import os from "os";
 import { notifyIcmpDown, notifyIcmpUp } from "./telegramService";
+import { isValidIpAddress, isRestrictedNetworkTarget } from "@/lib/security";
 
 export type TimeframePreset = "3h" | "6h" | "24h" | "7d" | "30d" | "365d" | "custom";
 
@@ -370,7 +371,7 @@ export async function initIcmpDb(): Promise<void> {
 }
 
 /**
- * Execute native ICMP ping with regex extraction and sandbox fallback
+ * Execute native ICMP ping with strict SSRF defense, command-injection prevention via execFile, and sandbox fallback
  */
 export function pingHost(host: string): Promise<{
   status: "UP" | "DOWN" | "PENDING";
@@ -388,11 +389,36 @@ export function pingHost(host: string): Promise<{
       return;
     }
 
+    // SSRF & Command Injection Guard
+    // Target must be a valid IPv4/IPv6 address or valid safe hostname
+    const isIp = isValidIpAddress(cleanHost);
+    const isValidHostname = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/.test(cleanHost);
+    if (!isIp && !isValidHostname) {
+      resolve({
+        status: "DOWN",
+        latency_ms: null,
+        msg: "Format target host/IP tidak valid.",
+      });
+      return;
+    }
+
+    // Strict SSRF defense: block cloud metadata & restricted internal targets
+    if (isRestrictedNetworkTarget(cleanHost)) {
+      resolve({
+        status: "DOWN",
+        latency_ms: null,
+        msg: "Akses target ditolak: Alamat IP internal/link-local diblokir.",
+      });
+      return;
+    }
+
     const isWin = os.platform() === "win32";
-    const cmd = isWin ? `ping -n 1 -w 2000 ${cleanHost}` : `ping -c 1 -W 2 ${cleanHost}`;
+    const pingArgs = isWin
+      ? ["-n", "1", "-w", "2000", cleanHost]
+      : ["-c", "1", "-W", "2", cleanHost];
     const start = Date.now();
 
-    exec(cmd, (error, stdout, stderr) => {
+    execFile("ping", pingArgs, { timeout: 4000 }, (error, stdout, stderr) => {
       const elapsed = Date.now() - start;
       const output = (stdout || "") + (stderr || "");
 

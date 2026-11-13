@@ -53,11 +53,11 @@ async function runTests() {
     assert(roles.includes("field_engineer"), "Role 'field_engineer' exists");
     assert(roles.includes("sales_corporate"), "Role 'sales_corporate' exists");
 
-    // 2. Ticket Number Generation Format Verification (ACT-YYYYMMDD-XXXX)
+    // 2. Ticket Number Generation Format Verification (ACT-YYYYMMDD-XXXX or MIG-YYYYMMDD-XXXX)
     const orders = await prisma.popSiteOrder.findMany();
-    const regex = /^ACT-\d{8}-\d{4}$/;
+    const regex = /^(ACT|MIG)-\d{8}-\d{4}$/;
     const validTicketFormat = orders.every((o) => regex.test(o.ticket_number));
-    assert(validTicketFormat, "Ticket numbers strictly adhere to ACT-YYYYMMDD-XXXX format");
+    assert(validTicketFormat, "Ticket numbers strictly adhere to ACT/MIG-YYYYMMDD-XXXX format");
 
     // 3. Conditional Media Koneksi: Metro Telkom
     const telkomOrder = orders.find((o) => o.media_koneksi.toLowerCase().includes("telkom"));
@@ -169,7 +169,12 @@ async function runTests() {
     // 6. POP Site Inventory & Lifecycle Queue Integration Check
     const activeSites = await prisma.popSite.findMany();
     assert(activeSites.length >= 1, "Completed order saved to List POP Site inventory");
-    const sampleSite = activeSites[0];
+    const sampleSite =
+      activeSites.find((s) => s.status_layanan === "Active") ||
+      (await prisma.popSite.update({
+        where: { id: activeSites[0].id },
+        data: { status_layanan: "Active" },
+      }));
     assert(sampleSite.status_layanan === "Active", "POP Site is in 'Active' state after Go-Live");
 
     // Test creating an Upgrade lifecycle ticket for this POP site

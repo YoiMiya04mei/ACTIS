@@ -1,14 +1,18 @@
 import crypto from "crypto";
+import { getSafeSessionSecret } from "@/lib/security";
 
-const RAW_SECRET =
-  process.env.BACKUP_ENCRYPTION_KEY ||
-  process.env.SESSION_SECRET ||
-  "actis-secure-session-key-2026-secret";
+function getRawSecret(): string {
+  const customKey = process.env.BACKUP_ENCRYPTION_KEY;
+  if (customKey && customKey.length >= 16) {
+    return customKey;
+  }
+  return getSafeSessionSecret();
+}
 
 const PREFIX = "enc:v1:";
 
 function getKey(): Buffer {
-  return crypto.createHash("sha256").update(RAW_SECRET).digest();
+  return crypto.createHash("sha256").update(getRawSecret()).digest();
 }
 
 export function isEncryptedSecret(value: string | null | undefined): boolean {

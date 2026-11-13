@@ -49,6 +49,7 @@ services:
       - HOSTNAME=0.0.0.0
       # Koneksi internal container ke service postgres (port 5432 internal)
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-actis_db}?schema=public
+      - SESSION_SECRET=${SESSION_SECRET}
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       - GOOGLE_APPS_SCRIPT_WEBHOOK_URL=${GOOGLE_APPS_SCRIPT_WEBHOOK_URL}
       - GOOGLE_SHEET_ID=${GOOGLE_SHEET_ID}

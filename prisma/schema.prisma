@@ -524,4 +524,226 @@ model TacacsAuditLog {
   @@map("tacacs_audit_logs")
 }
 
+// ============================================================================
+// INVENTORY MANAGEMENT SYSTEM MODELS
+// ============================================================================
+
+model InventoryCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @default(now()) @updatedAt
+
+  items InventoryItem[]
+
+  @@map("inventory_categories")
+}
+
+model InventoryItem {
+  id               String   @id @default(uuid())
+  code             String   @unique // e.g. ITM-ROU-0001
+  name             String
+  category_id      String
+  category         InventoryCategory @relation(fields: [category_id], references: [id], onDelete: Restrict)
+  type             String   // "REUSABLE" | "CONSUMABLE"
+  brand            String?
+  model            String?
+  serial_number    String?
+  unit             String   @default("Unit") // Unit, Pcs, Meter, Roll, Box, Set, etc.
+  min_stock        Decimal  @default(0) @db.Decimal(12, 2)
+  storage_location String?  // e.g. "Gudang Utama Rak A1"
+  description      String?  @db.Text
+  image_url        String?
+  is_active        Boolean  @default(true)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @default(now()) @updatedAt
+
+  stock               InventoryStock?
+  units               InventoryItemUnit[]
+  transaction_details InventoryTransactionDetail[]
+  movements           InventoryMovement[]
+  return_details      InventoryReturnDetail[]
+
+  @@index([category_id])
+  @@index([type])
+  @@index([is_active])
+  @@map("inventory_items")
+}
+
+model InventoryItemUnit {
+  id               String        @id @default(uuid())
+  item_id          String
+  item             InventoryItem @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  serial_number    String        @unique
+  mac_address      String?
+  status           String        @default("AVAILABLE") // "AVAILABLE", "IN_USE", "DAMAGED", "LOST", "DISPOSED"
+  condition        String        @default("BAIK")      // "BAIK", "RUSAK_RINGAN", "RUSAK_BERAT", "HILANG"
+  current_pic      String?
+  current_location String?
+  created_at       DateTime      @default(now())
+  updated_at       DateTime      @default(now()) @updatedAt
+
+  @@index([item_id])
+  @@index([status])
+  @@map("inventory_item_units")
+}
+
+model InventoryStock {
+  id              String        @id @default(uuid())
+  item_id         String        @unique
+  item            InventoryItem @relation(fields: [item_id], references: [id], onDelete: Cascade)
+  initial_stock   Decimal       @default(0) @db.Decimal(12, 2)
+  total_in        Decimal       @default(0) @db.Decimal(12, 2)
+  total_out       Decimal       @default(0) @db.Decimal(12, 2)
+  total_in_use    Decimal       @default(0) @db.Decimal(12, 2) // Reusable currently deployed/outside
+  total_returned  Decimal       @default(0) @db.Decimal(12, 2) // Reusable returned to stock
+  total_consumed  Decimal       @default(0) @db.Decimal(12, 2) // Consumable permanently consumed
+  total_damaged   Decimal       @default(0) @db.Decimal(12, 2) // Returned broken / quarantined
+  total_lost      Decimal       @default(0) @db.Decimal(12, 2) // Lost / missing
+  available_stock Decimal       @default(0) @db.Decimal(12, 2) // Ready to be issued in warehouse
+  updated_at      DateTime      @default(now()) @updatedAt
+
+  @@map("inventory_stocks")
+}
+
+model InventoryTransaction {
+  id                 String    @id @default(uuid())
+  transaction_number String    @unique // e.g. OUT-20261113-0001, IN-20261113-0001, ADJ-20261113-0001, OPN-20261113-0001
+  type               String    // "IN", "OUT", "ADJUSTMENT", "OPNAME"
+  transaction_date   DateTime  @default(now())
+  pic_name           String?
+  pic_phone          String?
+  department         String?   // "NOC", "Field Operations", "Enterprise", "Infrastructure", etc.
+  location           String?   // Location of usage / POP Site / Data Center
+  purpose            String?   // Reason / Purpose / Ticket assignment
+  warehouse_officer  String    // Staff in charge of warehouse dispatch/receipt
+  status             String    @default("COMPLETED") // For OUT: "SEDANG_DIGUNAKAN", "SEBAGIAN_KEMBALI", "SUDAH_KEMBALI", "TERPAKAI", "COMPLETED"
+  notes              String?   @db.Text
+  permit_id          String?   // Reference to Permit Barang ID if linked
+  permit_number      String?   // Reference permit document number e.g. PM/101/XII/2025/JDP
+  created_by         String?
+  created_at         DateTime  @default(now())
+  updated_at         DateTime  @default(now()) @updatedAt
+
+  details   InventoryTransactionDetail[]
+  returns   InventoryReturn[]
+  movements InventoryMovement[]
+
+  @@index([type, transaction_date])
+  @@index([status])
+  @@index([pic_name])
+  @@map("inventory_transactions")
+}
+
+model InventoryTransactionDetail {
+  id                  String               @id @default(uuid())
+  transaction_id      String
+  transaction         InventoryTransaction @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+  item_id             String
+  item                InventoryItem        @relation(fields: [item_id], references: [id], onDelete: Restrict)
+  quantity            Decimal              @db.Decimal(12, 2)
+  unit                String               @default("Unit")
+  unit_serial_numbers String?              // JSON array string of serial numbers: ["SN1", "SN2"]
+  qty_returned        Decimal              @default(0) @db.Decimal(12, 2)
+  qty_remaining       Decimal              @default(0) @db.Decimal(12, 2)
+  status              String               @default("ACTIVE") // "ACTIVE", "PARTIAL_RETURN", "FULLY_RETURNED", "CONSUMED"
+  notes               String?
+
+  returns InventoryReturnDetail[]
+
+  @@index([transaction_id])
+  @@index([item_id])
+  @@map("inventory_transaction_details")
+}
+
+model InventoryReturn {
+  id                 String               @id @default(uuid())
+  return_number      String               @unique // e.g. RET-20261113-0001
+  out_transaction_id String
+  out_transaction    InventoryTransaction @relation(fields: [out_transaction_id], references: [id], onDelete: Restrict)
+  pic_name           String               // Name of returning PIC
+  recipient_officer  String               // Name of warehouse receiver
+  return_date        DateTime             @default(now())
+  notes              String?              @db.Text
+  created_by         String?
+  created_at         DateTime             @default(now())
+
+  details InventoryReturnDetail[]
+
+  @@index([out_transaction_id])
+  @@index([return_date])
+  @@map("inventory_returns")
+}
+
+model InventoryReturnDetail {
+  id                    String                     @id @default(uuid())
+  return_id             String
+  return                InventoryReturn            @relation(fields: [return_id], references: [id], onDelete: Cascade)
+  transaction_detail_id String
+  transaction_detail    InventoryTransactionDetail @relation(fields: [transaction_detail_id], references: [id], onDelete: Restrict)
+  item_id               String
+  item                  InventoryItem              @relation(fields: [item_id], references: [id], onDelete: Restrict)
+  quantity              Decimal                    @db.Decimal(12, 2)
+  condition             String                     @default("BAIK") // "BAIK", "RUSAK_RINGAN", "RUSAK_BERAT", "HILANG"
+  serial_numbers        String?                    // JSON array string
+  action_taken          String?                    // "Restocked to available", "Quarantined for repair", "Decommissioned", "Loss logged"
+  notes                 String?
+
+  @@index([return_id])
+  @@index([transaction_detail_id])
+  @@index([item_id])
+  @@map("inventory_return_details")
+}
+
+model InventoryMovement {
+  id             String                @id @default(uuid())
+  item_id        String
+  item           InventoryItem         @relation(fields: [item_id], references: [id], onDelete: Restrict)
+  movement_type  String                // "IN", "OUT", "RETURN_GOOD", "RETURN_DAMAGED", "CONSUMED", "ADJUSTMENT"
+  quantity       Decimal               @db.Decimal(12, 2)
+  balance_before Decimal               @db.Decimal(12, 2)
+  balance_after  Decimal               @db.Decimal(12, 2)
+  reference_type String                // "TRANSACTION", "RETURN", "ADJUSTMENT", "OPNAME"
+  reference_id   String
+  transaction_id String?
+  transaction    InventoryTransaction? @relation(fields: [transaction_id], references: [id], onDelete: SetNull)
+  performed_by   String
+  notes          String?
+  created_at     DateTime              @default(now())
+
+  @@index([item_id, created_at])
+  @@index([reference_id])
+  @@map("inventory_movements")
+}
+
+model InventoryAuditLog {
+  id          String   @id @default(uuid())
+  entity_type String   // "ITEM", "TRANSACTION", "RETURN", "PIC_LOCATION_EDIT", "STOCK_ADJUSTMENT"
+  entity_id   String
+  action      String   // "CREATE", "UPDATE", "CORRECTION", "EDIT_PIC_LOCATION", "ADJUST"
+  user_id     String?
+  user_name   String
+  data_before String?  @db.Text
+  data_after  String?  @db.Text
+  reason      String?  @db.Text
+  ip_address  String?
+  created_at  DateTime @default(now())
+
+  @@index([entity_type, entity_id])
+  @@index([created_at])
+  @@map("inventory_audit_logs")
+}
+
+model InventorySetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String   @db.Text
+  description String?
+  updated_at  DateTime @default(now()) @updatedAt
+
+  @@map("inventory_settings")
+}
+
+
 

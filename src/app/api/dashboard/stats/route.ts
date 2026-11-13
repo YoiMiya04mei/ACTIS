@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAllMonitors } from "@/lib/icmpMonitorService";
 import { getIpamOverviewData } from "@/lib/ipamService";
+import { requireAuth } from "@/lib/security";
 
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const activeScope = { status: { notIn: ["Completed", "Cancelled"] } };
 

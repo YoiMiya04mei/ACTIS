@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifySessionToken } from "@/lib/auth";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { requireAuth } from "@/lib/security";
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth(request, { requireAdmin: true });
+  if (!auth.ok) return auth.response;
+
   try {
     const body = await request.json();
-    const { site_ids, user_id } = body;
+    const { site_ids } = body;
 
     if (!Array.isArray(site_ids) || site_ids.length === 0) {
       return NextResponse.json(
@@ -15,35 +18,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Identify user & check superadmin role
-    let actorId = user_id;
-    if (!actorId) {
-      const authHeader = request.headers.get("authorization");
-      const cookieToken = request.cookies.get("actis_session")?.value;
-      const token = authHeader?.replace("Bearer ", "") || cookieToken;
-      if (token) {
-        const payload = verifySessionToken(token);
-        if (payload?.id) actorId = payload.id;
-      }
-    }
-
-    if (!actorId) {
-      return NextResponse.json(
-        { success: false, error: "Identifikasi pengguna diperlukan untuk melakukan penghapusan." },
-        { status: 401 }
-      );
-    }
-
-    const actorUser = await prisma.user.findUnique({
-      where: { id: actorId },
-    });
-
-    if (!actorUser || (actorUser.role !== "admin" && actorUser.role !== "superadmin")) {
-      return NextResponse.json(
-        { success: false, error: "Akses ditolak. Fitur hapus POP Site hanya diizinkan untuk level akun Super Admin." },
-        { status: 403 }
-      );
-    }
+    const actorUser = auth.user;
 
     // Fetch targeted sites
     const sites = await prisma.popSite.findMany({

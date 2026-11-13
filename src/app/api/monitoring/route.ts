@@ -4,8 +4,12 @@ import {
   parseTimeframeRange,
   ensureBackgroundPingWorker,
 } from "@/lib/icmpMonitorService";
+import { requireAuth } from "@/lib/security";
 
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     ensureBackgroundPingWorker(60);
     const { searchParams } = new URL(request.url);

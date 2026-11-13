@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isRackRangeFree } from "@/lib/dcimUtils";
-import { verifySessionToken } from "@/lib/auth";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { requireAuth } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +10,11 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; slotId: string }> }
 ) {
+  const auth = await requireAuth(request, {
+    allowedRoles: ["admin", "noc_engineer"],
+  });
+  if (!auth.ok) return auth.response;
+
   try {
     const { id: rackId, slotId } = await params;
     const body = await request.json();
@@ -62,9 +67,9 @@ export async function PATCH(
       },
     });
 
-    const sessionUser = verifySessionToken(request.cookies.get("actis_session")?.value);
     recordActivity({
-      nama_lengkap: sessionUser?.nama || "NOC Engineer",
+      nama_lengkap: auth.user.nama,
+      email: auth.user.email,
       ip_address: request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63",
       tipe: "UPDATE_DATA",
       aktifitas: `Memperbarui unit ${updated.device_name} di Rack ${rack.code} (U${updated.start_u}-U${updated.end_u})`,
@@ -82,6 +87,11 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; slotId: string }> }
 ) {
+  const auth = await requireAuth(request, {
+    allowedRoles: ["admin", "noc_engineer"],
+  });
+  if (!auth.ok) return auth.response;
+
   try {
     const { id: rackId, slotId } = await params;
     const slot = await prisma.rackUnitAllocation.findUnique({
@@ -94,9 +104,9 @@ export async function DELETE(
 
     await prisma.rackUnitAllocation.delete({ where: { id: slotId } });
 
-    const sessionUser = verifySessionToken(request.cookies.get("actis_session")?.value);
     recordActivity({
-      nama_lengkap: sessionUser?.nama || "NOC Engineer",
+      nama_lengkap: auth.user.nama,
+      email: auth.user.email,
       ip_address: request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63",
       tipe: "DELETE_DATA",
       aktifitas: `Melepas unit ${slot.device_name} dari Rack ${slot.rack.code} (U${slot.start_u}-U${slot.end_u})`,

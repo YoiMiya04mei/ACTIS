@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { buildOtbPortsData, listOtbsWithStats } from "@/lib/dcimService";
 import { computeOtbStats } from "@/lib/dcimUtils";
-import { verifySessionToken } from "@/lib/auth";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { requireAuth } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search") || undefined;
@@ -25,6 +28,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth(request, {
+    allowedRoles: ["admin", "noc_engineer"],
+  });
+  if (!auth.ok) return auth.response;
+
   try {
     const body = await request.json();
     const {
@@ -91,9 +99,9 @@ export async function POST(request: NextRequest) {
       include: { ports: { orderBy: { core_number: "asc" } } },
     });
 
-    const sessionUser = verifySessionToken(request.cookies.get("actis_session")?.value);
     recordActivity({
-      nama_lengkap: sessionUser?.nama || "Administrator",
+      nama_lengkap: auth.user.nama,
+      email: auth.user.email,
       ip_address: request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63",
       tipe: "CREATE_DEVICE",
       aktifitas: `Menambahkan OTB 3D baru ${cleanCode} (${totalCores} Core ${created.connector_type})`,

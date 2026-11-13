@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCurrentUser } from "@/context/UserContext";
@@ -28,6 +28,14 @@ import {
   Archive,
   Cable,
   KeyRound,
+  Package,
+  RotateCcw,
+  BarChart3,
+  Settings,
+  Tags,
+  Clock,
+  ArrowDownLeft,
+  ArrowUpRight,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -45,25 +53,6 @@ export function Sidebar({
   const isBackupAllowed =
     currentUser?.role === "admin" || currentUser?.role === "noc_engineer";
 
-  // Collapsible Menu & Submenu states for:
-  // 1. Layanan & Inventaris
-  // 2. Tools & Generator
-  // 3. Backup Config
-  // 4. Integrasi & Sistem
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    layanan: true,
-    tools: true,
-    backup: true,
-    integrasi: true,
-  });
-
-  const toggleSection = (key: string) => {
-    setOpenSections((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
-  };
-
   const isLayananActive =
     pathname === "/queue" ||
     pathname.startsWith("/pop-sites") ||
@@ -71,6 +60,8 @@ export function Sidebar({
     pathname.startsWith("/ipam") ||
     pathname.startsWith("/monitoring") ||
     pathname.startsWith("/dcim");
+
+  const isInventoryActive = pathname.startsWith("/inventory");
 
   const isToolsActive = pathname.startsWith("/tools");
 
@@ -82,6 +73,28 @@ export function Sidebar({
     pathname.startsWith("/settings") ||
     pathname === "/logs" ||
     pathname === "/admin/logs";
+
+  // Accordion Menu: Hanya 1 menu sidebar yang terbuka dalam satu waktu
+  const [activeSection, setActiveSection] = useState<string | null>(() => {
+    if (isInventoryActive) return "inventory";
+    if (isToolsActive) return "tools";
+    if (isBackupActive) return "backup";
+    if (isIntegrasiActive) return "integrasi";
+    return "layanan";
+  });
+
+  // Sinkronisasi otomatis section yang terbuka jika user berpindah halaman
+  useEffect(() => {
+    if (isLayananActive) setActiveSection("layanan");
+    else if (isInventoryActive) setActiveSection("inventory");
+    else if (isToolsActive) setActiveSection("tools");
+    else if (isBackupActive) setActiveSection("backup");
+    else if (isIntegrasiActive) setActiveSection("integrasi");
+  }, [pathname, isLayananActive, isInventoryActive, isToolsActive, isBackupActive, isIntegrasiActive]);
+
+  const toggleSection = (key: string) => {
+    setActiveSection((prev) => (prev === key ? null : key));
+  };
 
   return (
     <>
@@ -184,13 +197,13 @@ export function Sidebar({
                 </div>
                 <ChevronDown
                   className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-                    openSections.layanan ? "rotate-0" : "-rotate-90"
+                    activeSection === "layanan" ? "rotate-0" : "-rotate-90"
                   }`}
                 />
               </button>
 
               {/* Submenu: Layanan & Inventaris */}
-              {openSections.layanan && (
+              {activeSection === "layanan" && (
                 <div className="pl-2 ml-2 border-l border-slate-200/80 dark:border-slate-800/80 space-y-1 mt-0.5 transition-all duration-200">
                   <Link
                     href="/queue"
@@ -349,6 +362,319 @@ export function Sidebar({
               )}
             </div>
 
+            {/* SECTION: INVENTORY MANAGEMENT */}
+            <div className="space-y-1">
+              <button
+                type="button"
+                onClick={() => toggleSection("inventory")}
+                className={`w-full group flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition select-none ${
+                  isInventoryActive
+                    ? "text-blue-700 dark:text-blue-300 bg-blue-50/70 dark:bg-blue-950/40 border border-blue-200/60 dark:border-blue-900/60 shadow-2xs"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                }`}
+                title="Inventory Management (Klik untuk Buka/Tutup Submenu)"
+              >
+                <div className="flex items-center space-x-2.5">
+                  <Package
+                    className={`w-4 h-4 shrink-0 ${
+                      isInventoryActive
+                        ? "text-blue-600 dark:text-blue-400"
+                        : "text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"
+                    }`}
+                  />
+                  <span>INVENTORY MANAGEMENT</span>
+                </div>
+                <ChevronDown
+                  className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                    activeSection === "inventory" ? "rotate-0" : "-rotate-90"
+                  }`}
+                />
+              </button>
+
+              {/* Submenu: Inventory Management */}
+              {activeSection === "inventory" && (
+                <div className="pl-2 ml-2 border-l border-slate-200/80 dark:border-slate-800/80 space-y-1 mt-0.5 transition-all duration-200">
+                  {/* 1. Dashboard Inventory */}
+                  <Link
+                    href="/inventory/dashboard"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/inventory/dashboard" || pathname === "/inventory"
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Dashboard Ringkasan & Statistik Inventory"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <LayoutDashboard
+                        className={`w-4 h-4 shrink-0 ${
+                          pathname.startsWith("/inventory/dashboard")
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                        }`}
+                      />
+                      <span className="truncate">Dashboard Inventory</span>
+                    </div>
+                  </Link>
+
+                  {/* 2. Master Barang */}
+                  <Link
+                    href="/inventory/items"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/inventory/items" || pathname.startsWith("/inventory/items/")
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Master Data Barang Reusable & Consumable"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Boxes
+                        className={`w-4 h-4 shrink-0 ${
+                          pathname.startsWith("/inventory/items")
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                        }`}
+                      />
+                      <span className="truncate">Master Barang</span>
+                    </div>
+                  </Link>
+
+                  {/* 3. Kategori Barang */}
+                  <Link
+                    href="/inventory/categories"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/inventory/categories"
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Kategori Barang & Peralatan"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Tags
+                        className={`w-4 h-4 shrink-0 ${
+                          pathname === "/inventory/categories"
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                        }`}
+                      />
+                      <span className="truncate">Kategori Barang</span>
+                    </div>
+                  </Link>
+
+                  {/* 4. Stok Inventory */}
+                  <Link
+                    href="/inventory/stock"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/inventory/stock"
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Monitoring Saldo Stok, Opname & Penyesuaian"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Layers
+                        className={`w-4 h-4 shrink-0 ${
+                          pathname === "/inventory/stock"
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400"
+                        }`}
+                      />
+                      <span className="truncate">Stok Inventory</span>
+                    </div>
+                  </Link>
+
+                  {/* 5. Barang Masuk */}
+                  <Link
+                    href="/inventory/transactions/in"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/inventory/transactions/in"
+                        ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Penerimaan Barang Masuk (Stock In)"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <ArrowDownLeft
+                        className={`w-4 h-4 shrink-0 ${
+                          pathname === "/inventory/transactions/in"
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400"
+                        }`}
+                      />
+                      <span className="truncate">Barang Masuk</span>
+                    </div>
+                  </Link>
+
+                  {/* 6. Barang Keluar */}
+                  <Link
+                    href="/inventory/transactions/out"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/inventory/transactions/out"
+                        ? "bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Pengeluaran Barang Keluar (Stock Out)"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <ArrowUpRight
+                        className={`w-4 h-4 shrink-0 ${
+                          pathname === "/inventory/transactions/out"
+                            ? "text-rose-600 dark:text-rose-400"
+                            : "text-slate-400 group-hover:text-rose-600 dark:group-hover:text-rose-400"
+                        }`}
+                      />
+                      <span className="truncate">Barang Keluar</span>
+                    </div>
+                  </Link>
+
+                  {/* 7. Barang Sedang Digunakan */}
+                  <Link
+                    href="/inventory/in-use"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/inventory/in-use"
+                        ? "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200/80 dark:border-amber-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Monitoring Perangkat Reusable di Luar Gudang & PIC"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Clock
+                        className={`w-4 h-4 shrink-0 ${
+                          pathname === "/inventory/in-use"
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-slate-400 group-hover:text-amber-600 dark:group-hover:text-amber-400"
+                        }`}
+                      />
+                      <span className="truncate">Barang Sedang Digunakan</span>
+                    </div>
+                  </Link>
+
+                  {/* 8. Pengembalian Barang */}
+                  <Link
+                    href="/inventory/returns"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/inventory/returns" || pathname.startsWith("/inventory/returns/")
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Proses Pengembalian Barang Reusable Sebagian & Penuh"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <RotateCcw
+                        className={`w-4 h-4 shrink-0 ${
+                          pathname.startsWith("/inventory/returns")
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                        }`}
+                      />
+                      <span className="truncate">Pengembalian Barang</span>
+                    </div>
+                  </Link>
+
+                  {/* 9. Barang Habis Pakai */}
+                  <Link
+                    href="/inventory/consumables"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/inventory/consumables"
+                        ? "bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Pengelolaan & Riwayat Konsumsi Material Habis Pakai"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Cable
+                        className={`w-4 h-4 shrink-0 ${
+                          pathname === "/inventory/consumables"
+                            ? "text-purple-600 dark:text-purple-400"
+                            : "text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-400"
+                        }`}
+                      />
+                      <span className="truncate">Barang Habis Pakai</span>
+                    </div>
+                  </Link>
+
+                  {/* 10. Riwayat Transaksi */}
+                  <Link
+                    href="/inventory/history"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/inventory/history"
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Audit Trail Pergerakan Stok & Perubahan PIC/Lokasi"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <History
+                        className={`w-4 h-4 shrink-0 ${
+                          pathname === "/inventory/history"
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                        }`}
+                      />
+                      <span className="truncate">Riwayat Transaksi</span>
+                    </div>
+                  </Link>
+
+                  {/* 11. Laporan Inventory */}
+                  <Link
+                    href="/inventory/reports"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/inventory/reports"
+                        ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Rekapitulasi Laporan Stok, Mutasi & Penggunaan"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <BarChart3
+                        className={`w-4 h-4 shrink-0 ${
+                          pathname === "/inventory/reports"
+                            ? "text-indigo-600 dark:text-indigo-400"
+                            : "text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
+                        }`}
+                      />
+                      <span className="truncate">Laporan Inventory</span>
+                    </div>
+                  </Link>
+
+                  {/* 12. Pengaturan Inventory */}
+                  {isSuperAdmin && (
+                    <Link
+                      href="/inventory/settings"
+                      onClick={onCloseMobile}
+                      className={`group flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
+                        pathname === "/inventory/settings"
+                          ? "bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-700 font-bold shadow-xs"
+                          : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                      title="Konfigurasi Parameter & Default Inventory (Admin)"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <Settings
+                          className={`w-4 h-4 shrink-0 ${
+                            pathname === "/inventory/settings"
+                              ? "text-slate-700 dark:text-slate-200"
+                              : "text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300"
+                          }`}
+                        />
+                        <span className="truncate">Pengaturan Inventory</span>
+                      </div>
+                    </Link>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* SECTION 2: TOOLS & GENERATOR */}
             <div className="space-y-1">
               <button
@@ -373,13 +699,13 @@ export function Sidebar({
                 </div>
                 <ChevronDown
                   className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-                    openSections.tools ? "rotate-0" : "-rotate-90"
+                    activeSection === "tools" ? "rotate-0" : "-rotate-90"
                   }`}
                 />
               </button>
 
               {/* Submenu: Tools & Generator */}
-              {openSections.tools && (
+              {activeSection === "tools" && (
                 <div className="pl-2 ml-2 border-l border-slate-200/80 dark:border-slate-800/80 space-y-1 mt-0.5 transition-all duration-200">
                   <Link
                     href="/tools/mikrotik"
@@ -545,12 +871,12 @@ export function Sidebar({
                   </div>
                   <ChevronDown
                     className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-                      openSections.backup ? "rotate-0" : "-rotate-90"
+                      activeSection === "backup" ? "rotate-0" : "-rotate-90"
                     }`}
                   />
                 </button>
 
-                {openSections.backup && (
+                {activeSection === "backup" && (
                   <div className="pl-2 ml-2 border-l border-slate-200/80 dark:border-slate-800/80 space-y-1 mt-0.5 transition-all duration-200">
                     <Link
                       href="/backups"
@@ -602,13 +928,13 @@ export function Sidebar({
                 </div>
                 <ChevronDown
                   className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-                    openSections.integrasi ? "rotate-0" : "-rotate-90"
+                    activeSection === "integrasi" ? "rotate-0" : "-rotate-90"
                   }`}
                 />
               </button>
 
               {/* Submenu: Integrasi & Sistem */}
-              {openSections.integrasi && (
+              {activeSection === "integrasi" && (
                 <div className="pl-2 ml-2 border-l border-slate-200/80 dark:border-slate-800/80 space-y-1 mt-0.5 transition-all duration-200">
                   {isBackupAllowed && (
                     <Link

@@ -18,6 +18,10 @@ import {
   HardDrive,
   Printer,
   FileDown,
+  Boxes,
+  CheckCircle,
+  AlertCircle,
+  ExternalLink,
 } from 'lucide-react';
 import type {
   PermitBarangDocument,
@@ -278,6 +282,61 @@ export const CreatePermitBarangPage: React.FC<CreatePermitBarangPageProps> = ({
     setApplicantName(currentUser.name);
     setApplicantPosition(currentUser.position || 'Staff NOC');
     addToast('success', 'Data Pemohon Terisi', `Nama diisi dengan ${currentUser.name}.`);
+  };
+
+  // Inventory Stock Integration
+  const [checkingStock, setCheckingStock] = useState<boolean>(false);
+  const [stockCheckResults, setStockCheckResults] = useState<
+    Record<string, { available: number; sufficient: boolean; code?: string; name?: string; message?: string }>
+  >({});
+
+  const handleCheckStock = async () => {
+    const validDevices = devices.filter((d) => d.name.trim().length > 0);
+    if (validDevices.length === 0) {
+      addToast('info', 'Daftar Kosong', 'Tambahkan minimal satu nama perangkat untuk mengecek stok.');
+      return;
+    }
+
+    setCheckingStock(true);
+    try {
+      const res = await fetch('/api/inventory/permit-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'check_stock',
+          devices: validDevices.map((d) => ({
+            name: d.name,
+            quantity: d.quantity || '1',
+          })),
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        const resultsMap: Record<string, any> = {};
+        json.data.forEach((item: any) => {
+          resultsMap[item.device_name.toLowerCase()] = {
+            available: item.available_stock,
+            sufficient: item.is_sufficient,
+            code: item.matched_item_code,
+            name: item.matched_item_name,
+            message: item.message,
+          };
+        });
+        setStockCheckResults(resultsMap);
+        addToast(
+          'success',
+          'Pemeriksaan Stok Selesai',
+          `Berhasil memeriksa ${json.data.length} perangkat terhadap database Inventory.`
+        );
+      } else {
+        throw new Error(json.error || 'Gagal mengecek stok.');
+      }
+    } catch (err: any) {
+      addToast('error', 'Gagal Cek Stok', err.message || 'Koneksi ke database inventory gagal.');
+    } finally {
+      setCheckingStock(false);
+    }
   };
 
   // Form Validation
@@ -817,14 +876,27 @@ export const CreatePermitBarangPage: React.FC<CreatePermitBarangPageProps> = ({
                 <span className="text-[11px] text-slate-400">Dapat menambahkan banyak perangkat</span>
               </div>
 
-              <button
-                type="button"
-                onClick={() => handleAddDevice('')}
-                className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer shadow-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Tambah Perangkat</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCheckStock}
+                  disabled={checkingStock}
+                  className="px-2.5 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors disabled:opacity-50"
+                  title="Periksa ketersediaan stok barang ini di gudang inventory ACTIS"
+                >
+                  <Boxes className={`w-3.5 h-3.5 ${checkingStock ? 'animate-spin' : ''}`} />
+                  <span>{checkingStock ? 'Memeriksa...' : 'Cek Stok Gudang'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleAddDevice('')}
+                  className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tambah Perangkat</span>
+                </button>
+              </div>
             </div>
 
             {/* Quick Add Chips */}
@@ -866,6 +938,27 @@ export const CreatePermitBarangPage: React.FC<CreatePermitBarangPageProps> = ({
                         placeholder="Nama/Spesifikasi Perangkat (e.g. Routerboard 1100AHx4)"
                         className="w-full px-2.5 py-1.5 text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 bg-white font-medium text-slate-800"
                       />
+                      {device.name && stockCheckResults[device.name.trim().toLowerCase()] && (
+                        <div className="mt-1 flex items-center gap-1.5 text-[10.5px]">
+                          {stockCheckResults[device.name.trim().toLowerCase()].code ? (
+                            stockCheckResults[device.name.trim().toLowerCase()].available > 0 ? (
+                              <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded font-medium">
+                                <CheckCircle className="w-3 h-3 text-emerald-600" />
+                                Stok Gudang: {stockCheckResults[device.name.trim().toLowerCase()].available} unit ({stockCheckResults[device.name.trim().toLowerCase()].code})
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded font-medium">
+                                <AlertCircle className="w-3 h-3 text-rose-600" />
+                                Stok Habis di Gudang (0 unit)
+                              </span>
+                            )
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
+                              Belum terdaftar di Master Inventory
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="sm:col-span-2">
                       <input
@@ -901,6 +994,29 @@ export const CreatePermitBarangPage: React.FC<CreatePermitBarangPageProps> = ({
 
             {validationErrors.devices && (
               <p className="text-[11px] text-red-500 mt-1">{validationErrors.devices}</p>
+            )}
+
+            {permitType === 'keluar' && (
+              <div className="p-3 rounded-lg bg-indigo-50/70 border border-indigo-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-indigo-950">
+                <div className="flex items-start gap-2">
+                  <Boxes className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold text-indigo-900 block">Integrasi Stok Gudang ACTIS:</span>
+                    <span className="text-[11.5px] text-indigo-700">
+                      Pembuatan surat permit tidak memotong stok fisik. Pengurangan stok dilakukan saat barang diserahkan ke teknisi melalui menu Barang Keluar.
+                    </span>
+                  </div>
+                </div>
+                <a
+                  href="/inventory/transactions/out"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-2.5 py-1 rounded-md bg-white hover:bg-indigo-100 border border-indigo-200 text-indigo-700 font-semibold inline-flex items-center gap-1 text-[11px] shrink-0 shadow-xs transition-colors self-end sm:self-auto"
+                >
+                  <span>Form Barang Keluar</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
             )}
           </div>
 

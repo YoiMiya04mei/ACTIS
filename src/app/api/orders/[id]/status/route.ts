@@ -6,15 +6,19 @@ import { ensureIcmpMonitorForSite } from "@/lib/icmpMonitorService";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 import { notifyOrderCompleted } from "@/lib/telegramService";
 import { syncDcimOnOrderCompletion } from "@/lib/dcimService";
+import { requireAuth } from "@/lib/security";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const { id: orderId } = await params;
     const body = await request.json();
-    const { status, user_id, note } = body;
+    const { status, note } = body;
 
     const validStatuses = [
       "Antrian Aktivasi",
@@ -62,16 +66,8 @@ export async function POST(
     }
 
     const previousStatus = order.status;
-    let authorId = user_id;
-    if (!authorId) {
-      const defaultUser = await prisma.user.findFirst({
-        where: { role: "noc_engineer" },
-      });
-      authorId = defaultUser?.id || "usr-noc-001";
-    }
-
-    const user = await prisma.user.findUnique({ where: { id: authorId } });
-    const userName = user?.nama || "NOC Engineer";
+    const authorId = auth.user.id;
+    const userName = auth.user.nama;
 
     const completedAt = status === "Completed" ? new Date() : order.completed_at;
     const waktuAktivasi = status === "Completed" ? (order.waktu_aktivasi || new Date()) : order.waktu_aktivasi;
@@ -218,7 +214,7 @@ export async function POST(
     // Record application-wide activity log
     recordActivity({
       nama_lengkap: userName,
-      email: user?.email || null,
+      email: auth.user.email || null,
       ip_address: request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63",
       tipe: "UPDATE_ORDER",
       aktifitas: `Mengubah status tiket ${order.ticket_number} menjadi ${status}`,

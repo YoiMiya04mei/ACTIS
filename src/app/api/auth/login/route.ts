@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifyPassword, hashPassword, createSessionToken } from "@/lib/auth";
+import { verifyPassword, createSessionToken } from "@/lib/auth";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { checkRateLimit, getSessionCookieOptions } from "@/lib/security";
 
 function getClientIp(req: NextRequest): string {
   const forwarded = req.headers.get("x-forwarded-for");
@@ -13,10 +14,23 @@ function getClientIp(req: NextRequest): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { email, password } = body;
     const clientIp = getClientIp(request);
     const userAgent = parseUserAgent(request.headers.get("user-agent"));
+
+    // Rate Limiting Protection (Brute Force Defense)
+    const ipLimit = checkRateLimit(`login:ip:${clientIp}`, 15, 60);
+    if (!ipLimit.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Terlalu banyak percobaan login. Silakan tunggu ${ipLimit.retryAfter} detik sebelum mencoba kembali.`,
+        },
+        { status: 429 }
+      );
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const { email, password } = body;
 
     if (!email || !password) {
       return NextResponse.json(
@@ -26,6 +40,19 @@ export async function POST(request: NextRequest) {
     }
 
     const cleanEmail = String(email).trim().toLowerCase();
+
+    // Account-specific rate limit
+    const accountLimit = checkRateLimit(`login:acc:${cleanEmail}`, 5, 300);
+    if (!accountLimit.allowed) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Akun ini terkunci sementara karena terlalu banyak percobaan login yang gagal. Silakan tunggu ${accountLimit.retryAfter} detik.`,
+        },
+        { status: 429 }
+      );
+    }
+
     const user = await prisma.user.findUnique({
       where: { email: cleanEmail },
     });
@@ -36,7 +63,7 @@ export async function POST(request: NextRequest) {
         email: cleanEmail,
         ip_address: clientIp,
         tipe: "LOGIN_FAILED",
-        aktifitas: `Login gagal — username ${cleanEmail.split("@")[0] || cleanEmail} — ${userAgent}`,
+        aktifitas: `Login gagal — username ${cleanEmail.split("@")[0] || cleanEmail} tidak ditemukan — ${userAgent}`,
         user_agent: userAgent,
       }).catch(() => {});
 
@@ -53,7 +80,7 @@ export async function POST(request: NextRequest) {
         email: cleanEmail,
         ip_address: clientIp,
         tipe: "LOGIN_FAILED",
-        aktifitas: `Login gagal — username ${cleanEmail.split("@")[0] || cleanEmail} — ${userAgent}`,
+        aktifitas: `Login gagal — password salah untuk ${cleanEmail} — ${userAgent}`,
         user_agent: userAgent,
       }).catch(() => {});
 
@@ -61,18 +88,6 @@ export async function POST(request: NextRequest) {
         { success: false, error: "Email atau password salah." },
         { status: 401 }
       );
-    }
-
-    // Auto-hash initial default password if it was null
-    if (!user.password_hash) {
-      try {
-        await prisma.user.update({
-          where: { id: user.id },
-          data: { password_hash: hashPassword(password) },
-        });
-      } catch (err) {
-        console.error("Failed to auto-hash password:", err);
-      }
     }
 
     const sessionPayload = {
@@ -100,21 +115,15 @@ export async function POST(request: NextRequest) {
       user: sessionPayload,
     });
 
-    // Set session cookie
-    response.cookies.set("actis_session", token, {
-      httpOnly: false, // accessible to client for fast state recovery if needed
-      path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
-      sameSite: "lax",
-    });
+    // Set secure HttpOnly session cookie
+    response.cookies.set("actis_session", token, getSessionCookieOptions(60 * 60 * 24 * 7));
 
     return response;
   } catch (err: any) {
     console.error("POST /api/auth/login error:", err);
     return NextResponse.json(
-      { success: false, error: err.message || "Gagal melakukan login" },
+      { success: false, error: "Gagal melakukan proses autentikasi." },
       { status: 500 }
     );
   }
 }
-

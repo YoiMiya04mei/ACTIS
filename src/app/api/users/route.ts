@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifySessionToken, hashPassword } from "@/lib/auth";
+import { hashPassword } from "@/lib/auth";
+import { requireAuth } from "@/lib/security";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 
-export async function GET() {
+export const dynamic = "force-dynamic";
+
+export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const users = await prisma.user.findMany({
       orderBy: { nama: "asc" },
@@ -20,34 +26,22 @@ export async function GET() {
   } catch (err: any) {
     console.error("GET /api/users error:", err);
     return NextResponse.json(
-      { success: false, error: err.message || "Failed to fetch users" },
+      { success: false, error: "Gagal memuat daftar pengguna." },
       { status: 500 }
     );
   }
 }
 
 export async function POST(request: NextRequest) {
+  // Strict authorization: ONLY Administrator can create users
+  const auth = await requireAuth(request, { requireAdmin: true });
+  if (!auth.ok) return auth.response;
+
   try {
-    // 1. Authorization check: ONLY Administrator can add users
-    const sessionCookie = request.cookies.get("actis_session")?.value;
-    const sessionUser = verifySessionToken(sessionCookie);
+    const body = await request.json().catch(() => ({}));
+    const { nama, email, password, role } = body;
 
-    const body = await request.json();
-    const { nama, email, password, role, actorRole } = body;
-
-    // Check caller role either from session or header/payload
-    const callerRole = sessionUser?.role || actorRole;
-    if (callerRole !== "admin") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Akses ditolak: Hanya akun dengan level Administrator yang memiliki hak akses untuk menambah pengguna baru.",
-        },
-        { status: 403 }
-      );
-    }
-
-    // 2. Validate input fields
+    // Validate inputs
     if (!nama || !email || !password) {
       return NextResponse.json(
         { success: false, error: "Nama, email, dan password wajib diisi." },
@@ -55,16 +49,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (password.length < 6) {
+    if (String(password).length < 8) {
       return NextResponse.json(
-        { success: false, error: "Password minimal harus 6 karakter." },
+        { success: false, error: "Password minimal harus 8 karakter." },
         { status: 400 }
       );
     }
 
     const cleanEmail = String(email).trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      return NextResponse.json(
+        { success: false, error: "Format email tidak valid." },
+        { status: 400 }
+      );
+    }
 
-    // 3. Check if email already exists
     const existing = await prisma.user.findUnique({
       where: { email: cleanEmail },
     });
@@ -76,12 +76,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Valid role values
     const allowedRoles = ["admin", "noc_engineer", "field_engineer", "sales_corporate"];
     const targetRole = allowedRoles.includes(role) ? role : "noc_engineer";
 
-    // 4. Hash password and insert into database
-    const hashedPassword = hashPassword(password);
+    const hashedPassword = hashPassword(String(password));
     const newUser = await prisma.user.create({
       data: {
         nama: String(nama).trim(),
@@ -98,31 +96,26 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Catat ke Log Aplikasi
-    const actorName = sessionUser?.nama || "Administrator";
     const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
     const userAgent = parseUserAgent(request.headers.get("user-agent"));
     recordActivity({
-      nama_lengkap: actorName,
+      nama_lengkap: auth.user.nama,
+      email: auth.user.email,
       ip_address: clientIp,
       tipe: "CREATE_USER",
       aktifitas: `Menambahkan pengguna baru: ${newUser.nama} (${newUser.email}) - Role: ${newUser.role}`,
-      detail: `ID: ${newUser.id}`,
       user_agent: userAgent,
     }).catch(() => {});
 
-    return NextResponse.json(
-      {
-        success: true,
-        message: `Pengguna '${newUser.nama}' berhasil ditambahkan.`,
-        data: newUser,
-      },
-      { status: 201 }
-    );
+    return NextResponse.json({
+      success: true,
+      message: `Pengguna '${newUser.nama}' berhasil ditambahkan.`,
+      data: newUser,
+    });
   } catch (err: any) {
     console.error("POST /api/users error:", err);
     return NextResponse.json(
-      { success: false, error: err.message || "Gagal menambahkan pengguna" },
+      { success: false, error: "Gagal menambahkan pengguna baru." },
       { status: 500 }
     );
   }

@@ -5,10 +5,13 @@ import {
   resetPublicPrefixesToDefault,
 } from "@/lib/ipamService";
 import { parseCidr } from "@/lib/ipamUtils";
-import { verifySessionToken } from "@/lib/auth";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { requireAuth } from "@/lib/security";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const prefixes = await getConfiguredPublicPrefixes();
     return NextResponse.json({ success: true, data: prefixes });
@@ -21,23 +24,12 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth(request, { requireAdmin: true });
+  if (!auth.ok) return auth.response;
+
   try {
     const body = await request.json();
-    const { cidr, description, actorRole } = body;
-
-    const sessionCookie = request.cookies.get("actis_session")?.value;
-    const sessionUser = verifySessionToken(sessionCookie);
-    const effectiveRole = sessionUser?.role || actorRole;
-
-    if (effectiveRole !== "admin") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Akses ditolak: Hanya akun Administrator yang berhak mengelola Prefix IP Public.",
-        },
-        { status: 403 }
-      );
-    }
+    const { cidr, description } = body;
 
     if (!cidr || typeof cidr !== "string") {
       return NextResponse.json(
@@ -62,23 +54,24 @@ export async function POST(request: NextRequest) {
 
     if (current.some((p) => p.cidr.toLowerCase() === normalizedCidr.toLowerCase())) {
       return NextResponse.json(
-        { success: false, error: `Prefix '${normalizedCidr}' sudah terdaftar.` },
-        { status: 400 }
+        { success: false, error: `Prefix ${normalizedCidr} sudah terdaftar dalam sistem.` },
+        { status: 409 }
       );
     }
 
-    const updated = [
-      ...current,
-      {
-        cidr: normalizedCidr,
-        description: description?.trim() || `Prefix ${normalizedCidr}`,
-      },
-    ];
+    const newPrefix = {
+      id: `pfx-custom-${Date.now()}`,
+      cidr: normalizedCidr,
+      description: description?.trim() || `Prefix ${normalizedCidr}`,
+      is_default: false,
+      created_at: new Date().toISOString(),
+    };
 
+    const updated = [...current, newPrefix];
     await savePublicPrefixes(updated);
 
     // Catat ke Log Aplikasi
-    const actorName = sessionUser?.nama || "Administrator";
+    const actorName = auth.user.nama;
     const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
     const userAgent = parseUserAgent(request.headers.get("user-agent"));
     recordActivity({
@@ -104,23 +97,12 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const auth = await requireAuth(request, { requireAdmin: true });
+  if (!auth.ok) return auth.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const cidr = searchParams.get("cidr");
-
-    const sessionCookie = request.cookies.get("actis_session")?.value;
-    const sessionUser = verifySessionToken(sessionCookie);
-    const effectiveRole = sessionUser?.role;
-
-    if (effectiveRole !== "admin") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Akses ditolak: Hanya akun Administrator yang berhak menghapus Prefix IP Public.",
-        },
-        { status: 403 }
-      );
-    }
 
     if (!cidr) {
       return NextResponse.json(
@@ -142,7 +124,7 @@ export async function DELETE(request: NextRequest) {
     await savePublicPrefixes(updated);
 
     // Catat ke Log Aplikasi
-    const actorName = sessionUser?.nama || "Administrator";
+    const actorName = auth.user.nama;
     const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
     const userAgent = parseUserAgent(request.headers.get("user-agent"));
     recordActivity({
@@ -168,26 +150,15 @@ export async function DELETE(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  const auth = await requireAuth(request, { requireAdmin: true });
+  if (!auth.ok) return auth.response;
+
   try {
-    const sessionCookie = request.cookies.get("actis_session")?.value;
-    const sessionUser = verifySessionToken(sessionCookie);
-    const effectiveRole = sessionUser?.role;
-
-    if (effectiveRole !== "admin") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Akses ditolak: Hanya akun Administrator yang berhak mengatur ulang prefix.",
-        },
-        { status: 403 }
-      );
-    }
-
     await resetPublicPrefixesToDefault();
     const defaults = await getConfiguredPublicPrefixes();
 
     // Catat ke Log Aplikasi
-    const actorName = sessionUser?.nama || "Administrator";
+    const actorName = auth.user.nama;
     const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
     const userAgent = parseUserAgent(request.headers.get("user-agent"));
     recordActivity({
@@ -211,4 +182,3 @@ export async function PUT(request: NextRequest) {
     );
   }
 }
-

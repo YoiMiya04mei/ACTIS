@@ -1,6 +1,13 @@
 const { PrismaClient } = require('@prisma/client');
+const crypto = require('crypto');
 
 const prisma = new PrismaClient();
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+  return `${salt}:${hash}`;
+}
 
 async function main() {
   console.log('Checking ACTIS database before seeding...');
@@ -32,13 +39,17 @@ async function main() {
   await prisma.user.deleteMany();
   await prisma.systemSetting.deleteMany();
 
-  // 2. Create Users with required roles
+  // 2. Create Users with required roles and pre-hashed secure credentials
+  const adminPasswordHash = hashPassword(process.env.INITIAL_ADMIN_PASSWORD || 'Admin@Actis2026!');
+  const userPasswordHash = hashPassword(process.env.INITIAL_USER_PASSWORD || 'NocFieldSales@2026!');
+
   const adminUser = await prisma.user.create({
     data: {
       id: 'usr-admin-001',
       nama: 'Ahmad Fauzi (Head of NOC)',
       email: 'admin.noc@isp-enterprise.net',
       role: 'admin',
+      password_hash: adminPasswordHash,
     },
   });
 
@@ -48,6 +59,7 @@ async function main() {
       nama: 'Budi Santoso (NOC Engineer)',
       email: 'budi.santoso@isp-enterprise.net',
       role: 'noc_engineer',
+      password_hash: userPasswordHash,
     },
   });
 
@@ -57,6 +69,7 @@ async function main() {
       nama: 'Reza Pratama (Senior NOC)',
       email: 'reza.pratama@isp-enterprise.net',
       role: 'noc_engineer',
+      password_hash: userPasswordHash,
     },
   });
 
@@ -66,6 +79,7 @@ async function main() {
       nama: 'Dimas Kurniawan (Field Engineer)',
       email: 'dimas.k@isp-enterprise.net',
       role: 'field_engineer',
+      password_hash: userPasswordHash,
     },
   });
 
@@ -75,6 +89,7 @@ async function main() {
       nama: 'Sarah Novita (Sales Corporate)',
       email: 'sarah.novita@isp-enterprise.net',
       role: 'sales_corporate',
+      password_hash: userPasswordHash,
     },
   });
 

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { isRackRangeFree } from "@/lib/dcimUtils";
-import { verifySessionToken } from "@/lib/auth";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { requireAuth } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +10,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth(request, {
+    allowedRoles: ["admin", "noc_engineer"],
+  });
+  if (!auth.ok) return auth.response;
+
   try {
     const { id: rackId } = await params;
     const body = await request.json();
@@ -72,9 +77,9 @@ export async function POST(
       },
     });
 
-    const sessionUser = verifySessionToken(request.cookies.get("actis_session")?.value);
     recordActivity({
-      nama_lengkap: sessionUser?.nama || "NOC Engineer",
+      nama_lengkap: auth.user.nama,
+      email: auth.user.email,
       ip_address: request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63",
       tipe: "UPDATE_DATA",
       aktifitas: `Memasang unit ${created.device_name} di Rack ${rack.code} (U${startU}-U${rangeCheck.endU})`,

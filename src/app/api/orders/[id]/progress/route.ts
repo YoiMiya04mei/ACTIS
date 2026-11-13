@@ -4,11 +4,15 @@ import { buildPayloadForOrder, dispatchSheetsSync } from "@/lib/sheetsSync";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 import { notifyOrderCompleted } from "@/lib/telegramService";
 import { syncDcimOnOrderCompletion } from "@/lib/dcimService";
+import { requireAuth } from "@/lib/security";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const { id: orderId } = await params;
     const body = await request.json();
@@ -16,7 +20,6 @@ export async function POST(
     const {
       catatan_progress,
       action_type = "Progress Note",
-      user_id,
       new_status,
     } = body;
 
@@ -41,14 +44,7 @@ export async function POST(
       );
     }
 
-    // Default user fallback
-    let authorId = user_id;
-    if (!authorId) {
-      const defaultNoc = await prisma.user.findFirst({
-        where: { role: "noc_engineer" },
-      });
-      authorId = defaultNoc?.id || "usr-noc-001";
-    }
+    const authorId = auth.user.id;
 
     const statusSebelum = order.status;
     let statusSesudah = statusSebelum;

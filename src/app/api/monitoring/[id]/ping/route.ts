@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { executePingForMonitor } from "@/lib/icmpMonitorService";
+import { requireAuth } from "@/lib/security";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const { id } = await params;
     const { searchParams } = new URL(request.url);

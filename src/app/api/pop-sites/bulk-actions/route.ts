@@ -3,8 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { parseBandwidthToMbps } from "@/lib/ticketUtils";
 import { buildPayloadForOrder, dispatchSheetsSync } from "@/lib/sheetsSync";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { requireAuth } from "@/lib/security";
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const body = await request.json();
     const {
@@ -13,7 +17,6 @@ export async function POST(request: NextRequest) {
       layanan_dedicated,
       alasan,
       catatan,
-      user_id,
     } = body;
 
     const validActions = ["Upgrade", "Downgrade", "Isolir", "Unisolir", "Terminate", "Unterminate", "Unterminated"];
@@ -38,14 +41,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Default user fallback
-    let creatorId = user_id;
-    if (!creatorId) {
-      const defaultUser = await prisma.user.findFirst({
-        where: { role: "sales_corporate" },
-      });
-      creatorId = defaultUser?.id || "usr-sales-001";
-    }
+    const creatorId = auth.user.id;
 
     // Fetch all targeted sites
     const sites = await prisma.popSite.findMany({

@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { computeOtbStats } from "@/lib/dcimUtils";
-import { verifySessionToken } from "@/lib/auth";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { requireAuth } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const { id } = await params;
     const otb = await prisma.opticalOtb.findUnique({
@@ -38,6 +41,11 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth(request, {
+    allowedRoles: ["admin", "noc_engineer"],
+  });
+  if (!auth.ok) return auth.response;
+
   try {
     const { id } = await params;
     const body = await request.json();
@@ -62,9 +70,9 @@ export async function PATCH(
       include: { ports: { orderBy: { core_number: "asc" } } },
     });
 
-    const sessionUser = verifySessionToken(request.cookies.get("actis_session")?.value);
     recordActivity({
-      nama_lengkap: sessionUser?.nama || "Administrator",
+      nama_lengkap: auth.user.nama,
+      email: auth.user.email,
       ip_address: request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63",
       tipe: "UPDATE_DATA",
       aktifitas: `Memperbarui data OTB ${updated.code}`,
@@ -89,6 +97,9 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth(request, { requireAdmin: true });
+  if (!auth.ok) return auth.response;
+
   try {
     const { id } = await params;
     const otb = await prisma.opticalOtb.findUnique({
@@ -114,9 +125,9 @@ export async function DELETE(
 
     await prisma.opticalOtb.delete({ where: { id } });
 
-    const sessionUser = verifySessionToken(request.cookies.get("actis_session")?.value);
     recordActivity({
-      nama_lengkap: sessionUser?.nama || "Administrator",
+      nama_lengkap: auth.user.nama,
+      email: auth.user.email,
       ip_address: request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63",
       tipe: "DELETE_DATA",
       aktifitas: `Menghapus OTB ${otb.code}`,

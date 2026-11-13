@@ -1,13 +1,20 @@
 import crypto from "crypto";
+import {
+  createSecureSessionToken,
+  verifySecureSessionToken,
+  revokeSessionToken,
+  getSafeSessionSecret,
+} from "@/lib/security";
 
 export interface SessionUser {
   id: string;
   nama: string;
   email: string;
   role: string;
+  exp?: number;
+  iat?: number;
+  jti?: string;
 }
-
-const SESSION_SECRET = process.env.SESSION_SECRET || "actis-secure-session-key-2026-secret";
 
 /**
  * Hash a plain password using scrypt with random salt.
@@ -21,57 +28,63 @@ export function hashPassword(password: string): string {
 
 /**
  * Verify a plain password against the stored hash.
- * If storedHash is null, falls back to default seed passwords:
- * - admin: 'admin123' or 'actis123'
- * - other roles: 'actis123' or 'admin123'
+ * STRICT SECURITY: Never falls back to default passwords like 'admin123' or 'actis123'.
+ * If storedHash is missing or malformed, verification strictly returns false.
  */
-export function verifyPassword(password: string, storedHash: string | null, email?: string): boolean {
-  if (!storedHash) {
-    if (email === "admin.noc@isp-enterprise.net") {
-      return password === "admin123" || password === "actis123";
-    }
-    return password === "actis123" || password === "admin123";
+export function verifyPassword(
+  password: string,
+  storedHash: string | null | undefined,
+  _email?: string
+): boolean {
+  if (!storedHash || typeof storedHash !== "string") {
+    return false;
   }
 
   const parts = storedHash.split(":");
   if (parts.length !== 2) return false;
   const [salt, key] = parts;
-  const keyBuffer = Buffer.from(key, "hex");
-  const derivedKey = crypto.scryptSync(password, salt, 64);
-  if (keyBuffer.length !== derivedKey.length) return false;
-  return crypto.timingSafeEqual(keyBuffer, derivedKey);
+
+  try {
+    const keyBuffer = Buffer.from(key, "hex");
+    const derivedKey = crypto.scryptSync(password, salt, 64);
+    if (keyBuffer.length !== derivedKey.length) return false;
+    return crypto.timingSafeEqual(keyBuffer, derivedKey);
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Create a tamper-proof session token.
+ * Create a secure, tamper-proof session token with expiration and JTI.
  */
 export function createSessionToken(user: SessionUser): string {
-  const payload = Buffer.from(JSON.stringify(user)).toString("base64url");
-  const signature = crypto.createHmac("sha256", SESSION_SECRET).update(payload).digest("hex");
-  return `${payload}.${signature}`;
+  return createSecureSessionToken(user);
 }
 
 /**
  * Verify a session token and extract SessionUser.
+ * Checks cryptographic signature, expiration, and revocation.
  */
 export function verifySessionToken(token: string | null | undefined): SessionUser | null {
-  if (!token) return null;
-  const parts = token.split(".");
-  if (parts.length !== 2) return null;
-  const [payload, signature] = parts;
+  const verified = verifySecureSessionToken(token);
+  if (!verified) return null;
 
-  const expectedSignature = crypto.createHmac("sha256", SESSION_SECRET).update(payload).digest("hex");
-  const sigBuffer = Buffer.from(signature);
-  const expBuffer = Buffer.from(expectedSignature);
-
-  if (sigBuffer.length !== expBuffer.length) return null;
-  if (!crypto.timingSafeEqual(sigBuffer, expBuffer)) return null;
-
-  try {
-    const jsonStr = Buffer.from(payload, "base64url").toString("utf8");
-    return JSON.parse(jsonStr) as SessionUser;
-  } catch {
-    return null;
-  }
+  return {
+    id: verified.id,
+    nama: verified.nama,
+    email: verified.email,
+    role: verified.role,
+    exp: verified.exp,
+    iat: verified.iat,
+    jti: verified.jti,
+  };
 }
 
+/**
+ * Invalidate a session token on logout.
+ */
+export function invalidateSessionToken(token: string | null | undefined): void {
+  revokeSessionToken(token);
+}
+
+export { getSafeSessionSecret };

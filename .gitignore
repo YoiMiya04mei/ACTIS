@@ -38,3 +38,11 @@ pnpm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# User uploads & temporary files
+/public/uploads/*
+!/public/uploads/.gitkeep
+/uploads/
+*.pem
+*.key
+backup_export_*.zip

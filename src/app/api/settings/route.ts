@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifySessionToken } from "@/lib/auth";
+import { requireAuth } from "@/lib/security";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 
-export async function GET() {
+export const dynamic = "force-dynamic";
+
+export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const settings = await prisma.systemSetting.findMany();
     const settingsMap = settings.reduce((acc, curr) => {
@@ -15,60 +20,40 @@ export async function GET() {
   } catch (err: any) {
     console.error("GET /api/settings error:", err);
     return NextResponse.json(
-      { success: false, error: err.message || "Failed to fetch settings" },
+      { success: false, error: "Failed to fetch settings" },
       { status: 500 }
     );
   }
 }
 
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
-    const { key, value, actorRole } = body;
+  // Strict authorization: Only Administrator can modify system settings
+  const auth = await requireAuth(request, { requireAdmin: true });
+  if (!auth.ok) return auth.response;
 
-    if (!key) {
+  try {
+    const body = await request.json().catch(() => ({}));
+    const { key, value } = body;
+
+    if (!key || typeof key !== "string") {
       return NextResponse.json(
         { success: false, error: "Setting key is required" },
         { status: 400 }
       );
     }
 
-    const sessionCookie = request.cookies.get("actis_session")?.value;
-    const sessionUser = verifySessionToken(sessionCookie);
-    const effectiveRole = sessionUser?.role || actorRole;
-
-    // Role-based protection: Only Administrator can add/modify/delete server_options, infrastructure_options, or media_options
-    if (key === "server_options" || key === "infrastructure_options" || key === "media_options") {
-      if (effectiveRole !== "admin") {
-        const entityMap: Record<string, string> = {
-          server_options: "server",
-          infrastructure_options: "infrastruktur",
-          media_options: "media koneksi",
-        };
-        const entityName = entityMap[key] || "sistem";
-        return NextResponse.json(
-          {
-            success: false,
-            error: `Akses ditolak: Hanya akun Administrator yang berhak menambah atau menghapus konfigurasi ${entityName}.`,
-          },
-          { status: 403 }
-        );
-      }
-    }
-
     const updated = await prisma.systemSetting.upsert({
-      where: { key },
-      update: { value: String(value || "") },
-      create: { key, value: String(value || "") },
+      where: { key: key.trim() },
+      update: { value: String(value ?? "") },
+      create: { key: key.trim(), value: String(value ?? "") },
     });
 
-    // Catat ke Log Aplikasi
-    const actorName = sessionUser?.nama || body.actorName || (effectiveRole === "admin" ? "Administrator" : "User");
     const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
     const userAgent = parseUserAgent(request.headers.get("user-agent"));
 
     recordActivity({
-      nama_lengkap: actorName,
+      nama_lengkap: auth.user.nama,
+      email: auth.user.email,
       ip_address: clientIp,
       tipe: "SETTING_UPDATE",
       aktifitas: `Memperbarui konfigurasi sistem [${key}]`,
@@ -84,7 +69,7 @@ export async function POST(request: NextRequest) {
   } catch (err: any) {
     console.error("POST /api/settings error:", err);
     return NextResponse.json(
-      { success: false, error: err.message || "Failed to update setting" },
+      { success: false, error: "Failed to update setting" },
       { status: 500 }
     );
   }

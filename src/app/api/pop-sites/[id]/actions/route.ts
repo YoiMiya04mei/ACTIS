@@ -3,11 +3,15 @@ import { prisma } from "@/lib/prisma";
 import { generateTicketNumber, parseBandwidthToMbps } from "@/lib/ticketUtils";
 import { buildPayloadForOrder, dispatchSheetsSync } from "@/lib/sheetsSync";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { requireAuth } from "@/lib/security";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const { id: siteId } = await params;
     const body = await request.json();
@@ -18,7 +22,6 @@ export async function POST(
       vlan,
       alasan,
       catatan,
-      user_id,
     } = body;
 
     const validActions = ["Upgrade", "Downgrade", "Isolir", "Unisolir", "Terminate", "Unterminate", "Unterminated"];
@@ -40,14 +43,7 @@ export async function POST(
       );
     }
 
-    // Default user fallback
-    let creatorId = user_id;
-    if (!creatorId) {
-      const defaultUser = await prisma.user.findFirst({
-        where: { role: "sales_corporate" },
-      });
-      creatorId = defaultUser?.id || "usr-sales-001";
-    }
+    const creatorId = auth.user.id;
 
     const ticketNumber = await generateTicketNumber();
 

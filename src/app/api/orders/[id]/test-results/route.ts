@@ -3,12 +3,19 @@ import { prisma } from "@/lib/prisma";
 import { buildPayloadForOrder, dispatchSheetsSync } from "@/lib/sheetsSync";
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { requireAuth, validateUploadedBuffer } from "@/lib/security";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const auth = await requireAuth(request, {
+    allowedRoles: ["admin", "noc_engineer", "field_engineer"],
+  });
+  if (!auth.ok) return auth.response;
+
   try {
     const { id: orderId } = await params;
 
@@ -28,12 +35,12 @@ export async function POST(
     let fileUrl = "";
     let fileName = "";
     let fileType = "image/png";
-    let uploaderId = "";
+    const uploaderId = auth.user.id;
+    const uploaderName = auth.user.nama;
 
     if (contentType.includes("multipart/form-data")) {
       const formData = await request.formData();
       const file = formData.get("file") as File | null;
-      uploaderId = (formData.get("uploader_id") as string) || "";
 
       if (!file) {
         return NextResponse.json(
@@ -45,49 +52,55 @@ export async function POST(
       fileName = file.name;
       fileType = file.type || "application/octet-stream";
 
-      // Save file to public/uploads
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+
+      // Strict file validation: magic bytes, MIME, allowed extensions (.png, .jpg, .jpeg, .pdf), max 10MB
+      const validation = validateUploadedBuffer(buffer, fileName);
+      if (!validation.valid) {
+        return NextResponse.json(
+          { success: false, error: validation.error || "Format atau isi file tidak valid." },
+          { status: 400 }
+        );
+      }
+
+      // Save file to public/uploads with random token prefix to prevent overwriting or guessing
       const uploadsDir = path.join(process.cwd(), "public", "uploads");
       if (!fs.existsSync(uploadsDir)) {
         fs.mkdirSync(uploadsDir, { recursive: true });
       }
 
-      const timestamp = Date.now();
-      const sanitizedName = fileName.replace(/[^a-zA-Z0-9.-]/g, "_");
-      const storedFileName = `${timestamp}_${sanitizedName}`;
+      const randomPrefix = crypto.randomBytes(12).toString("hex");
+      const sanitizedName = path.basename(fileName).replace(/[^a-zA-Z0-9.-]/g, "_");
+      const storedFileName = `${Date.now()}_${randomPrefix}_${sanitizedName}`;
       const filePath = path.join(uploadsDir, storedFileName);
 
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
       fs.writeFileSync(filePath, buffer);
-
       fileUrl = `/uploads/${storedFileName}`;
     } else {
-      // JSON payload (e.g. direct external link or test simulated)
+      // JSON payload (e.g. simulated test or verified external link)
       const body = await request.json();
       fileUrl = body.file_url;
       fileName = body.file_name || "test_result.png";
       fileType = body.file_type || "image/png";
-      uploaderId = body.uploader_id || "";
 
-      if (!fileUrl) {
+      if (!fileUrl || typeof fileUrl !== "string") {
         return NextResponse.json(
           { success: false, error: "file_url wajib disediakan." },
           { status: 400 }
         );
       }
+
+      // Security check on external URL / relative path
+      if (!fileUrl.startsWith("/uploads/") && !fileUrl.startsWith("https://")) {
+        return NextResponse.json(
+          { success: false, error: "file_url harus berupa HTTPS URL atau file upload internal (/uploads/)." },
+          { status: 400 }
+        );
+      }
     }
 
-    if (!uploaderId) {
-      const defaultUser = await prisma.user.findFirst({
-        where: { role: "noc_engineer" },
-      });
-      uploaderId = defaultUser?.id || "usr-noc-001";
-    }
-
-    const uploader = await prisma.user.findUnique({ where: { id: uploaderId } });
-    const uploaderName = uploader?.nama || "NOC Engineer";
-
-    // Save test result record
+    // Save test result record bound to authenticated user
     const testRecord = await prisma.testResult.create({
       data: {
         order_id: orderId,
@@ -126,7 +139,7 @@ export async function POST(
     // Record application-wide activity log
     recordActivity({
       nama_lengkap: uploaderName,
-      email: uploader?.email || null,
+      email: auth.user.email || null,
       ip_address: request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63",
       tipe: "UPDATE_ORDER",
       aktifitas: `Mengunggah hasil uji jaringan untuk tiket ${order.ticket_number} (${fileName})`,

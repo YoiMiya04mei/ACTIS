@@ -9,8 +9,12 @@ import {
   parseCoreNumbersJson,
 } from "@/lib/dcimUtils";
 import { reserveRackSlotForOrder, reserveOtbCoresForOrder } from "@/lib/dcimService";
+import { requireAuth } from "@/lib/security";
 
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status");
@@ -180,6 +184,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const body = await request.json();
 
@@ -417,14 +424,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Find or fallback creator user
-    let creatorId = created_by;
-    if (!creatorId) {
-      const defaultUser = await prisma.user.findFirst({
-        where: { role: "sales_corporate" },
-      });
-      creatorId = defaultUser?.id || "usr-sales-001";
-    }
+    // Strictly bind creator user to verified authenticated session
+    const creatorId = auth.user.id;
 
     const ticketNumber = await generateTicketNumber();
 

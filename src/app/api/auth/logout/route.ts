@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySessionToken } from "@/lib/auth";
+import { verifySessionToken, invalidateSessionToken } from "@/lib/auth";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { getSessionCookieOptions } from "@/lib/security";
 
 function getClientIp(req: NextRequest): string {
   const forwarded = req.headers.get("x-forwarded-for");
@@ -17,6 +18,9 @@ export async function POST(request: NextRequest) {
   const userAgent = parseUserAgent(request.headers.get("user-agent"));
 
   if (sessionUser) {
+    // Cryptographically revoke the token so it cannot be re-used
+    invalidateSessionToken(sessionCookie);
+
     recordActivity({
       nama_lengkap: sessionUser.nama,
       email: sessionUser.email,
@@ -32,11 +36,11 @@ export async function POST(request: NextRequest) {
     message: "Logout berhasil.",
   });
 
+  // Clear cookie completely
   response.cookies.set("actis_session", "", {
-    path: "/",
+    ...getSessionCookieOptions(0),
     maxAge: 0,
   });
 
   return response;
 }
-

@@ -6,14 +6,17 @@ import {
   maskBotToken,
   isMaskedTokenInput,
 } from "@/lib/telegramService";
-import { verifySessionToken } from "@/lib/auth";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { requireAuth } from "@/lib/security";
 
 /**
  * GET /api/monitoring/telegram
  * Mendapatkan status konfigurasi Telegram Bot (token disamarkan/masked)
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (!auth.ok) return auth.response;
+
   try {
     const config = await getTelegramConfig();
 
@@ -49,8 +52,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { action } = body;
 
-    // Aksi 1: Kirim Pesan Tes
+    // Aksi 1: Kirim Pesan Tes (Hanya butuh authenticated user)
     if (action === "test") {
+      const auth = await requireAuth(request);
+      if (!auth.ok) return auth.response;
+
       const testToken = body.bot_token?.trim();
       const testChatId = body.chat_id?.trim();
 
@@ -72,9 +78,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Catat ke Log Aplikasi
-      const sessionCookie = request.cookies.get("actis_session")?.value;
-      const sessionUser = verifySessionToken(sessionCookie);
-      const actorName = sessionUser?.nama || "Administrator";
+      const actorName = auth.user.nama;
       const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
       const userAgent = parseUserAgent(request.headers.get("user-agent"));
       recordActivity({
@@ -92,7 +96,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Aksi 2: Simpan Konfigurasi
+    // Aksi 2: Simpan Konfigurasi (Wajib level Administrator)
+    const adminAuth = await requireAuth(request, { requireAdmin: true });
+    if (!adminAuth.ok) return adminAuth.response;
+
     const { bot_token, chat_id, enabled, notif_down, notif_up } = body;
 
     const payloadToSave: any = {};
@@ -110,9 +117,7 @@ export async function POST(request: NextRequest) {
     const updated = await saveTelegramConfig(payloadToSave);
 
     // Catat ke Log Aplikasi
-    const sessionCookie = request.cookies.get("actis_session")?.value;
-    const sessionUser = verifySessionToken(sessionCookie);
-    const actorName = sessionUser?.nama || "Administrator";
+    const actorName = adminAuth.user.nama;
     const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
     const userAgent = parseUserAgent(request.headers.get("user-agent"));
     recordActivity({
