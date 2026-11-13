@@ -58,13 +58,20 @@ interface UserContextType {
   fetchUsers: () => Promise<void>;
 }
 
+export const EMPTY_USER: AppUser = {
+  id: "",
+  nama: "",
+  email: "",
+  role: "",
+};
+
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [currentUser, setCurrentUserState] = useState<AppUser>(DEMO_USERS[0]); // default to Admin Ahmad Fauzi
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
+  const [currentUser, setCurrentUserState] = useState<AppUser>(EMPTY_USER);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [users, setUsers] = useState<AppUser[]>(DEMO_USERS);
+  const [users, setUsers] = useState<AppUser[]>([]);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -78,39 +85,36 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Initialize user from local storage or cookie session
+  // Initialize and verify user from server session
   useEffect(() => {
     const initAuth = async () => {
       try {
-        const saved = localStorage.getItem("actis_active_user");
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          setCurrentUserState(parsed);
-          setIsAuthenticated(true);
-        } else {
-          // If no stored user, verify from server session or fallback
-          const meRes = await fetch("/api/auth/me");
+        const meRes = await fetch("/api/auth/me");
+        if (meRes.ok) {
           const meJson = await meRes.json();
           if (meJson.success && meJson.user) {
             setCurrentUserState(meJson.user);
             setIsAuthenticated(true);
             localStorage.setItem("actis_active_user", JSON.stringify(meJson.user));
-          } else {
-            // Set default admin for initial convenience or prompt login
-            setCurrentUserState(DEMO_USERS[0]);
-            setIsAuthenticated(true);
-            localStorage.setItem("actis_active_user", JSON.stringify(DEMO_USERS[0]));
+            fetchUsers();
+            return;
           }
         }
+        // If not authenticated or invalid session:
+        setCurrentUserState(EMPTY_USER);
+        setIsAuthenticated(false);
+        localStorage.removeItem("actis_active_user");
       } catch (err) {
         console.error("Failed to initialize auth", err);
+        setCurrentUserState(EMPTY_USER);
+        setIsAuthenticated(false);
+        localStorage.removeItem("actis_active_user");
       } finally {
         setIsLoading(false);
       }
     };
 
     initAuth();
-    fetchUsers();
   }, [fetchUsers]);
 
   const handleSetUser = (user: AppUser) => {
@@ -200,8 +204,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       console.error("Logout error", e);
     } finally {
       localStorage.removeItem("actis_active_user");
+      setCurrentUserState(EMPTY_USER);
       setIsAuthenticated(false);
-      // Optional: keep currentUser as null or fallback
     }
   };
 

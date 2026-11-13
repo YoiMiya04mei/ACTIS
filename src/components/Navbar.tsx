@@ -153,14 +153,14 @@ export function Navbar() {
                 className="flex items-center space-x-2.5 px-3 py-1.5 rounded-xl bg-slate-800/90 border border-slate-700/80 hover:bg-slate-800 transition text-left focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shadow-inner">
-                  {currentUser.nama.charAt(0)}
+                  {currentUser?.nama ? currentUser.nama.charAt(0) : "U"}
                 </div>
                 <div className="flex flex-col text-left">
                   <span className="text-xs font-semibold text-slate-200 line-clamp-1 max-w-[130px]">
-                    {currentUser.nama}
+                    {currentUser?.nama || "-"}
                   </span>
                   <span className="text-[10px] text-slate-400 font-medium">
-                    {getRoleLabel(currentUser.role)}
+                    {getRoleLabel(currentUser?.role || "")}
                   </span>
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-1" />

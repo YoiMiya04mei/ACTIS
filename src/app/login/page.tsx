@@ -14,7 +14,6 @@ import {
   User,
   CheckCircle2,
   AlertCircle,
-  Sparkles,
 } from "lucide-react";
 
 export default function LoginPage() {
@@ -49,12 +48,6 @@ export default function LoginPage() {
         router.push("/queue");
       }, 500);
     }
-  };
-
-  const fillCredentials = (userEmail: string, userPass: string) => {
-    setEmail(userEmail);
-    setPassword(userPass);
-    setError(null);
   };
 
   return (
@@ -166,95 +159,6 @@ export default function LoginPage() {
               )}
             </button>
           </form>
-
-          {/* Demo Account Quick Switcher */}
-          <div className="mt-8 pt-6 border-t border-slate-100">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center space-x-1">
-                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                <span>Uji Coba Cepat (Akun Demo)</span>
-              </span>
-              <span className="text-[10px] text-slate-400">Klik untuk isi otomatis</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => fillCredentials("admin.noc@isp-enterprise.net", "admin123")}
-                className="p-2.5 rounded-xl border border-purple-200 bg-purple-50/70 hover:bg-purple-100/80 text-left transition flex flex-col"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-purple-900">Administrator</span>
-                  <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-purple-200 text-purple-800">
-                    Full Access
-                  </span>
-                </div>
-                <span className="text-[10px] text-purple-700 truncate mt-0.5">
-                  admin.noc@isp-enterprise.net
-                </span>
-                <span className="text-[9px] text-purple-600 mt-0.5">
-                  Bisa Tambah & Hapus User
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillCredentials("budi.santoso@isp-enterprise.net", "actis123")}
-                className="p-2.5 rounded-xl border border-blue-200 bg-blue-50/70 hover:bg-blue-100/80 text-left transition flex flex-col"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-blue-900">NOC Engineer</span>
-                  <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-blue-200 text-blue-800">
-                    Operasional
-                  </span>
-                </div>
-                <span className="text-[10px] text-blue-700 truncate mt-0.5">
-                  budi.santoso@isp-enterprise.net
-                </span>
-                <span className="text-[9px] text-blue-600 mt-0.5">
-                  Hanya Ganti Password
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillCredentials("dimas.k@isp-enterprise.net", "actis123")}
-                className="p-2.5 rounded-xl border border-amber-200 bg-amber-50/70 hover:bg-amber-100/80 text-left transition flex flex-col"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-amber-900">Field Engineer</span>
-                  <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-amber-200 text-amber-800">
-                    Teknisi
-                  </span>
-                </div>
-                <span className="text-[10px] text-amber-700 truncate mt-0.5">
-                  dimas.k@isp-enterprise.net
-                </span>
-                <span className="text-[9px] text-amber-600 mt-0.5">
-                  Hanya Ganti Password
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillCredentials("sarah.novita@isp-enterprise.net", "actis123")}
-                className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 hover:bg-emerald-100/80 text-left transition flex flex-col"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-emerald-900">Sales Corporate</span>
-                  <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-emerald-200 text-emerald-800">
-                    Bisnis
-                  </span>
-                </div>
-                <span className="text-[10px] text-emerald-700 truncate mt-0.5">
-                  sarah.novita@isp-enterprise.net
-                </span>
-                <span className="text-[9px] text-emerald-600 mt-0.5">
-                  Hanya Ganti Password
-                </span>
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Footer info */}

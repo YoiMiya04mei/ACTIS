@@ -1,5 +1,82 @@
 [
   {
+    "id": "log-1794612528058-suskv",
+    "nama_lengkap": "Administrator Jembatan Data",
+    "email": "admin@jembatandata.com",
+    "ip_address": "::1",
+    "tipe": "UPDATE_SITE",
+    "aktifitas": "Mengubah data layanan POP-202611-0009 (SIAPA AJA)",
+    "detail": "[{\"field\":\"ip_public\",\"label\":\"IP Public\",\"old_value\":\"103.155.196.5\",\"new_value\":\"103.155.196.4\"}]",
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-13T23:28:48.058Z"
+  },
+  {
+    "id": "log-1794612480395-ezy4z",
+    "nama_lengkap": "Administrator Jembatan Data",
+    "email": "admin@jembatandata.com",
+    "ip_address": "::1",
+    "tipe": "UPDATE_ORDER",
+    "aktifitas": "Mengubah status tiket ACT-20261110-0004 menjadi Completed",
+    "detail": "Aktivasi layanan selesai dan diverifikasi oleh Administrator Jembatan Data. Layanan berstatus Completed (Go-Live).",
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-13T23:28:00.395Z"
+  },
+  {
+    "id": "log-1794612459916-xiu7c",
+    "nama_lengkap": "Administrator Jembatan Data",
+    "email": "admin@jembatandata.com",
+    "ip_address": "::1",
+    "tipe": "UPDATE_ORDER",
+    "aktifitas": "Mengunggah hasil uji jaringan untuk tiket ACT-20261110-0004 (133853936603813676.jpg)",
+    "detail": "Hasil uji jaringan diunggah: \"133853936603813676.jpg\" oleh Administrator Jembatan Data. Waktu laporan aktivasi tercatat. Syarat Completion terpenuhi.",
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-13T23:27:39.916Z"
+  },
+  {
+    "id": "log-1794612443075-ply2t",
+    "nama_lengkap": "Administrator Jembatan Data",
+    "email": null,
+    "ip_address": "::1",
+    "tipe": "UPDATE_ORDER",
+    "aktifitas": "Menambahkan catatan progress pada tiket ACT-20261110-0004 (Progress Note)",
+    "detail": "hgj",
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-13T23:27:23.075Z"
+  },
+  {
+    "id": "log-1794612392387-o4zxf",
+    "nama_lengkap": "Administrator Jembatan Data",
+    "email": "admin@jembatandata.com",
+    "ip_address": "::1",
+    "tipe": "LOGIN_SUCCESS",
+    "aktifitas": "Berhasil login ke aplikasi",
+    "detail": null,
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-13T23:26:32.387Z"
+  },
+  {
+    "id": "log-1794612392277-k3a36",
+    "nama_lengkap": "Administrator Jembatan Data",
+    "email": "admin@jembatandata.com",
+    "ip_address": "::1",
+    "tipe": "LOGIN_SUCCESS",
+    "aktifitas": "Berhasil login ke aplikasi — Administrator Jembatan Data",
+    "detail": null,
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-13T23:26:32.277Z"
+  },
+  {
+    "id": "log-1794612390058-r15ol",
+    "nama_lengkap": "Administrator Jembatan Data",
+    "email": "admin@jembatandata.com",
+    "ip_address": "::1",
+    "tipe": "LOGIN_SUCCESS",
+    "aktifitas": "Berhasil login ke aplikasi — Chrome 157 · Windows",
+    "detail": null,
+    "user_agent": "Chrome 157 · Windows",
+    "created_at": "2026-11-13T23:26:30.058Z"
+  },
+  {
     "id": "log-1794565506498-gdlaf",
     "nama_lengkap": "brute_attacker",
     "email": "brute_attacker@isp.net",

@@ -1,9 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
-import { usePathname } from "next/navigation";
+import React, { useState, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { TopHeader } from "@/components/TopHeader";
+import { useCurrentUser } from "@/context/UserContext";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -11,11 +12,28 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { isAuthenticated, isLoading } = useCurrentUser();
   const [isOpenMobile, setIsOpenMobile] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated && pathname !== "/login") {
+      router.push("/login");
+    }
+  }, [isLoading, isAuthenticated, pathname, router]);
 
   // If on login page, render bare without navigation chrome
   if (pathname === "/login") {
     return <main className="min-h-screen bg-slate-900">{children}</main>;
+  }
+
+  // If verifying authentication state, show loading indicator
+  if (isLoading && !isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
   }
 
   return (

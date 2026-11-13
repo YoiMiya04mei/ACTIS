@@ -56,6 +56,33 @@ export function middleware(request: NextRequest) {
     }
   }
 
+  // Authentication Guard for Web Page Routes
+  const isPublicRoute =
+    pathname === "/login" ||
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/icons/") ||
+    pathname.startsWith("/images/") ||
+    pathname.startsWith("/uploads/") ||
+    pathname === "/favicon.ico" ||
+    pathname === "/manifest.json" ||
+    pathname.includes(".");
+
+  const sessionCookie = request.cookies.get("actis_session")?.value;
+
+  // Root URL redirection: direct to /login if unauthenticated, /queue if authenticated
+  if (pathname === "/") {
+    if (!sessionCookie) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+    return NextResponse.redirect(new URL("/queue", request.url));
+  }
+
+  // Redirect unauthenticated visitors attempting to access protected pages to /login
+  if (!isPublicRoute && !sessionCookie) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
   const response = NextResponse.next();
 
   // Security Headers for Defense-in-Depth

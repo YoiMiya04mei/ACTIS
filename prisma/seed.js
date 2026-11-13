@@ -53,6 +53,16 @@ async function main() {
     },
   });
 
+  const jembatanDataAdmin = await prisma.user.create({
+    data: {
+      id: 'usr-admin-jembatandata',
+      nama: 'Administrator Jembatan Data',
+      email: 'admin@jembatandata.com',
+      role: 'admin',
+      password_hash: hashPassword(process.env.INITIAL_JEMBATANDATA_PASSWORD || 'admin123'),
+    },
+  });
+
   const nocUser1 = await prisma.user.create({
     data: {
       id: 'usr-noc-001',
