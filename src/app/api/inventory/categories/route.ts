@@ -8,13 +8,57 @@ export async function GET(request: NextRequest) {
   if (!auth.ok) return auth.response;
 
   try {
+    // Pastikan kategori baku "Aktif" dan "Pasif" selalu tersedia
+    const catAktif = await prisma.inventoryCategory.upsert({
+      where: { name: "Aktif" },
+      update: {},
+      create: {
+        name: "Aktif",
+        description: "Perangkat Aktif (Elektronik / Bertenaga Listrik seperti Router, Switch, OLT, ONT/Modem, SFP, Server, dsb)",
+      },
+    });
+
+    const catPasif = await prisma.inventoryCategory.upsert({
+      where: { name: "Pasif" },
+      update: {},
+      create: {
+        name: "Pasif",
+        description: "Perangkat / Material Pasif (Non-Elektronik seperti Kabel Fiber Optik, Drop Core, Patch Cord, OTB, Splitter, Closure, dsb)",
+      },
+    });
+
+    // Migrasikan item lama yang masih menggunakan kategori selain Aktif/Pasif
+    const legacyCategories = await prisma.inventoryCategory.findMany({
+      where: {
+        name: { notIn: ["Aktif", "Pasif"] },
+      },
+      include: {
+        items: true,
+      },
+    });
+
+    for (const legacy of legacyCategories) {
+      if (legacy.items.length > 0) {
+        const isPassive = /kabel|cable|fiber|drop|patch|otb|closure|splitter|material|baut|konektor|roset|pasif|passive/i.test(legacy.name);
+        const targetCategory = isPassive ? catPasif : catAktif;
+        await prisma.inventoryItem.updateMany({
+          where: { category_id: legacy.id },
+          data: { category_id: targetCategory.id },
+        });
+      }
+    }
+
+    // Ambil data kategori resmi (Aktif & Pasif) beserta jumlah itemnya
     const categories = await prisma.inventoryCategory.findMany({
+      where: {
+        name: { in: ["Aktif", "Pasif"] },
+      },
       include: {
         _count: {
           select: { items: true },
         },
       },
-      orderBy: { name: "asc" },
+      orderBy: { name: "asc" }, // Aktif, Pasif
     });
 
     return NextResponse.json({

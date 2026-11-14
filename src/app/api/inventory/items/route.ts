@@ -132,12 +132,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const category = await prisma.inventoryCategory.findUnique({
+    let category = await prisma.inventoryCategory.findUnique({
       where: { id: categoryId },
     });
     if (!category) {
+      category = await prisma.inventoryCategory.findFirst({
+        where: { name: { equals: categoryId, mode: "insensitive" } },
+      });
+      if (!category) {
+        if (/aktif/i.test(categoryId)) {
+          category = await prisma.inventoryCategory.upsert({
+            where: { name: "Aktif" },
+            update: {},
+            create: { name: "Aktif", description: "Perangkat Aktif" },
+          });
+        } else if (/pasif/i.test(categoryId)) {
+          category = await prisma.inventoryCategory.upsert({
+            where: { name: "Pasif" },
+            update: {},
+            create: { name: "Pasif", description: "Perangkat Pasif" },
+          });
+        }
+      }
+    }
+    if (!category) {
       return NextResponse.json(
-        { success: false, error: "Kategori yang dipilih tidak valid." },
+        { success: false, error: "Kategori yang dipilih tidak valid. Pilih Aktif atau Pasif." },
         { status: 400 }
       );
     }
@@ -165,7 +185,7 @@ export async function POST(request: NextRequest) {
         data: {
           code: itemCode,
           name,
-          category_id: categoryId,
+          category_id: category.id,
           type,
           brand,
           model,

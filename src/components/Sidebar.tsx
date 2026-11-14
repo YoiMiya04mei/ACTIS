@@ -440,30 +440,7 @@ export function Sidebar({
                     </div>
                   </Link>
 
-                  {/* 3. Kategori Barang */}
-                  <Link
-                    href="/inventory/categories"
-                    onClick={onCloseMobile}
-                    className={`group flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
-                      pathname === "/inventory/categories"
-                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
-                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
-                    }`}
-                    title="Kategori Barang & Peralatan"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <Tags
-                        className={`w-4 h-4 shrink-0 ${
-                          pathname === "/inventory/categories"
-                            ? "text-blue-600 dark:text-blue-400"
-                            : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
-                        }`}
-                      />
-                      <span className="truncate">Kategori Barang</span>
-                    </div>
-                  </Link>
-
-                  {/* 4. Stok Inventory */}
+                  {/* 3. Stok Inventory */}
                   <Link
                     href="/inventory/stock"
                     onClick={onCloseMobile}

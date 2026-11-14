@@ -63,7 +63,10 @@ export default function MasterBarangPage() {
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "warehouse_admin";
 
   const [items, setItems] = useState<Item[]>([]);
-  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
+  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([
+    { id: "Aktif", name: "Aktif" },
+    { id: "Pasif", name: "Pasif" },
+  ]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -386,7 +389,7 @@ export default function MasterBarangPage() {
             }}
             className="w-full py-2 px-3 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-hidden"
           >
-            <option value="">Semua Kategori</option>
+            <option value="">Semua Kategori (Aktif & Pasif)</option>
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
@@ -478,8 +481,20 @@ export default function MasterBarangPage() {
                           {item.brand ? `Merk: ${item.brand}` : ""} {item.model ? `(${item.model})` : ""}
                         </p>
                       </td>
-                      <td className="py-3 px-4 font-medium text-slate-600 dark:text-slate-300">
-                        {item.category?.name || "Uncategorized"}
+                      <td className="py-3 px-4">
+                        {item.category?.name?.toLowerCase() === "aktif" ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 shadow-xs">
+                            Aktif
+                          </span>
+                        ) : item.category?.name?.toLowerCase() === "pasif" ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950/70 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 shadow-xs">
+                            Pasif
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                            {item.category?.name || "Aktif"}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         {item.type === "REUSABLE" ? (

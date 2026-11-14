@@ -87,7 +87,31 @@ export async function PUT(
     }
 
     const name = body.name?.trim() || existing.name;
-    const categoryId = body.category_id || existing.category_id;
+    let categoryId = body.category_id || existing.category_id;
+    if (body.category_id) {
+      let cat = await prisma.inventoryCategory.findUnique({ where: { id: body.category_id } });
+      if (!cat) {
+        cat = await prisma.inventoryCategory.findFirst({
+          where: { name: { equals: body.category_id, mode: "insensitive" } },
+        });
+        if (!cat) {
+          if (/aktif/i.test(body.category_id)) {
+            cat = await prisma.inventoryCategory.upsert({
+              where: { name: "Aktif" },
+              update: {},
+              create: { name: "Aktif", description: "Perangkat Aktif" },
+            });
+          } else if (/pasif/i.test(body.category_id)) {
+            cat = await prisma.inventoryCategory.upsert({
+              where: { name: "Pasif" },
+              update: {},
+              create: { name: "Pasif", description: "Perangkat Pasif" },
+            });
+          }
+        }
+      }
+      if (cat) categoryId = cat.id;
+    }
     const brand = body.brand !== undefined ? body.brand?.trim() || null : existing.brand;
     const model = body.model !== undefined ? body.model?.trim() || null : existing.model;
     const serialNumber = body.serial_number !== undefined ? body.serial_number?.trim() || null : existing.serial_number;
