@@ -28,8 +28,8 @@ export default function InventorySettingsPage() {
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const [formData, setFormData] = useState({
-    DEFAULT_WAREHOUSE_NAME: "Gudang Utama JDP",
-    DEFAULT_STORAGE_LOCATION: "Gudang Utama - Rak A1",
+    DEFAULT_WAREHOUSE_NAME: "Gudang Pusat",
+    DEFAULT_STORAGE_LOCATION: "Gudang Pusat",
     DEFAULT_MIN_STOCK: "5",
     ENABLE_AUTO_ITEM_CODE: "true",
     ALLOW_NEGATIVE_STOCK: "false",
@@ -182,16 +182,23 @@ export default function InventorySettingsPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Lokasi / Rak Penyimpanan Default
+                    Lokasi / Gudang Penyimpanan Default
                   </label>
-                  <input
-                    type="text"
+                  <select
                     disabled={!canEdit || loading}
                     value={formData.DEFAULT_STORAGE_LOCATION}
                     onChange={(e) => setFormData({ ...formData, DEFAULT_STORAGE_LOCATION: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
-                    placeholder="Contoh: Gudang Utama - Rak A1"
-                  />
+                  >
+                    <option value="Gudang Pusat">Gudang Pusat</option>
+                    <option value="Gudang Bandung">Gudang Bandung</option>
+                    <option value="Gudang Gekbrong">Gudang Gekbrong</option>
+                    {formData.DEFAULT_STORAGE_LOCATION && !["Gudang Pusat", "Gudang Bandung", "Gudang Gekbrong"].includes(formData.DEFAULT_STORAGE_LOCATION) && (
+                      <option value={formData.DEFAULT_STORAGE_LOCATION}>
+                        {formData.DEFAULT_STORAGE_LOCATION}
+                      </option>
+                    )}
+                  </select>
                   <p className="text-xs text-gray-500 mt-1">
                     Lokasi penempatan barang baru jika kolom lokasi pada Master Barang dikosongkan.
                   </p>

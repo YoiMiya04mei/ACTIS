@@ -14,8 +14,8 @@ export async function GET(request: NextRequest) {
       ENABLE_AUTO_ITEM_CODE: "true",
       ALLOW_NEGATIVE_STOCK: "false",
       NOTIFY_ON_LOW_STOCK: "true",
-      DEFAULT_WAREHOUSE_NAME: "Gudang Utama JDP",
-      DEFAULT_STORAGE_LOCATION: "Gudang Utama - Rak A1",
+      DEFAULT_WAREHOUSE_NAME: "Gudang Pusat",
+      DEFAULT_STORAGE_LOCATION: "Gudang Pusat",
     };
 
     settings.forEach((s) => {

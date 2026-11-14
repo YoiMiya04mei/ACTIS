@@ -58,6 +58,12 @@ interface Item {
   };
 }
 
+const STORAGE_LOCATIONS = [
+  "Gudang Pusat",
+  "Gudang Bandung",
+  "Gudang Gekbrong",
+];
+
 export default function MasterBarangPage() {
   const { currentUser } = useCurrentUser();
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "warehouse_admin";
@@ -98,7 +104,7 @@ export default function MasterBarangPage() {
     serial_number: "",
     unit: "Unit",
     min_stock: "5",
-    storage_location: "Gudang Utama",
+    storage_location: "Gudang Pusat",
     description: "",
     initial_stock: "0",
     serial_numbers_text: "",
@@ -160,7 +166,7 @@ export default function MasterBarangPage() {
       serial_number: "",
       unit: "Unit",
       min_stock: "5",
-      storage_location: "Gudang Utama - Rak A1",
+      storage_location: "Gudang Pusat",
       description: "",
       initial_stock: "0",
       serial_numbers_text: "",
@@ -180,7 +186,7 @@ export default function MasterBarangPage() {
       serial_number: item.serial_number || "",
       unit: item.unit,
       min_stock: String(item.min_stock),
-      storage_location: item.storage_location || "",
+      storage_location: item.storage_location || "Gudang Pusat",
       description: item.description || "",
       initial_stock: "0",
       serial_numbers_text: "",
@@ -763,15 +769,25 @@ export default function MasterBarangPage() {
 
                 <div>
                   <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                    Lokasi Penyimpanan (Gudang / Rak)
+                    Lokasi Penyimpanan <span className="text-rose-500">*</span>
                   </label>
-                  <input
-                    type="text"
+                  <select
+                    required
                     value={formData.storage_location}
                     onChange={(e) => setFormData({ ...formData, storage_location: e.target.value })}
-                    placeholder="Contoh: Gudang Utama - Rak A1"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                  />
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-medium text-slate-900 dark:text-slate-100"
+                  >
+                    {STORAGE_LOCATIONS.map((loc) => (
+                      <option key={loc} value={loc}>
+                        {loc}
+                      </option>
+                    ))}
+                    {formData.storage_location && !STORAGE_LOCATIONS.includes(formData.storage_location) && (
+                      <option value={formData.storage_location}>
+                        {formData.storage_location}
+                      </option>
+                    )}
+                  </select>
                 </div>
 
                 {!editingItem && (
@@ -982,6 +998,9 @@ export default function MasterBarangPage() {
               </div>
               <p className="text-[11px] text-slate-500">
                 * Kolom Jenis diisi <code>REUSABLE</code> atau <code>CONSUMABLE</code>.
+              </p>
+              <p className="text-[11px] text-slate-500">
+                * Pilihan Lokasi Penyimpanan: <code>Gudang Pusat</code>, <code>Gudang Bandung</code>, <code>Gudang Gekbrong</code>.
               </p>
             </div>
 
