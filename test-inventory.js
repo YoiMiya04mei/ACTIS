@@ -84,6 +84,8 @@ async function runInventoryTests() {
       processReturn,
       updateInUseAssignment,
       adjustStock,
+      extractConsonantsCode,
+      generateItemCode,
     } = await import("./src/lib/inventoryService.ts");
 
     // =========================================================================
@@ -540,6 +542,50 @@ async function runInventoryTests() {
       "TEST 14: Integrasi Permit Barang: stok tetap utuh saat permohonan dibuat dan HANYA berkurang saat barang diserahkan (5 -> 3).",
       `Stock before dispatch: ${stockAfterPermitCreated?.available_stock}, after dispatch: ${stockAfterDispatch?.available_stock}`
     );
+
+    // =========================================================================
+    // TEST 15: Generator Kode Barang Mengikuti 3 Huruf Konsonan Nama Barang + Urutan
+    // =========================================================================
+    const rtrCode = extractConsonantsCode("ROUTERBOARD 1100AHX4");
+    const mdmCode = extractConsonantsCode("MODEM HUAWEI HG8245H5");
+    const swtCode = extractConsonantsCode("SWITCH CISCO 2960");
+    const kblCode = extractConsonantsCode("KABEL FIBER OPTIK");
+    const sfpCode = extractConsonantsCode("SFP TRANSCEIVER 10G");
+
+    assert(
+      rtrCode === "RTR" &&
+      mdmCode === "MDM" &&
+      swtCode === "SWT" &&
+      kblCode === "KBL" &&
+      sfpCode === "SFP",
+      "TEST 15.1: Ekstraksi 3 huruf konsonan dari nama barang berhasil (ROUTERBOARD->RTR, MODEM->MDM, SWITCH->SWT, KABEL->KBL, SFP->SFP)."
+    );
+
+    // Test sequential ID generation
+    const code1 = await generateItemCode("MODEM FIBERHOME AN5506");
+    assert(code1.startsWith("MDM-"), `TEST 15.2: Kode barang diawali 3 konsonan nama: ${code1}`);
+
+    // Insert dummy item to test sequence increment
+    const catAktif = await prisma.inventoryCategory.upsert({
+      where: { name: "Aktif" },
+      update: {},
+      create: { name: "Aktif", description: "Perangkat Aktif" },
+    });
+
+    const testItemSeq1 = await prisma.inventoryItem.create({
+      data: {
+        code: code1,
+        name: "TEST MODEM FIBERHOME AN5506",
+        category_id: catAktif.id,
+        type: "REUSABLE",
+      },
+    });
+
+    const code2 = await generateItemCode("MODEM ZTE F609");
+    assert(code2.startsWith("MDM-") && code2 !== code1, `TEST 15.3: Kode barang kedua berurutan naik: ${code2} (sebelumnya ${code1})`);
+
+    // Clean up temporary test items
+    await prisma.inventoryItem.delete({ where: { id: testItemSeq1.id } });
 
     // Clean up test records
     await prisma.inventoryMovement.deleteMany({

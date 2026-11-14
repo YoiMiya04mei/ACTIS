@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const name = body.name?.trim();
+    const name = body.name ? String(body.name).trim().toUpperCase() : "";
     const categoryId = body.category_id?.trim();
     const type = body.type === "CONSUMABLE" ? "CONSUMABLE" : "REUSABLE";
     const brand = body.brand?.trim() || null;
@@ -162,11 +162,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine or generate unique item code
-    let itemCode = body.code?.trim();
+    // Determine or generate unique item code based on 3 consonants of item name + sequence
+    let itemCode = body.code?.trim().toUpperCase();
     if (!itemCode) {
-      const catCode = category.name.replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase() || "ITM";
-      itemCode = await generateItemCode(catCode);
+      itemCode = await generateItemCode(name);
     } else {
       const existing = await prisma.inventoryItem.findUnique({
         where: { code: itemCode },

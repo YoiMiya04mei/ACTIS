@@ -86,7 +86,7 @@ export async function PUT(
       );
     }
 
-    const name = body.name?.trim() || existing.name;
+    const name = body.name !== undefined ? String(body.name).trim().toUpperCase() : existing.name;
     let categoryId = body.category_id || existing.category_id;
     if (body.category_id) {
       let cat = await prisma.inventoryCategory.findUnique({ where: { id: body.category_id } });

@@ -55,25 +55,56 @@ export async function generateReturnNumber(
 }
 
 /**
- * Generate sequential item code e.g. ITM-ROU-0001
+ * Extract 3 uppercase consonant letters from Item Name (e.g. ROUTERBOARD -> RTR, MODEM -> MDM)
+ */
+export function extractConsonantsCode(name: string): string {
+  if (!name || !name.trim()) return "ITM";
+
+  // Ambil huruf konsonan alfabet (B, C, D, F, G, H, J, K, L, M, N, P, Q, R, S, T, V, W, X, Y, Z)
+  const consonants = name.toUpperCase().replace(/[^BCDFGHJKLMNPQRSTVWXYZ]/g, "");
+
+  if (consonants.length >= 3) {
+    return consonants.slice(0, 3);
+  }
+
+  // Jika konsonan kurang dari 3, tambahkan huruf alfabet lain dari nama dan pad dengan X jika perlu
+  const allLetters = name.toUpperCase().replace(/[^A-Z]/g, "");
+  const combined = consonants + allLetters + "XXX";
+  return combined.slice(0, 3);
+}
+
+/**
+ * Generate sequential item code based on 3 consonant letters of item name followed by sequence ID (e.g. RTR-0001, MDM-0001)
  */
 export async function generateItemCode(
-  categoryCode = "GEN",
+  nameOrCode = "ITM",
   tx?: Prisma.TransactionClient
 ): Promise<string> {
   const client = tx || prisma;
-  const cleanCode = categoryCode.slice(0, 3).toUpperCase();
-  const prefix = `ITM-${cleanCode}-`;
+  const prefix3 = extractConsonantsCode(nameOrCode);
+  const prefix = `${prefix3}-`;
 
-  const count = await client.inventoryItem.count({
+  const items = await client.inventoryItem.findMany({
     where: {
       code: {
         startsWith: prefix,
       },
     },
+    select: {
+      code: true,
+    },
   });
 
-  const nextSeq = String(count + 1).padStart(4, "0");
+  let maxSeq = 0;
+  for (const it of items) {
+    const numPart = it.code.substring(prefix.length);
+    const parsed = parseInt(numPart, 10);
+    if (!isNaN(parsed) && parsed > maxSeq) {
+      maxSeq = parsed;
+    }
+  }
+
+  const nextSeq = String(maxSeq + 1).padStart(4, "0");
   return `${prefix}${nextSeq}`;
 }
 

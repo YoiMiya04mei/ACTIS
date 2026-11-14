@@ -634,24 +634,40 @@ export default function MasterBarangPage() {
                     type="text"
                     required
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="Contoh: Routerboard 1100AHx4"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value.toUpperCase() })}
+                    placeholder="Contoh: ROUTERBOARD 1100AHX4"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 uppercase font-semibold text-slate-900 dark:text-slate-100"
                   />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    * Otomatis huruf besar / CAPSLOCK.
+                  </p>
                 </div>
 
                 <div>
                   <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
                     Kode Barang (Opsional / Otomatis)
                   </label>
-                  <input
-                    type="text"
-                    value={formData.code}
-                    disabled={!!editingItem}
-                    onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                    placeholder="Kosongkan untuk auto-generate (ITM-XXX-0001)"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 disabled:bg-slate-100 dark:disabled:bg-slate-800"
-                  />
+                  {(() => {
+                    const consonants = (formData.name || "").toUpperCase().replace(/[^BCDFGHJKLMNPQRSTVWXYZ]/g, "");
+                    const allLetters = (formData.name || "").toUpperCase().replace(/[^A-Z]/g, "");
+                    const prefix3 = consonants.length >= 3 ? consonants.slice(0, 3) : (consonants + allLetters + "XXX").slice(0, 3);
+                    const previewCode = formData.name ? `${prefix3}-0001` : "XXX-0001";
+                    return (
+                      <>
+                        <input
+                          type="text"
+                          value={formData.code}
+                          disabled={!!editingItem}
+                          onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, "") })}
+                          placeholder={formData.name ? `Otomatis: ${previewCode}` : "Kosongkan untuk auto-generate (contoh: RTR-0001)"}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 uppercase disabled:bg-slate-100 dark:disabled:bg-slate-800"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          * 3 huruf konsonan dari nama barang + nomor urut (contoh: <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{previewCode}</span>).
+                        </p>
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <div>
@@ -787,23 +803,6 @@ export default function MasterBarangPage() {
                 />
               </div>
 
-              {formData.type === "REUSABLE" && !editingItem && (
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                    Serial Number Unit (Opsional - Pisahkan tiap baris)
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={formData.serial_numbers_text}
-                    onChange={(e) => setFormData({ ...formData, serial_numbers_text: e.target.value })}
-                    placeholder="SN-RB1100-001&#10;SN-RB1100-002"
-                    className="w-full font-mono px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                  />
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Setiap serial number akan dicatat sebagai unit terpisah untuk pelacakan fisik individual.
-                  </p>
-                </div>
-              )}
 
               <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100 dark:border-slate-800">
                 <button

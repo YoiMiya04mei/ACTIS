@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       const row = items[i];
       const rowNum = i + 1;
 
-      const name = row.name || row["Nama Barang"];
+      const name = String(row.name || row["Nama Barang"] || "").trim().toUpperCase();
       const categoryName = (row.category || row["Kategori"] || "Umum").trim();
       const typeStr = (row.type || row["Jenis"] || "REUSABLE").toUpperCase().includes("CONSUMABLE")
         ? "CONSUMABLE"
@@ -91,8 +91,7 @@ export async function POST(request: NextRequest) {
           continue;
         }
       } else {
-        const catCode = categoryName.slice(0, 3).toUpperCase() || "ITM";
-        code = await generateItemCode(catCode);
+        code = await generateItemCode(name);
       }
 
       // Create new item + stock
