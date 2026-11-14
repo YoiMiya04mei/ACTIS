@@ -17,6 +17,10 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Info,
+  Barcode,
+  Copy,
+  Check,
+  ExternalLink,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
 
@@ -47,6 +51,14 @@ export default function StokInventoryPage() {
   const [opnameOfficer, setOpnameOfficer] = useState("");
   const [opnameNotes, setOpnameNotes] = useState("");
   const [opnameEntries, setOpnameEntries] = useState<Record<string, string>>({});
+
+  // Item Detail & Available SNs Modal
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [detailItem, setDetailItem] = useState<any>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [snSearch, setSnSearch] = useState("");
+  const [snStatusFilter, setSnStatusFilter] = useState<"AVAILABLE" | "IN_USE" | "ALL">("AVAILABLE");
+  const [copiedSn, setCopiedSn] = useState<string | null>(null);
 
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
@@ -150,6 +162,47 @@ export default function StokInventoryPage() {
       fetchStock();
     } catch (err: any) {
       setNotification({ type: "error", message: err.message });
+    }
+  };
+
+  const handleOpenDetail = async (item: any) => {
+    setDetailItem(item);
+    setIsDetailModalOpen(true);
+    setLoadingDetail(true);
+    setSnSearch("");
+    setSnStatusFilter("AVAILABLE");
+    setCopiedSn(null);
+
+    try {
+      const res = await fetch(`/api/inventory/items/${item.id}`);
+      const json = await res.json();
+      if (json.success && json.data) {
+        setDetailItem(json.data);
+      }
+    } catch (err: any) {
+      console.error("Gagal memuat detail barang:", err);
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
+  const handleCopySn = (sn: string) => {
+    if (!sn) return;
+    navigator.clipboard.writeText(sn);
+    setCopiedSn(sn);
+    setTimeout(() => setCopiedSn(null), 2000);
+  };
+
+  const handleCopyAllAvailableSn = () => {
+    if (!detailItem?.units) return;
+    const availableSns = detailItem.units
+      .filter((u: any) => u.status === "AVAILABLE")
+      .map((u: any) => u.serial_number)
+      .join("\n");
+    if (availableSns) {
+      navigator.clipboard.writeText(availableSns);
+      setCopiedSn("__ALL__");
+      setTimeout(() => setCopiedSn(null), 2000);
     }
   };
 
@@ -295,7 +348,6 @@ export default function StokInventoryPage() {
                 <th className="py-3 px-4">Kode & Nama Barang</th>
                 <th className="py-3 px-4">Jenis</th>
                 <th className="py-3 px-4 text-right">Stok Awal</th>
-                <th className="py-3 px-4 text-right text-emerald-600">Total Masuk</th>
                 <th className="py-3 px-4 text-right text-rose-600">Total Keluar</th>
                 <th className="py-3 px-4 text-right text-amber-600">Digunakan</th>
                 <th className="py-3 px-4 text-right text-blue-600">Kembali</th>
@@ -307,14 +359,14 @@ export default function StokInventoryPage() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-400">
+                  <td colSpan={isAdmin ? 9 : 8} className="py-12 text-center text-slate-400">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
                     Memuat saldo stok...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-400">
+                  <td colSpan={isAdmin ? 9 : 8} className="py-12 text-center text-slate-400">
                     Tidak ada data stok yang sesuai filter.
                   </td>
                 </tr>
@@ -330,13 +382,23 @@ export default function StokInventoryPage() {
                       className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition"
                     >
                       <td className="py-3 px-4">
-                        <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
-                          {item.code}
-                        </span>
-                        <p className="font-bold text-slate-900 dark:text-slate-100">{item.name}</p>
-                        <p className="text-[11px] text-slate-400">
-                          {item.category?.name} &bull; Lokasi: {item.storage_location || "-"}
-                        </p>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDetail(item)}
+                          className="text-left group cursor-pointer focus:outline-hidden block w-full"
+                          title="Klik untuk melihat deskripsi detail barang & SN yang tersedia"
+                        >
+                          <span className="font-mono font-bold text-blue-600 dark:text-blue-400 group-hover:underline inline-flex items-center gap-1.5">
+                            {item.code}
+                            <ExternalLink className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </span>
+                          <p className="font-bold text-slate-900 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                            {item.name}
+                          </p>
+                          <p className="text-[11px] text-slate-400">
+                            {item.category?.name} &bull; Lokasi: {item.storage_location || "-"}
+                          </p>
+                        </button>
                       </td>
                       <td className="py-3 px-4">
                         {item.type === "REUSABLE" ? (
@@ -351,9 +413,6 @@ export default function StokInventoryPage() {
                       </td>
                       <td className="py-3 px-4 text-right font-medium text-slate-600">
                         {Number(s.initial_stock || 0)}
-                      </td>
-                      <td className="py-3 px-4 text-right font-bold text-emerald-600">
-                        +{Number(s.total_in || 0)}
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-rose-600">
                         -{Number(s.total_out || 0)}
@@ -620,6 +679,380 @@ export default function StokInventoryPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DETAIL BARANG & SN TERSEDIA (UNTUK PERANGKAT AKTIF) */}
+      {isDetailModalOpen && detailItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 dark:border-slate-800 flex items-start justify-between bg-slate-50/70 dark:bg-slate-800/40">
+              <div className="space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800">
+                    {detailItem.code}
+                  </span>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                      detailItem.category?.name?.toLowerCase().includes("aktif")
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+                    }`}
+                  >
+                    Kategori: {detailItem.category?.name || "Perangkat"}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                    {detailItem.type === "REUSABLE" ? "Reusable" : "Consumable"}
+                  </span>
+                </div>
+                <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
+                  {detailItem.name}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDetailModalOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-6 text-xs">
+              {/* Quick Stock Balances */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+                <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/50">
+                  <span className="text-[11px] font-medium text-emerald-800 dark:text-emerald-300">Stok Siap Pakai</span>
+                  <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+                    {Number(detailItem.stock?.available_stock || 0).toLocaleString("id-ID")}{" "}
+                    <span className="text-xs font-semibold">{detailItem.unit}</span>
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50">
+                  <span className="text-[11px] font-medium text-amber-800 dark:text-amber-300">Sedang Digunakan</span>
+                  <p className="text-xl font-black text-amber-600 dark:text-amber-400 mt-0.5">
+                    {detailItem.type === "REUSABLE"
+                      ? Number(detailItem.stock?.total_in_use || 0).toLocaleString("id-ID")
+                      : "-"}{" "}
+                    <span className="text-xs font-semibold">{detailItem.unit}</span>
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200/80 dark:border-rose-800/50">
+                  <span className="text-[11px] font-medium text-rose-800 dark:text-rose-300">Total Keluar</span>
+                  <p className="text-xl font-black text-rose-600 dark:text-rose-400 mt-0.5">
+                    {Number(detailItem.stock?.total_out || 0).toLocaleString("id-ID")}{" "}
+                    <span className="text-xs font-semibold">{detailItem.unit}</span>
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800">
+                  <span className="text-[11px] font-medium text-slate-500">Stok Minimum</span>
+                  <p className="text-xl font-black text-slate-700 dark:text-slate-300 mt-0.5">
+                    {Number(detailItem.min_stock || 0).toLocaleString("id-ID")}{" "}
+                    <span className="text-xs font-semibold">{detailItem.unit}</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Deskripsi & Spesifikasi Barang */}
+              <div className="bg-slate-50/70 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 space-y-3">
+                <h3 className="font-bold text-slate-900 dark:text-slate-100 flex items-center gap-1.5 uppercase tracking-wider text-[11px]">
+                  <Info className="w-4 h-4 text-blue-600" />
+                  Spesifikasi &amp; Deskripsi Barang
+                </h3>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">Brand / Merk:</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {detailItem.brand || "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">Model / Tipe:</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {detailItem.model || "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">Lokasi Rak:</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {detailItem.storage_location || "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">Satuan Unit:</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {detailItem.unit}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">Status Barang:</span>
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                      {detailItem.is_active ? "Aktif" : "Non-aktif"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block text-[11px]">Rusak / Karantina:</span>
+                    <span className="font-semibold text-rose-600 dark:text-rose-400">
+                      {Number(detailItem.stock?.total_damaged || 0)} {detailItem.unit}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                  <span className="text-slate-500 block text-[11px] mb-1 font-semibold">Deskripsi Barang:</span>
+                  <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/80 dark:border-slate-800 text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+                    {detailItem.description || "Tidak ada catatan deskripsi spesifikasi tambahan untuk barang ini."}
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION: SERIAL NUMBER (SN) UNTUK KATEGORI PERANGKAT AKTIF */}
+              {(() => {
+                const isPerangkatAktif =
+                  detailItem.category?.name?.toLowerCase().includes("aktif") ||
+                  detailItem.type === "REUSABLE" ||
+                  (detailItem.units && detailItem.units.length > 0);
+
+                if (!isPerangkatAktif) {
+                  return (
+                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex items-start gap-3">
+                      <Info className="w-5 h-5 text-slate-500 shrink-0 mt-0.5" />
+                      <div className="text-xs space-y-1">
+                        <p className="font-bold text-slate-800 dark:text-slate-200">
+                          Kategori Perangkat Pasif / Non-SN
+                        </p>
+                        <p className="text-slate-600 dark:text-slate-400">
+                          Barang ini terdaftar pada kategori <strong>{detailItem.category?.name || "Pasif"}</strong> dan tidak memiliki pelacakan serial number individual. Jumlah fisik dikelola langsung berdasarkan kuantitas ({detailItem.unit}).
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+
+                const units: any[] = detailItem.units || [];
+                const availableUnits = units.filter((u) => u.status === "AVAILABLE");
+                const inUseUnits = units.filter((u) => u.status === "IN_USE");
+
+                const filteredUnits = units.filter((u) => {
+                  if (snStatusFilter === "AVAILABLE" && u.status !== "AVAILABLE") return false;
+                  if (snStatusFilter === "IN_USE" && u.status !== "IN_USE") return false;
+                  if (snSearch.trim()) {
+                    const q = snSearch.toLowerCase();
+                    const sn = (u.serial_number || "").toLowerCase();
+                    const mac = (u.mac_address || "").toLowerCase();
+                    const pic = (u.current_pic || "").toLowerCase();
+                    const loc = (u.current_location || "").toLowerCase();
+                    return sn.includes(q) || mac.includes(q) || pic.includes(q) || loc.includes(q);
+                  }
+                  return true;
+                });
+
+                return (
+                  <div className="space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-1 border-b border-slate-100 dark:border-slate-800">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <Barcode className="w-4 h-4 text-blue-600" />
+                          <h3 className="font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[11px]">
+                            Serial Number (SN) Perangkat Aktif
+                          </h3>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Daftar unit serial number siap pakai dan terlacak untuk perangkat ini.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {availableUnits.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleCopyAllAvailableSn}
+                            className="inline-flex items-center px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-300 hover:text-blue-600 shadow-xs transition cursor-pointer"
+                            title="Salin semua SN yang berstatus Siap Pakai"
+                          >
+                            {copiedSn === "__ALL__" ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                                Tersalin!
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5 mr-1 text-slate-400" />
+                                Salin Semua SN Tersedia ({availableUnits.length})
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Filter and Search Bar for SN */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div className="flex items-center space-x-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+                        <button
+                          type="button"
+                          onClick={() => setSnStatusFilter("AVAILABLE")}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                            snStatusFilter === "AVAILABLE"
+                              ? "bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs"
+                              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                          }`}
+                        >
+                          SN Tersedia ({availableUnits.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSnStatusFilter("IN_USE")}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                            snStatusFilter === "IN_USE"
+                              ? "bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400 shadow-xs"
+                              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                          }`}
+                        >
+                          Sedang Digunakan ({inUseUnits.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSnStatusFilter("ALL")}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                            snStatusFilter === "ALL"
+                              ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs"
+                              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                          }`}
+                        >
+                          Semua ({units.length})
+                        </button>
+                      </div>
+
+                      <div className="relative w-full sm:w-56">
+                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                        <input
+                          type="text"
+                          placeholder="Cari SN, MAC, PIC..."
+                          value={snSearch}
+                          onChange={(e) => setSnSearch(e.target.value)}
+                          className="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:outline-hidden focus:ring-1 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* SN Table / List */}
+                    {loadingDetail ? (
+                      <div className="py-8 text-center text-slate-400 border border-slate-200 dark:border-slate-800 rounded-xl">
+                        <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2 text-blue-600" />
+                        Memuat daftar unit serial number...
+                      </div>
+                    ) : filteredUnits.length === 0 ? (
+                      <div className="py-8 text-center text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-1">
+                        <p className="font-semibold text-slate-600 dark:text-slate-300">
+                          {units.length === 0
+                            ? "Belum ada serial number yang didaftarkan untuk barang ini."
+                            : snStatusFilter === "AVAILABLE"
+                            ? "Tidak ada serial number yang berstatus Siap Pakai (Tersedia) saat ini."
+                            : "Tidak ditemukan serial number yang sesuai filter pencarian."}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden max-h-64 overflow-y-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 uppercase font-bold text-[10px] border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
+                            <tr>
+                              <th className="py-2.5 px-3 w-10 text-center">No</th>
+                              <th className="py-2.5 px-3">Serial Number (SN)</th>
+                              <th className="py-2.5 px-3">Status</th>
+                              <th className="py-2.5 px-3">Kondisi</th>
+                              <th className="py-2.5 px-3">Lokasi / PIC</th>
+                              <th className="py-2.5 px-3 text-center w-16">Salin</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {filteredUnits.map((u, idx) => (
+                              <tr
+                                key={u.id}
+                                className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition"
+                              >
+                                <td className="py-2 px-3 text-center text-slate-400 font-mono text-[11px]">
+                                  {idx + 1}
+                                </td>
+                                <td className="py-2 px-3">
+                                  <div className="font-mono font-bold text-slate-900 dark:text-slate-100">
+                                    {u.serial_number}
+                                  </div>
+                                  {u.mac_address && (
+                                    <div className="font-mono text-[10px] text-slate-400">
+                                      MAC: {u.mac_address}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-2 px-3">
+                                  <span
+                                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                      u.status === "AVAILABLE"
+                                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                        : u.status === "IN_USE"
+                                        ? "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+                                        : "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300"
+                                    }`}
+                                  >
+                                    {u.status === "AVAILABLE"
+                                      ? "Tersedia"
+                                      : u.status === "IN_USE"
+                                      ? "Digunakan"
+                                      : u.status}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3">
+                                  <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                                    {u.condition || "BAIK"}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3 text-[11px] text-slate-500">
+                                  {u.current_pic
+                                    ? `PIC: ${u.current_pic}`
+                                    : u.current_location || detailItem.storage_location || "Gudang"}
+                                </td>
+                                <td className="py-2 px-3 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleCopySn(u.serial_number)}
+                                    className="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-600 transition cursor-pointer"
+                                    title="Salin Serial Number"
+                                  >
+                                    {copiedSn === u.serial_number ? (
+                                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                    ) : (
+                                      <Copy className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/30">
+              <span className="text-[11px] text-slate-400">
+                Data diperbarui secara otomatis dari sistem saldo fisik ACTIS.
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsDetailModalOpen(false)}
+                className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs transition cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
           </div>
         </div>
       )}

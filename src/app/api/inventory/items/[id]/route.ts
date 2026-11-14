@@ -20,8 +20,11 @@ export async function GET(
         category: true,
         stock: true,
         units: {
-          orderBy: { created_at: "desc" },
-          take: 50,
+          orderBy: [
+            { status: "asc" },
+            { serial_number: "asc" },
+          ],
+          take: 500,
         },
         movements: {
           orderBy: { created_at: "desc" },

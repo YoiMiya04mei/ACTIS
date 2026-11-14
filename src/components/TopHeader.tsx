@@ -8,7 +8,6 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { NotificationBell } from "@/components/NotificationBell";
 import {
   Menu,
-  PlusCircle,
   ShieldCheck,
   LogOut,
   ChevronDown,
@@ -87,23 +86,10 @@ export function TopHeader({ onOpenMobileSidebar }: TopHeaderProps) {
         </div>
       </div>
 
-      {/* Right: Theme Toggle, + Registrasi POP Site Button & Interactive Role/User Badge */}
+      {/* Right: Theme Toggle, Notification Bell & Interactive Role/User Badge */}
       <div className="flex items-center space-x-2 sm:space-x-3">
         {/* Dark Mode Theme Selector */}
         <ThemeToggle />
-
-        <Link
-          href="/orders/new"
-          className={`inline-flex items-center px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-blue-500/20 transition hover:scale-[1.02] ${
-            pathname === "/orders/new"
-              ? "bg-slate-900 dark:bg-blue-600 text-white ring-2 ring-blue-500"
-              : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white"
-          }`}
-        >
-          <PlusCircle className="w-4 h-4 mr-1.5 sm:mr-2 text-blue-200" />
-          <span className="hidden xs:inline">+ Registrasi POP Site</span>
-          <span className="xs:hidden">+ Baru</span>
-        </Link>
 
         {/* Notification Center Bell */}
         <NotificationBell />
