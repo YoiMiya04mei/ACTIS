@@ -777,8 +777,8 @@ export async function processReturn(payload: ReturnPayload) {
     const overallStatus = allReusableReturned
       ? "SUDAH_KEMBALI"
       : hasAnyReturned
-      ? "SEBAGIAN_KEMBALI"
-      : "SEDANG_DIGUNAKAN";
+        ? "SEBAGIAN_KEMBALI"
+        : "SEDANG_DIGUNAKAN";
 
     await tx.inventoryTransaction.update({
       where: { id: outTx.id },

@@ -530,6 +530,7 @@ export default function BarangMasukPage() {
                 <th className="py-2.5 px-3">Tanggal</th>
                 <th className="py-2.5 px-3">Petugas Gudang</th>
                 <th className="py-2.5 px-3">Jumlah Item</th>
+                <th className="py-2.5 px-3">Kuantitas</th>
                 <th className="py-2.5 px-3">Catatan</th>
                 <th className="py-2.5 px-3 text-center">Aksi</th>
               </tr>
@@ -537,39 +538,53 @@ export default function BarangMasukPage() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {recentTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400">
+                  <td colSpan={7} className="py-8 text-center text-slate-400">
                     Belum ada riwayat transaksi barang masuk.
                   </td>
                 </tr>
               ) : (
-                recentTransactions.map((tx) => (
-                  <tr key={tx.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition">
-                    <td className="py-2.5 px-3 font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                      {tx.transaction_number}
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
-                      {new Date(tx.transaction_date).toLocaleDateString("id-ID")}
-                    </td>
-                    <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200">
-                      {tx.warehouse_officer}
-                    </td>
-                    <td className="py-2.5 px-3 font-bold text-slate-700 dark:text-slate-300">
-                      {tx.details?.length || 0} barang
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400">
-                      {tx.notes || "-"}
-                    </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <button
-                        onClick={() => setSelectedTx(tx)}
-                        title="Lihat Detail Transaksi"
-                        className="p-1 rounded text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                recentTransactions.map((tx) => {
+                  const totalQty = tx.details?.reduce(
+                    (acc: number, d: any) => acc + Number(d.quantity || 0),
+                    0
+                  ) || 0;
+                  const units = Array.from(
+                    new Set(tx.details?.map((d: any) => d.unit || d.item?.unit).filter(Boolean))
+                  );
+                  const unitLabel = units.length === 1 ? units[0] : (units.length > 1 ? "unit" : "");
+
+                  return (
+                    <tr key={tx.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition">
+                      <td className="py-2.5 px-3 font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                        {tx.transaction_number}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
+                        {new Date(tx.transaction_date).toLocaleDateString("id-ID")}
+                      </td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200">
+                        {tx.warehouse_officer}
+                      </td>
+                      <td className="py-2.5 px-3 font-bold text-slate-700 dark:text-slate-300">
+                        {tx.details?.length || 0} barang
+                      </td>
+                      <td className="py-2.5 px-3 font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                        +{totalQty} {unitLabel}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400">
+                        {tx.notes || "-"}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <button
+                          onClick={() => setSelectedTx(tx)}
+                          title="Lihat Detail Transaksi"
+                          className="p-1 rounded text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

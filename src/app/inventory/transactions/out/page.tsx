@@ -475,11 +475,10 @@ export default function BarangKeluarPage() {
 
       {notification && (
         <div
-          className={`p-4 rounded-xl border text-sm flex items-center justify-between ${
-            notification.type === "success"
+          className={`p-4 rounded-xl border text-sm flex items-center justify-between ${notification.type === "success"
               ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 text-emerald-800 dark:text-emerald-300"
               : "bg-rose-50 dark:bg-rose-950/40 border-rose-200 text-rose-800 dark:text-rose-300"
-          }`}
+            }`}
         >
           <div className="flex items-center space-x-2">
             {notification.type === "success" ? (
@@ -683,9 +682,8 @@ export default function BarangKeluarPage() {
                               required
                               value={row.quantity}
                               onChange={(e) => handleQuantityChange(idx, e.target.value)}
-                              className={`w-20 px-2 py-1 text-right font-bold rounded-lg border bg-white dark:bg-slate-950 ${
-                                isExceed ? "border-rose-500 text-rose-600" : "border-slate-300 dark:border-slate-700"
-                              }`}
+                              className={`w-20 px-2 py-1 text-right font-bold rounded-lg border bg-white dark:bg-slate-950 ${isExceed ? "border-rose-500 text-rose-600" : "border-slate-300 dark:border-slate-700"
+                                }`}
                             />
                             <span className="text-[10px] text-slate-400 w-8 truncate text-left">
                               {selItem?.unit || "Unit"}
@@ -843,20 +841,19 @@ export default function BarangKeluarPage() {
                                             onClick={() => {
                                               if (!isUsedElsewhere) handleToggleSerial(idx, u.serial_number);
                                             }}
-                                            className={`p-2 flex items-center justify-between cursor-pointer select-none transition ${
-                                              isSelected
+                                            className={`p-2 flex items-center justify-between cursor-pointer select-none transition ${isSelected
                                                 ? "bg-blue-50/80 dark:bg-blue-950/60 font-semibold text-blue-900 dark:text-blue-200"
                                                 : isUsedElsewhere
-                                                ? "opacity-40 bg-slate-100/50 cursor-not-allowed text-slate-400"
-                                                : "hover:bg-slate-50 dark:hover:bg-slate-800/40 text-slate-800 dark:text-slate-200"
-                                            }`}
+                                                  ? "opacity-40 bg-slate-100/50 cursor-not-allowed text-slate-400"
+                                                  : "hover:bg-slate-50 dark:hover:bg-slate-800/40 text-slate-800 dark:text-slate-200"
+                                              }`}
                                           >
                                             <div className="flex items-center gap-2 truncate">
                                               <input
                                                 type="checkbox"
                                                 disabled={isUsedElsewhere}
                                                 checked={isSelected}
-                                                onChange={() => {}}
+                                                onChange={() => { }}
                                                 className="rounded text-blue-600 focus:ring-blue-500 pointer-events-none"
                                               />
                                               <span className="font-mono text-xs truncate">
@@ -1015,15 +1012,14 @@ export default function BarangKeluarPage() {
                     </td>
                     <td className="py-2.5 px-3">
                       <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          tx.status === "SUDAH_KEMBALI"
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${tx.status === "SUDAH_KEMBALI"
                             ? "bg-emerald-100 text-emerald-700"
                             : tx.status === "SEBAGIAN_KEMBALI"
-                            ? "bg-blue-100 text-blue-700"
-                            : tx.status === "TERPAKAI"
-                            ? "bg-purple-100 text-purple-700"
-                            : "bg-amber-100 text-amber-700"
-                        }`}
+                              ? "bg-blue-100 text-blue-700"
+                              : tx.status === "TERPAKAI"
+                                ? "bg-purple-100 text-purple-700"
+                                : "bg-amber-100 text-amber-700"
+                          }`}
                       >
                         {tx.status}
                       </span>
@@ -1156,7 +1152,7 @@ export default function BarangKeluarPage() {
                       if (d.unit_serial_numbers) {
                         try {
                           parsedSns = JSON.parse(d.unit_serial_numbers);
-                        } catch {}
+                        } catch { }
                       }
 
                       return (
