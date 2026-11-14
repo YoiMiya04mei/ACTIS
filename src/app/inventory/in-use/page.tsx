@@ -236,12 +236,13 @@ export default function BarangSedangDigunakanPage() {
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 font-bold text-[10px] text-slate-600 uppercase border-b">
+            <thead className="bg-slate-50 dark:bg-slate-800/60 font-bold text-[10px] text-slate-600 dark:text-slate-300 uppercase border-b border-slate-200/80 dark:border-slate-800">
               <tr>
                 <th className="py-3 px-4">No. Transaksi & Tgl</th>
                 <th className="py-3 px-4">Nama PIC & Kontak</th>
                 <th className="py-3 px-4">Lokasi Penggunaan</th>
                 <th className="py-3 px-4">Detail Perangkat</th>
+                <th className="py-3 px-4">Keterangan Barang</th>
                 <th className="py-3 px-4 text-center">Status</th>
                 <th className="py-3 px-4 text-center">Aksi</th>
               </tr>
@@ -249,25 +250,25 @@ export default function BarangSedangDigunakanPage() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-amber-600" />
                     Memuat barang sedang digunakan...
                   </td>
                 </tr>
               ) : transactions.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     Tidak ada perangkat yang sedang berada di luar gudang.
                   </td>
                 </tr>
               ) : (
                 transactions.map((tx) => (
-                  <tr key={tx.id} className="hover:bg-slate-50/70 transition">
+                  <tr key={tx.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition">
                     <td className="py-3 px-4">
                       <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
                         {tx.transaction_number}
                       </span>
-                      <p className="text-[11px] text-slate-500">
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
                         {new Date(tx.transaction_date).toLocaleDateString("id-ID")}
                       </p>
                     </td>
@@ -277,7 +278,7 @@ export default function BarangSedangDigunakanPage() {
                         {tx.pic_name}
                       </p>
                       {tx.pic_phone && (
-                        <p className="text-[11px] text-slate-500 flex items-center">
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center">
                           <Phone className="w-3 h-3 mr-1 text-slate-400" />
                           {tx.pic_phone}
                         </p>
@@ -289,34 +290,88 @@ export default function BarangSedangDigunakanPage() {
                         {tx.location || "Lokasi tidak dispesifikasikan"}
                       </p>
                       {tx.purpose && (
-                        <p className="text-[11px] text-slate-500">{tx.purpose}</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{tx.purpose}</p>
                       )}
                     </td>
                     <td className="py-3 px-4">
-                      <div className="space-y-1">
-                        {tx.details?.map((d: any) => (
-                          <div key={d.id} className="flex items-center justify-between text-[11px]">
-                            <span className="font-semibold text-slate-800 dark:text-slate-200">
-                              {d.item?.name}
-                            </span>
-                            <span className="font-bold font-mono text-slate-600">
-                              Keluar: {Number(d.quantity)} | Sisa:{" "}
-                              <span className="text-amber-600 font-black">
-                                {Number(d.qty_remaining)} {d.unit}
-                              </span>
-                            </span>
-                          </div>
-                        ))}
+                      <div className="space-y-1.5">
+                        {tx.details?.map((d: any) => {
+                          let parsedSns: string[] = [];
+                          if (d.unit_serial_numbers) {
+                            try {
+                              parsedSns = JSON.parse(d.unit_serial_numbers);
+                            } catch {}
+                          }
+
+                          return (
+                            <div key={d.id} className="text-[11px]">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                  {d.item?.name}
+                                </span>
+                                <span className="font-bold font-mono text-slate-600 dark:text-slate-300 shrink-0">
+                                  Keluar: {Number(d.quantity)} | Sisa:{" "}
+                                  <span className="text-amber-600 dark:text-amber-400 font-black">
+                                    {Number(d.qty_remaining)} {d.unit}
+                                  </span>
+                                </span>
+                              </div>
+                              {parsedSns.length > 0 && (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {parsedSns.map((sn, sIdx) => (
+                                    <span
+                                      key={sIdx}
+                                      className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono text-[10px] border border-slate-200 dark:border-slate-700"
+                                    >
+                                      SN: {sn}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </td>
+                    {/* Keterangan Barang (di samping Detail Perangkat) */}
+                    <td className="py-3 px-4">
+                      <div className="space-y-1.5">
+                        {tx.details?.map((d: any) => {
+                          const note = d.notes || tx.notes;
+                          return (
+                            <div key={d.id} className="text-[11px]">
+                              {note ? (
+                                <div>
+                                  <span className="text-slate-700 dark:text-slate-300 font-medium">
+                                    {note}
+                                  </span>
+                                  {d.notes && tx.notes && d.notes !== tx.notes && (
+                                    <p className="text-[10px] text-slate-400 mt-0.5">
+                                      {tx.notes}
+                                    </p>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 italic text-[11px]">-</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {(!tx.details || tx.details.length === 0) && (
+                          <span className="text-slate-400 italic text-[11px]">
+                            {tx.notes || "-"}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="py-3 px-4 text-center">
                       <span
                         className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
                           tx.status === "SUDAH_KEMBALI"
-                            ? "bg-emerald-100 text-emerald-700"
+                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
                             : tx.status === "SEBAGIAN_KEMBALI"
-                            ? "bg-blue-100 text-blue-700"
-                            : "bg-amber-100 text-amber-700"
+                            ? "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
+                            : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
                         }`}
                       >
                         {tx.status}
@@ -431,6 +486,19 @@ export default function BarangSedangDigunakanPage() {
                   type="text"
                   value={editLocation}
                   onChange={(e) => setEditLocation(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                  Keterangan / Catatan Barang
+                </label>
+                <input
+                  type="text"
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="Keterangan atau catatan barang..."
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
                 />
               </div>
