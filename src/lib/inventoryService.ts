@@ -13,7 +13,7 @@ export function getDateString(d = new Date()): string {
  * Generate sequential transaction number e.g. OUT-20261113-0001
  */
 export async function generateTransactionNumber(
-  type: "IN" | "OUT" | "ADJ" | "OPN",
+  type: "IN" | "OUT" | "ADJ" | "OPN" | "LOAN",
   tx?: Prisma.TransactionClient
 ): Promise<string> {
   const client = tx || prisma;
@@ -1247,4 +1247,448 @@ export async function getInventoryDashboardStats() {
     monthly_chart: monthsData,
     category_distribution: categoryDistribution,
   };
+}
+
+// =============================================================================
+// FITUR: SELESAIKAN PENGGUNAAN BARANG & ALOKASI BARANG DIPINJAMKAN
+// =============================================================================
+
+export interface CompleteAndLoanItemInput {
+  transaction_detail_id: string;
+  item_id: string;
+  qty_loaned: number | string;
+  qty_returned: number | string;
+  loaned_serials?: string[];
+  returned_serials?: string[];
+  return_condition?: string;
+}
+
+export interface CompleteAndLoanPayload {
+  transaction_id: string;
+  client_name: string;
+  client_phone?: string;
+  client_location: string;
+  notes?: string;
+  completion_date?: Date | string;
+  warehouse_officer?: string;
+  user_name?: string;
+  created_by?: string;
+  items: CompleteAndLoanItemInput[];
+}
+
+/**
+ * Menyelesaikan transaksi barang keluar (OUT):
+ * - Sebagian atau seluruh barang yang terpakai di pelanggan dialokasikan menjadi BARANG DIPINJAMKAN (type: "LOAN").
+ * - Sisa barang yang tidak terpakai dikembalikan ke gudang (InventoryReturn) dan masuk kembali ke stok inventaris.
+ * - Transaksi OUT asal ditandai sebagai SUDAH_KEMBALI (selesai).
+ */
+export async function processCompleteAndLoan(payload: CompleteAndLoanPayload) {
+  if (!payload.transaction_id) {
+    throw new Error("ID transaksi wajib disertakan.");
+  }
+  if (!payload.items || payload.items.length === 0) {
+    throw new Error("Daftar alokasi barang tidak boleh kosong.");
+  }
+
+  return await prisma.$transaction(async (tx) => {
+    const outTx = await tx.inventoryTransaction.findUnique({
+      where: { id: payload.transaction_id },
+      include: {
+        details: {
+          include: {
+            item: { include: { stock: true } },
+          },
+        },
+      },
+    });
+
+    if (!outTx) {
+      throw new Error(`Transaksi dengan ID ${payload.transaction_id} tidak ditemukan.`);
+    }
+
+    if (outTx.status === "SUDAH_KEMBALI" || outTx.status === "COMPLETED") {
+      throw new Error("Transaksi ini sudah selesai atau seluruh barang telah dikembalikan.");
+    }
+
+    let totalQtyLoaned = new Prisma.Decimal(0);
+    let totalQtyReturned = new Prisma.Decimal(0);
+
+    // 1. Validasi alokasi untuk setiap item
+    for (const input of payload.items) {
+      const d = outTx.details.find((det) => det.id === input.transaction_detail_id);
+      if (!d) {
+        throw new Error(`Detail transaksi tidak ditemukan untuk ID ${input.transaction_detail_id}`);
+      }
+
+      const qLoaned = new Prisma.Decimal(input.qty_loaned || 0);
+      const qReturned = new Prisma.Decimal(input.qty_returned || 0);
+      const qRem = new Prisma.Decimal(d.qty_remaining);
+
+      if (qLoaned.lessThan(0) || qReturned.lessThan(0)) {
+        throw new Error("Kuantitas tidak boleh bernilai negatif.");
+      }
+
+      if (!qLoaned.add(qReturned).equals(qRem)) {
+        throw new Error(
+          `Untuk barang '${d.item.name}', jumlah dipinjamkan (${qLoaned}) + kembali (${qReturned}) harus tepat sama dengan sisa di teknisi (${qRem}).`
+        );
+      }
+
+      const loanedSns = (input.loaned_serials || []).map((s) => s.trim()).filter(Boolean);
+      const returnedSns = (input.returned_serials || []).map((s) => s.trim()).filter(Boolean);
+
+      if (loanedSns.length > 0 && loanedSns.length !== Number(qLoaned)) {
+        throw new Error(
+          `Jumlah serial number yang dipinjamkan (${loanedSns.length}) tidak sesuai kuantitas dipinjamkan (${qLoaned}) untuk ${d.item.name}.`
+        );
+      }
+      if (returnedSns.length > 0 && returnedSns.length !== Number(qReturned)) {
+        throw new Error(
+          `Jumlah serial number yang dikembalikan (${returnedSns.length}) tidak sesuai kuantitas kembali (${qReturned}) untuk ${d.item.name}.`
+        );
+      }
+
+      totalQtyLoaned = totalQtyLoaned.add(qLoaned);
+      totalQtyReturned = totalQtyReturned.add(qReturned);
+    }
+
+    if (totalQtyLoaned.greaterThan(0)) {
+      if (!payload.client_name?.trim()) {
+        throw new Error("Nama Pelanggan wajib diisi jika terdapat barang yang dipinjamkan.");
+      }
+      if (!payload.client_location?.trim()) {
+        throw new Error("Lokasi Pemasangan di Pelanggan wajib diisi jika terdapat barang yang dipinjamkan.");
+      }
+    }
+
+    const completionDate = payload.completion_date
+      ? new Date(payload.completion_date)
+      : new Date();
+
+    let loanTx: any = null;
+
+    // 2. Buat Transaksi Barang Dipinjamkan (LOAN) jika ada barang yang dipinjamkan
+    if (totalQtyLoaned.greaterThan(0)) {
+      const loanTxNumber = await generateTransactionNumber("LOAN", tx);
+      loanTx = await tx.inventoryTransaction.create({
+        data: {
+          transaction_number: loanTxNumber,
+          type: "LOAN",
+          transaction_date: completionDate,
+          pic_name: payload.client_name.trim(),
+          pic_phone: payload.client_phone?.trim() || null,
+          location: payload.client_location.trim(),
+          purpose: `Dipinjamkan ke Pelanggan (Teknisi: ${outTx.pic_name || "-"})`,
+          warehouse_officer: payload.warehouse_officer || outTx.warehouse_officer || "Admin Gudang",
+          status: "DIPINJAMKAN",
+          notes: payload.notes?.trim() || `Pemasangan/Peminjaman dari transaksi ${outTx.transaction_number}`,
+          permit_number: outTx.transaction_number,
+          created_by: payload.created_by || null,
+        },
+      });
+
+      for (const input of payload.items) {
+        const qLoaned = new Prisma.Decimal(input.qty_loaned || 0);
+        if (qLoaned.greaterThan(0)) {
+          const d = outTx.details.find((det) => det.id === input.transaction_detail_id)!;
+          const loanedSns = (input.loaned_serials || []).map((s) => s.trim()).filter(Boolean);
+
+          await tx.inventoryTransactionDetail.create({
+            data: {
+              transaction_id: loanTx.id,
+              item_id: d.item_id,
+              quantity: qLoaned,
+              unit: d.unit,
+              unit_serial_numbers: loanedSns.length ? JSON.stringify(loanedSns) : null,
+              qty_returned: new Prisma.Decimal(0),
+              qty_remaining: qLoaned,
+              status: "ACTIVE",
+              notes: `Dipinjamkan ke Pelanggan: ${payload.client_name.trim()}`,
+            },
+          });
+
+          // Update status unit menjadi LOANED
+          for (const sn of loanedSns) {
+            await tx.inventoryItemUnit.updateMany({
+              where: { serial_number: sn },
+              data: {
+                status: "LOANED",
+                current_pic: payload.client_name.trim(),
+                current_location: payload.client_location.trim(),
+              },
+            });
+          }
+
+          // Catat pergerakan stok peminjaman
+          await tx.inventoryMovement.create({
+            data: {
+              item_id: d.item_id,
+              movement_type: "OUT",
+              quantity: qLoaned,
+              balance_before: d.item.stock?.available_stock || new Prisma.Decimal(0),
+              balance_after: d.item.stock?.available_stock || new Prisma.Decimal(0),
+              reference_type: "TRANSACTION",
+              reference_id: loanTx.id,
+              transaction_id: loanTx.id,
+              performed_by: payload.user_name || "Admin Gudang",
+              notes: `Barang Dipinjamkan (${loanTxNumber}) ke Pelanggan: ${payload.client_name.trim()}`,
+            },
+          });
+        }
+      }
+    }
+
+    // 3. Buat Pengembalian Barang (RETURN) untuk sisa yang kembali ke gudang
+    let returnTx: any = null;
+    if (totalQtyReturned.greaterThan(0)) {
+      const retNumber = await generateReturnNumber(tx);
+      returnTx = await tx.inventoryReturn.create({
+        data: {
+          return_number: retNumber,
+          out_transaction_id: outTx.id,
+          pic_name: outTx.pic_name || "Teknisi",
+          recipient_officer: payload.warehouse_officer || "Admin Gudang",
+          return_date: completionDate,
+          notes: `Pengembalian sisa barang tidak terpakai dari ${outTx.transaction_number}`,
+          created_by: payload.created_by || null,
+        },
+      });
+
+      for (const input of payload.items) {
+        const qReturned = new Prisma.Decimal(input.qty_returned || 0);
+        if (qReturned.greaterThan(0)) {
+          const d = outTx.details.find((det) => det.id === input.transaction_detail_id)!;
+          const returnedSns = (input.returned_serials || []).map((s) => s.trim()).filter(Boolean);
+          const cond = input.return_condition || "BAIK";
+
+          await tx.inventoryReturnDetail.create({
+            data: {
+              return_id: returnTx.id,
+              transaction_detail_id: d.id,
+              item_id: d.item_id,
+              quantity: qReturned,
+              condition: cond,
+              serial_numbers: returnedSns.length ? JSON.stringify(returnedSns) : null,
+              action_taken: "Dikembalikan ke Stok Gudang",
+              notes: "Sisa pemakaian teknisi dikembalikan ke gudang",
+            },
+          });
+
+          // Kembalikan ke stok siap pakai jika kondisi BAIK
+          const stock = d.item.stock;
+          const balBefore = stock ? new Prisma.Decimal(stock.available_stock) : new Prisma.Decimal(0);
+          const balAfter = cond === "BAIK" ? balBefore.add(qReturned) : balBefore;
+
+          if (stock) {
+            await tx.inventoryStock.update({
+              where: { id: stock.id },
+              data: {
+                total_in_use: Prisma.Decimal.max(0, new Prisma.Decimal(stock.total_in_use).sub(qReturned)),
+                total_returned: new Prisma.Decimal(stock.total_returned).add(qReturned),
+                total_damaged: cond !== "BAIK" ? new Prisma.Decimal(stock.total_damaged).add(qReturned) : stock.total_damaged,
+                available_stock: balAfter,
+              },
+            });
+          }
+
+          // Update status unit menjadi AVAILABLE
+          for (const sn of returnedSns) {
+            await tx.inventoryItemUnit.updateMany({
+              where: { serial_number: sn },
+              data: {
+                status: cond === "BAIK" ? "AVAILABLE" : "DAMAGED",
+                condition: cond,
+                current_pic: null,
+                current_location: d.item.storage_location || "Gudang Utama",
+              },
+            });
+          }
+
+          await tx.inventoryMovement.create({
+            data: {
+              item_id: d.item_id,
+              movement_type: cond === "BAIK" ? "RETURN_GOOD" : "RETURN_DAMAGED",
+              quantity: qReturned,
+              balance_before: balBefore,
+              balance_after: balAfter,
+              reference_type: "RETURN",
+              reference_id: returnTx.id,
+              transaction_id: outTx.id,
+              performed_by: payload.user_name || payload.warehouse_officer || "Admin Gudang",
+              notes: `Pengembalian Sisa Barang (${retNumber}) dari ${outTx.transaction_number}`,
+            },
+          });
+        }
+      }
+    }
+
+    // 4. Update transaksi OUT asal: kurangi qty_remaining menjadi 0 dan tandai SUDAH_KEMBALI
+    for (const input of payload.items) {
+      const d = outTx.details.find((det) => det.id === input.transaction_detail_id)!;
+      const qReturned = new Prisma.Decimal(input.qty_returned || 0);
+      const qLoaned = new Prisma.Decimal(input.qty_loaned || 0);
+
+      await tx.inventoryTransactionDetail.update({
+        where: { id: d.id },
+        data: {
+          qty_returned: new Prisma.Decimal(d.qty_returned).add(qReturned).add(qLoaned),
+          qty_remaining: new Prisma.Decimal(0),
+          status: "COMPLETED",
+        },
+      });
+    }
+
+    await tx.inventoryTransaction.update({
+      where: { id: outTx.id },
+      data: {
+        status: "SUDAH_KEMBALI",
+      },
+    });
+
+    // 5. Catat Audit Log
+    await tx.inventoryAuditLog.create({
+      data: {
+        entity_type: "TRANSACTION",
+        entity_id: outTx.id,
+        action: "COMPLETE_AND_LOAN",
+        user_id: payload.created_by,
+        user_name: payload.user_name || payload.warehouse_officer || "Admin Gudang",
+        data_after: JSON.stringify({
+          loaned_qty: totalQtyLoaned.toString(),
+          returned_qty: totalQtyReturned.toString(),
+          client_name: payload.client_name,
+          loan_transaction: loanTx?.transaction_number || null,
+          return_transaction: returnTx?.return_number || null,
+        }),
+        reason: `Penyelesaian transaksi ${outTx.transaction_number}: ${totalQtyLoaned} unit dipinjamkan ke ${payload.client_name || '-'}, ${totalQtyReturned} unit dikembalikan ke gudang.`,
+      },
+    });
+
+    return {
+      success: true,
+      loan_transaction: loanTx,
+      return_transaction: returnTx,
+      loaned_count: Number(totalQtyLoaned),
+      returned_count: Number(totalQtyReturned),
+    };
+  });
+}
+
+/**
+ * Menarik kembali barang yang dipinjamkan di pelanggan ke stok gudang
+ */
+export async function processReturnLoaned(payload: {
+  loan_transaction_id: string;
+  recipient_officer: string;
+  condition?: string;
+  notes?: string;
+  user_name?: string;
+  created_by?: string;
+}) {
+  return await prisma.$transaction(async (tx) => {
+    const loanTx = await tx.inventoryTransaction.findUnique({
+      where: { id: payload.loan_transaction_id },
+      include: {
+        details: {
+          include: {
+            item: { include: { stock: true } },
+          },
+        },
+      },
+    });
+
+    if (!loanTx || loanTx.type !== "LOAN") {
+      throw new Error(`Data peminjaman barang tidak ditemukan.`);
+    }
+
+    if (loanTx.status === "SUDAH_DITARIK") {
+      throw new Error("Barang pinjaman ini sudah ditarik kembali sebelumnya.");
+    }
+
+    const cond = payload.condition || "BAIK";
+
+    for (const d of loanTx.details) {
+      const q = new Prisma.Decimal(d.quantity);
+      let sns: string[] = [];
+      if (d.unit_serial_numbers) {
+        try {
+          sns = JSON.parse(d.unit_serial_numbers);
+        } catch {}
+      }
+
+      // Restock to warehouse
+      const stock = d.item.stock;
+      const balBefore = stock ? new Prisma.Decimal(stock.available_stock) : new Prisma.Decimal(0);
+      const balAfter = cond === "BAIK" ? balBefore.add(q) : balBefore;
+
+      if (stock) {
+        await tx.inventoryStock.update({
+          where: { id: stock.id },
+          data: {
+            total_in_use: Prisma.Decimal.max(0, new Prisma.Decimal(stock.total_in_use).sub(q)),
+            total_returned: new Prisma.Decimal(stock.total_returned).add(q),
+            total_damaged: cond !== "BAIK" ? new Prisma.Decimal(stock.total_damaged).add(q) : stock.total_damaged,
+            available_stock: balAfter,
+          },
+        });
+      }
+
+      for (const sn of sns) {
+        await tx.inventoryItemUnit.updateMany({
+          where: { serial_number: sn },
+          data: {
+            status: cond === "BAIK" ? "AVAILABLE" : "DAMAGED",
+            condition: cond,
+            current_pic: null,
+            current_location: d.item.storage_location || "Gudang Utama",
+          },
+        });
+      }
+
+      await tx.inventoryMovement.create({
+        data: {
+          item_id: d.item_id,
+          movement_type: cond === "BAIK" ? "RETURN_GOOD" : "RETURN_DAMAGED",
+          quantity: q,
+          balance_before: balBefore,
+          balance_after: balAfter,
+          reference_type: "TRANSACTION",
+          reference_id: loanTx.id,
+          transaction_id: loanTx.id,
+          performed_by: payload.user_name || payload.recipient_officer || "Admin Gudang",
+          notes: `Penarikan Barang Dipinjamkan (${loanTx.transaction_number}) dari ${loanTx.pic_name || "Pelanggan"}`,
+        },
+      });
+
+      await tx.inventoryTransactionDetail.update({
+        where: { id: d.id },
+        data: {
+          qty_returned: q,
+          qty_remaining: new Prisma.Decimal(0),
+          status: "COMPLETED",
+        },
+      });
+    }
+
+    await tx.inventoryTransaction.update({
+      where: { id: loanTx.id },
+      data: {
+        status: "SUDAH_DITARIK",
+      },
+    });
+
+    await tx.inventoryAuditLog.create({
+      data: {
+        entity_type: "TRANSACTION",
+        entity_id: loanTx.id,
+        action: "RETURN_LOAN",
+        user_id: payload.created_by,
+        user_name: payload.user_name || payload.recipient_officer || "Admin Gudang",
+        data_after: JSON.stringify({ status: "SUDAH_DITARIK", loan_tx: loanTx.transaction_number }),
+        reason: `Penarikan perangkat dipinjamkan ${loanTx.transaction_number} dari ${loanTx.pic_name || "Pelanggan"}. Barang kembali ke gudang.`,
+      },
+    });
+
+    return { success: true, message: `Barang dipinjamkan ${loanTx.transaction_number} berhasil ditarik kembali ke gudang.` };
+  });
 }

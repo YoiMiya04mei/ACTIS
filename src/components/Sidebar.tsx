@@ -36,6 +36,7 @@ import {
   Clock,
   ArrowDownLeft,
   ArrowUpRight,
+  Share2,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -529,6 +530,29 @@ export function Sidebar({
                         }`}
                       />
                       <span className="truncate">Barang Sedang Digunakan</span>
+                    </div>
+                  </Link>
+
+                  {/* 8. Barang Dipinjamkan */}
+                  <Link
+                    href="/inventory/loaned"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/inventory/loaned"
+                        ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Monitoring Perangkat Dipinjamkan / Terpasang di Pelanggan"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Share2
+                        className={`w-4 h-4 shrink-0 ${
+                          pathname === "/inventory/loaned"
+                            ? "text-indigo-600 dark:text-indigo-400"
+                            : "text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
+                        }`}
+                      />
+                      <span className="truncate">Barang Dipinjamkan</span>
                     </div>
                   </Link>
 
