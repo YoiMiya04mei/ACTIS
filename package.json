@@ -3,9 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/sync-pdfjs-assets.js",
     "dev": "next dev",
-    "dev:clean": "node -e \"try { require('fs').rmSync('.next', { recursive: true, force: true }); } catch (e) {}\" && next dev",
+    "dev:clean": "node scripts/sync-pdfjs-assets.js && node -e \"try { require('fs').rmSync('.next', { recursive: true, force: true }); } catch (e) {}\" && next dev",
     "clean": "node -e \"try { require('fs').rmSync('.next', { recursive: true, force: true }); } catch (e) {}\"",
+    "prebuild": "node scripts/sync-pdfjs-assets.js",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

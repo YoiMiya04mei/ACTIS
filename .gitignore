@@ -39,6 +39,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Generated pdfjs-dist runtime assets (synced via predev / prebuild)
+/public/pdfjs/
+
 # User uploads & temporary files
 /public/uploads/*
 !/public/uploads/.gitkeep

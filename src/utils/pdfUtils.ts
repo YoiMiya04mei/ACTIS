@@ -23,14 +23,22 @@ export async function extractFromPdf(file: File): Promise<PdfExtractionResult> {
 
   // Dynamic import ensures pdfjs-dist is only loaded in the browser (prevents SSR/prerender crashes)
   const pdfjsLib = await import('pdfjs-dist');
-  try {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
-  } catch {
-    // fallback
-  }
+  const assetBase = `${window.location.origin}/pdfjs`;
+  // Self-host worker & supporting PDF assets on same-origin /pdfjs/ so strict CSP
+  // and air-gapped/firewalled environments work without fetching from external CDNs.
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `${assetBase}/pdf.worker.min.js`;
 
   const arrayBuffer = await file.arrayBuffer();
-  const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+  const loadingTask = pdfjsLib.getDocument({
+    data: new Uint8Array(arrayBuffer),
+    cMapUrl: `${assetBase}/cmaps/`,
+    cMapPacked: true,
+    iccUrl: `${assetBase}/iccs/`,
+    standardFontDataUrl: `${assetBase}/standard_fonts/`,
+    wasmUrl: `${assetBase}/wasm/`,
+    useWasm: false,
+    disableWorkerRendering: true,
+  });
   const pdfDoc = await loadingTask.promise;
 
   if (pdfDoc.numPages < 1) {
