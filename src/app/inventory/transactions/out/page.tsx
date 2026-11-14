@@ -12,11 +12,22 @@ import {
   Eye,
   FileText,
   User,
-  MapPin,
   Clock,
+  Boxes,
+  Check,
+  Search,
+  Zap,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
 import { permitBarangStorage } from "@/services/permitBarangStorage";
+
+interface ItemUnit {
+  id: string;
+  serial_number: string;
+  mac_address?: string | null;
+  status: string;
+  condition: string;
+}
 
 interface ItemOption {
   id: string;
@@ -24,7 +35,22 @@ interface ItemOption {
   code: string;
   unit: string;
   type: string;
+  category?: {
+    id: string;
+    name: string;
+  };
   stock?: { available_stock: number };
+  units?: ItemUnit[];
+}
+
+interface RowItem {
+  item_id: string;
+  quantity: string;
+  notes: string;
+  serials: string[];
+  manualSnInput?: string;
+  isSelectorOpen?: boolean;
+  searchQuery?: string;
 }
 
 export default function BarangKeluarPage() {
@@ -41,16 +67,14 @@ export default function BarangKeluarPage() {
   const [picName, setPicName] = useState("");
   const [picPhone, setPicPhone] = useState("");
   const [department, setDepartment] = useState("Field Operations");
-  const [location, setLocation] = useState("");
-  const [purpose, setPurpose] = useState("");
   const [officer, setOfficer] = useState(currentUser?.nama || "Admin Gudang");
   const [txDate, setTxDate] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
   const [permitRefId, setPermitRefId] = useState<string | null>(null);
   const [permitRefNumber, setPermitRefNumber] = useState<string | null>(null);
 
-  const [rows, setRows] = useState<Array<{ item_id: string; quantity: string; notes: string; serials: string }>>([
-    { item_id: "", quantity: "1", notes: "", serials: "" },
+  const [rows, setRows] = useState<RowItem[]>([
+    { item_id: "", quantity: "1", notes: "", serials: [], isSelectorOpen: false, searchQuery: "", manualSnInput: "" },
   ]);
 
   // Permit Picker Modal
@@ -73,13 +97,21 @@ export default function BarangKeluarPage() {
 
       if (jsonItems.success) setAvailableItems(jsonItems.data);
       if (jsonTx.success) setRecentTransactions(jsonTx.data);
-    } catch {}
+    } catch (err) {
+      console.error("Gagal memuat data inventaris:", err);
+    }
     setLoading(false);
   };
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (currentUser?.nama && !officer) {
+      setOfficer(currentUser.nama);
+    }
+  }, [currentUser]);
 
   const handleOpenPermitPicker = async () => {
     try {
@@ -94,15 +126,13 @@ export default function BarangKeluarPage() {
   const handleSelectPermitDoc = (doc: any) => {
     setPicName(doc.applicantName || "");
     setPicPhone(doc.applicantPhone || "");
-    setLocation(doc.location || "");
-    setPurpose(doc.subject || "Permit Keluar Barang");
     setPermitRefId(doc.id);
     setPermitRefNumber(doc.letterNumber || doc.id);
     setNotes(`Berdasarkan Surat Permit No. ${doc.letterNumber || doc.id}`);
 
     // Map devices to inventory items
     if (doc.devices && doc.devices.length > 0) {
-      const newRows: Array<{ item_id: string; quantity: string; notes: string; serials: string }> = [];
+      const newRows: RowItem[] = [];
       doc.devices.forEach((dev: any) => {
         const cleanName = dev.name.toLowerCase();
         const matched = availableItems.find(
@@ -111,12 +141,27 @@ export default function BarangKeluarPage() {
 
         const qtyMatch = dev.quantity ? String(dev.quantity).match(/\d+/) : null;
         const qtyStr = qtyMatch ? qtyMatch[0] : "1";
+        const qtyNum = Number(qtyStr) || 1;
+
+        const isAktif = matched?.category?.name?.toLowerCase() === "aktif";
+        let autoSerials: string[] = [];
+
+        if (isAktif) {
+          if (dev.serialNumber) {
+            autoSerials = [dev.serialNumber.trim()];
+          } else if (matched?.units && matched.units.length > 0) {
+            autoSerials = matched.units.slice(0, qtyNum).map((u) => u.serial_number);
+          }
+        }
 
         newRows.push({
           item_id: matched ? matched.id : "",
           quantity: qtyStr,
           notes: dev.notes || (dev.serialNumber ? `SN: ${dev.serialNumber}` : ""),
-          serials: dev.serialNumber || "",
+          serials: isAktif ? autoSerials : [],
+          isSelectorOpen: false,
+          searchQuery: "",
+          manualSnInput: "",
         });
       });
 
@@ -133,7 +178,10 @@ export default function BarangKeluarPage() {
   };
 
   const handleAddRow = () => {
-    setRows([...rows, { item_id: "", quantity: "1", notes: "", serials: "" }]);
+    setRows([
+      ...rows,
+      { item_id: "", quantity: "1", notes: "", serials: [], isSelectorOpen: false, searchQuery: "", manualSnInput: "" },
+    ]);
   };
 
   const handleRemoveRow = (index: number) => {
@@ -141,16 +189,149 @@ export default function BarangKeluarPage() {
     setRows(rows.filter((_, idx) => idx !== index));
   };
 
-  const handleRowChange = (index: number, field: string, value: string) => {
+  const handleRowChange = (index: number, field: keyof RowItem, value: any) => {
     const updated = [...rows];
     updated[index] = { ...updated[index], [field]: value };
+    setRows(updated);
+  };
+
+  const handleItemSelect = (index: number, itemId: string) => {
+    const selected = availableItems.find((it) => it.id === itemId);
+    const isAktif = selected?.category?.name?.toLowerCase() === "aktif";
+    const isPasif = selected?.category?.name?.toLowerCase() === "pasif";
+    const qtyNum = Number(rows[index].quantity) || 1;
+
+    let initialSerials: string[] = [];
+    if (isAktif && selected?.units && selected.units.length > 0) {
+      // Find other rows selected serials
+      const usedInOtherRows = rows
+        .filter((_, rIdx) => rIdx !== index)
+        .flatMap((r) => r.serials || []);
+      const availableUnitsForThis = selected.units.filter((u) => !usedInOtherRows.includes(u.serial_number));
+      initialSerials = availableUnitsForThis.slice(0, qtyNum).map((u) => u.serial_number);
+    }
+
+    const updated = [...rows];
+    updated[index] = {
+      ...updated[index],
+      item_id: itemId,
+      serials: isPasif ? [] : initialSerials,
+      isSelectorOpen: false,
+      searchQuery: "",
+      manualSnInput: "",
+    };
+    setRows(updated);
+  };
+
+  const handleQuantityChange = (index: number, qtyStr: string) => {
+    const qtyNum = Math.max(1, parseInt(qtyStr, 10) || 1);
+    const updated = [...rows];
+    const currentRow = updated[index];
+    const selItem = availableItems.find((it) => it.id === currentRow.item_id);
+    const isAktif = selItem?.category?.name?.toLowerCase() === "aktif";
+
+    let nextSerials = currentRow.serials || [];
+    if (isAktif) {
+      // If quantity is reduced, slice serials to match
+      if (nextSerials.length > qtyNum) {
+        nextSerials = nextSerials.slice(0, qtyNum);
+      }
+    }
+
+    updated[index] = {
+      ...currentRow,
+      quantity: qtyStr,
+      serials: nextSerials,
+    };
+    setRows(updated);
+  };
+
+  const handleToggleSerial = (rowIndex: number, sn: string) => {
+    const updated = [...rows];
+    const row = updated[rowIndex];
+    const qtyNum = Number(row.quantity) || 1;
+    const currentSerials = row.serials || [];
+
+    if (currentSerials.includes(sn)) {
+      // Deselect
+      updated[rowIndex].serials = currentSerials.filter((s) => s !== sn);
+    } else {
+      // Select
+      if (currentSerials.length >= qtyNum) {
+        setNotification({
+          type: "error",
+          message: `Kuantitas baris adalah ${qtyNum}. Hapus salah satu serial number terlebih dahulu atau naikkan kuantitas.`,
+        });
+        return;
+      }
+      updated[rowIndex].serials = [...currentSerials, sn];
+    }
+    setRows(updated);
+  };
+
+  const handleRemoveSerial = (rowIndex: number, sn: string) => {
+    const updated = [...rows];
+    updated[rowIndex].serials = (updated[rowIndex].serials || []).filter((s) => s !== sn);
+    setRows(updated);
+  };
+
+  const handleAutoSelectSerials = (rowIndex: number) => {
+    const updated = [...rows];
+    const row = updated[rowIndex];
+    const selItem = availableItems.find((it) => it.id === row.item_id);
+    const qtyNum = Number(row.quantity) || 1;
+    if (!selItem?.units || selItem.units.length === 0) return;
+
+    const usedInOtherRows = rows
+      .filter((_, rIdx) => rIdx !== rowIndex)
+      .flatMap((r) => r.serials || []);
+
+    const availableForSelect = selItem.units
+      .filter((u) => !usedInOtherRows.includes(u.serial_number))
+      .slice(0, qtyNum)
+      .map((u) => u.serial_number);
+
+    updated[rowIndex].serials = availableForSelect;
+    setRows(updated);
+  };
+
+  const handleClearSerials = (rowIndex: number) => {
+    const updated = [...rows];
+    updated[rowIndex].serials = [];
+    setRows(updated);
+  };
+
+  const handleAddManualSn = (rowIndex: number) => {
+    const updated = [...rows];
+    const row = updated[rowIndex];
+    const sn = (row.manualSnInput || "").trim();
+    if (!sn) return;
+
+    const qtyNum = Number(row.quantity) || 1;
+    const current = row.serials || [];
+
+    if (current.includes(sn)) {
+      setNotification({ type: "error", message: `Serial Number '${sn}' sudah terpilih pada baris ini.` });
+      return;
+    }
+
+    if (current.length >= qtyNum) {
+      setNotification({
+        type: "error",
+        message: `Kuantitas adalah ${qtyNum}. Tidak dapat memilih lebih dari ${qtyNum} SN.`,
+      });
+      return;
+    }
+
+    updated[rowIndex].serials = [...current, sn];
+    updated[rowIndex].manualSnInput = "";
     setRows(updated);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!picName.trim()) {
-      setNotification({ type: "error", message: "Nama PIC wajib diisi." });
+      setNotification({ type: "error", message: "Nama PIC Penerima wajib diisi." });
       return;
     }
 
@@ -161,23 +342,56 @@ export default function BarangKeluarPage() {
         throw new Error("Pilih minimal satu barang dan tentukan kuantitas yang valid.");
       }
 
-      // Check client-side available stock validation
-      for (const r of validItems) {
+      // Check client-side available stock validation & Active Item SN requirements
+      const allTxSerialNumbers = new Set<string>();
+
+      for (let i = 0; i < validItems.length; i++) {
+        const r = validItems[i];
         const itm = availableItems.find((it) => it.id === r.item_id);
         const avail = itm?.stock ? Number(itm.stock.available_stock) : 0;
-        if (Number(r.quantity) > avail) {
+        const qtyNum = Number(r.quantity) || 0;
+
+        if (qtyNum > avail) {
           throw new Error(
             `Kuantitas keluar (${r.quantity} ${itm?.unit}) melebihi stok tersedia (${avail} ${itm?.unit}) untuk '${itm?.name}'.`
           );
         }
+
+        const isAktif = itm?.category?.name?.toLowerCase() === "aktif";
+        if (isAktif) {
+          const rowSerials = r.serials || [];
+          if (rowSerials.length !== qtyNum) {
+            throw new Error(
+              `Baris ${i + 1} (${itm?.name || "Barang Aktif"}): Kategori Aktif kuantitas ${qtyNum} wajib memilih tepat ${qtyNum} Serial Number dari inventory (saat ini terpilih: ${rowSerials.length}).`
+            );
+          }
+
+          // Check duplicate in same row
+          const uniqueSns = new Set(rowSerials);
+          if (uniqueSns.size !== rowSerials.length) {
+            throw new Error(`Baris ${i + 1} (${itm?.name}): Terdapat Serial Number duplikat pada pilihan.`);
+          }
+
+          // Check duplicate across rows
+          for (const sn of rowSerials) {
+            if (allTxSerialNumbers.has(sn)) {
+              throw new Error(`Serial Number '${sn}' dipilih lebih dari satu kali dalam transaksi ini.`);
+            }
+            allTxSerialNumbers.add(sn);
+          }
+        }
       }
 
-      const itemsPayload = validItems.map((r) => ({
-        item_id: r.item_id,
-        quantity: Number(r.quantity),
-        notes: r.notes || null,
-        serial_numbers: r.serials ? r.serials.split("\n").map((s) => s.trim()).filter(Boolean) : [],
-      }));
+      const itemsPayload = validItems.map((r) => {
+        const itm = availableItems.find((it) => it.id === r.item_id);
+        const isAktif = itm?.category?.name?.toLowerCase() === "aktif";
+        return {
+          item_id: r.item_id,
+          quantity: Number(r.quantity),
+          notes: r.notes || null,
+          serial_numbers: isAktif ? r.serials : [],
+        };
+      });
 
       const res = await fetch("/api/inventory/transactions/out", {
         method: "POST",
@@ -187,8 +401,6 @@ export default function BarangKeluarPage() {
           pic_name: picName,
           pic_phone: picPhone,
           department,
-          location,
-          purpose,
           warehouse_officer: officer,
           notes,
           permit_id: permitRefId,
@@ -204,12 +416,12 @@ export default function BarangKeluarPage() {
       // Reset form
       setPicName("");
       setPicPhone("");
-      setLocation("");
-      setPurpose("");
       setNotes("");
       setPermitRefId(null);
       setPermitRefNumber(null);
-      setRows([{ item_id: "", quantity: "1", notes: "", serials: "" }]);
+      setRows([
+        { item_id: "", quantity: "1", notes: "", serials: [], isSelectorOpen: false, searchQuery: "", manualSnInput: "" },
+      ]);
       fetchData();
     } catch (err: any) {
       setNotification({ type: "error", message: err.message });
@@ -236,13 +448,14 @@ export default function BarangKeluarPage() {
             Barang Keluar (Stock Out)
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
-            Pencatatan serah terima barang kepada PIC/teknisi, lokasi penggunaan, validasi stok otomatis, dan integrasi Surat Permit.
+            Pencatatan serah terima barang kepada PIC/teknisi, validasi stok otomatis, pemilihan Serial Number aktif dari inventory, dan integrasi Surat Permit.
           </p>
         </div>
 
         <div className="flex items-center space-x-2.5">
           <button
             onClick={fetchData}
+            title="Segarkan Data"
             className="p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 hover:text-rose-600 shadow-sm transition"
           >
             <RefreshCw className="w-4 h-4" />
@@ -264,8 +477,8 @@ export default function BarangKeluarPage() {
         <div
           className={`p-4 rounded-xl border text-sm flex items-center justify-between ${
             notification.type === "success"
-              ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 text-emerald-800"
-              : "bg-rose-50 dark:bg-rose-950/40 border-rose-200 text-rose-800"
+              ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 text-emerald-800 dark:text-emerald-300"
+              : "bg-rose-50 dark:bg-rose-950/40 border-rose-200 text-rose-800 dark:text-rose-300"
           }`}
         >
           <div className="flex items-center space-x-2">
@@ -298,7 +511,8 @@ export default function BarangKeluarPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Header Form Inputs (Lokasi Penggunaan & Tujuan Penggunaan Removed) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
                   Tanggal Keluar <span className="text-rose-500">*</span>
@@ -358,32 +572,6 @@ export default function BarangKeluarPage() {
 
               <div>
                 <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                  Lokasi Penggunaan
-                </label>
-                <input
-                  type="text"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  placeholder="Contoh: Gedung Wisma Bumi Putera Suite 701A"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                  Tujuan Penggunaan
-                </label>
-                <input
-                  type="text"
-                  value={purpose}
-                  onChange={(e) => setPurpose(e.target.value)}
-                  placeholder="Contoh: Instalasi Pelanggan Baru / Maintenance POP"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
                   Petugas Penyerah Gudang <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -391,7 +579,7 @@ export default function BarangKeluarPage() {
                   required
                   value={officer}
                   onChange={(e) => setOfficer(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-medium"
                 />
               </div>
 
@@ -403,22 +591,24 @@ export default function BarangKeluarPage() {
                   type="text"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Catatan surat tugas / nomor tiket"
+                  placeholder="Catatan surat tugas / nomor tiket / keperluan"
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
                 />
               </div>
             </div>
 
             {/* Multi-Item Selection Table */}
-            <div className="border rounded-xl overflow-hidden mt-2">
+            <div className="border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden mt-4">
               <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 dark:bg-slate-800/60 font-bold text-[10px] text-slate-600 uppercase border-b">
+                <thead className="bg-slate-50 dark:bg-slate-800/60 font-bold text-[10px] text-slate-600 dark:text-slate-300 uppercase border-b border-slate-200/80 dark:border-slate-800">
                   <tr>
-                    <th className="py-2.5 px-3">Pilih Barang</th>
+                    <th className="py-2.5 px-3 min-w-[220px]">Pilih Barang</th>
+                    <th className="py-2.5 px-3 w-28 text-center">Kategori</th>
                     <th className="py-2.5 px-3 text-right w-24">Stok Siap</th>
                     <th className="py-2.5 px-3 text-right w-28">Jumlah Keluar</th>
-                    <th className="py-2.5 px-3">Catatan / Serial Number</th>
-                    <th className="py-2.5 px-3 text-center w-16">Hapus</th>
+                    <th className="py-2.5 px-3 min-w-[300px]">Pilihan Serial Number (SN)</th>
+                    <th className="py-2.5 px-3 w-32">Catatan</th>
+                    <th className="py-2.5 px-3 text-center w-14">Hapus</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -426,31 +616,65 @@ export default function BarangKeluarPage() {
                     const selItem = availableItems.find((it) => it.id === row.item_id);
                     const avail = selItem?.stock ? Number(selItem.stock.available_stock) : 0;
                     const isExceed = Number(row.quantity) > avail;
+                    const isAktif = selItem?.category?.name?.toLowerCase() === "aktif";
+                    const isPasif = selItem?.category?.name?.toLowerCase() === "pasif";
+                    const qtyNum = Number(row.quantity) || 0;
+                    const availableUnits = selItem?.units || [];
+
+                    // Collect serials used in other rows to prevent selecting same unit twice
+                    const usedInOtherRows = rows
+                      .filter((_, rIdx) => rIdx !== idx)
+                      .flatMap((r) => r.serials || []);
+
+                    const filteredUnits = availableUnits.filter((u) => {
+                      if (!row.searchQuery?.trim()) return true;
+                      return u.serial_number.toLowerCase().includes(row.searchQuery.toLowerCase());
+                    });
 
                     return (
-                      <tr key={idx}>
-                        <td className="py-2 px-3">
+                      <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition">
+                        {/* 1. Pilih Barang */}
+                        <td className="py-2.5 px-3 align-top">
                           <select
                             required
                             value={row.item_id}
-                            onChange={(e) => handleRowChange(idx, "item_id", e.target.value)}
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                            onChange={(e) => handleItemSelect(idx, e.target.value)}
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-medium"
                           >
                             <option value="">-- Pilih Barang --</option>
                             {availableItems.map((it) => {
                               const st = it.stock ? Number(it.stock.available_stock) : 0;
                               return (
                                 <option key={it.id} value={it.id} disabled={st <= 0}>
-                                  [{it.code}] {it.name} - Tersedia: {st} {it.unit} ({it.type})
+                                  [{it.code}] {it.name} - Tersedia: {st} {it.unit} {it.category?.name ? `• [${it.category.name}]` : ""}
                                 </option>
                               );
                             })}
                           </select>
                         </td>
-                        <td className="py-2 px-3 text-right font-black text-slate-600">
+
+                        {/* 2. Kategori Badge */}
+                        <td className="py-2.5 px-3 align-top pt-3 text-center">
+                          {isAktif ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                              Aktif (Wajib SN)
+                            </span>
+                          ) : isPasif ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                              Pasif (Tanpa SN)
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-[10px] italic">-</span>
+                          )}
+                        </td>
+
+                        {/* 3. Stok Siap */}
+                        <td className="py-2.5 px-3 text-right font-black text-slate-600 dark:text-slate-300 align-top pt-3">
                           {selItem ? `${avail} ${selItem.unit}` : "-"}
                         </td>
-                        <td className="py-2 px-3 text-right">
+
+                        {/* 4. Jumlah Keluar */}
+                        <td className="py-2.5 px-3 text-right align-top">
                           <div className="flex items-center justify-end space-x-1">
                             <input
                               type="number"
@@ -458,31 +682,264 @@ export default function BarangKeluarPage() {
                               max={avail > 0 ? avail : 1}
                               required
                               value={row.quantity}
-                              onChange={(e) => handleRowChange(idx, "quantity", e.target.value)}
+                              onChange={(e) => handleQuantityChange(idx, e.target.value)}
                               className={`w-20 px-2 py-1 text-right font-bold rounded-lg border bg-white dark:bg-slate-950 ${
                                 isExceed ? "border-rose-500 text-rose-600" : "border-slate-300 dark:border-slate-700"
                               }`}
                             />
-                            <span className="text-[10px] text-slate-400 w-8">
+                            <span className="text-[10px] text-slate-400 w-8 truncate text-left">
                               {selItem?.unit || "Unit"}
                             </span>
                           </div>
                         </td>
-                        <td className="py-2 px-3">
+
+                        {/* 5. Serial Number Selection (Aktif vs Pasif) */}
+                        <td className="py-2.5 px-3 align-top">
+                          {isPasif ? (
+                            <div>
+                              <input
+                                type="text"
+                                disabled
+                                value=""
+                                placeholder="Tidak memerlukan SN (Barang Pasif)"
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-800/40 text-slate-400 cursor-not-allowed text-xs"
+                              />
+                              <p className="text-[10px] text-slate-400 mt-1 italic">
+                                Kolom SN dikunci untuk barang kategori pasif.
+                              </p>
+                            </div>
+                          ) : isAktif ? (
+                            <div className="space-y-1.5">
+                              {/* Selected Chips */}
+                              {row.serials && row.serials.length > 0 && (
+                                <div className="flex flex-wrap gap-1 p-1.5 bg-slate-50 dark:bg-slate-800/40 rounded-lg border border-slate-200 dark:border-slate-800">
+                                  {row.serials.map((sn, sIdx) => (
+                                    <span
+                                      key={sIdx}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/70 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-mono text-[11px] font-bold"
+                                    >
+                                      <span>{sn}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveSerial(idx, sn)}
+                                        className="text-blue-400 hover:text-rose-500 font-bold ml-0.5"
+                                        title="Hapus serial number ini"
+                                      >
+                                        &times;
+                                      </button>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Validation Status Indicator */}
+                              <div className="text-[11px]">
+                                {row.serials.length === qtyNum && qtyNum > 0 ? (
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                                    Tepat {row.serials.length}/{qtyNum} SN terpilih dari stok (Valid)
+                                  </span>
+                                ) : row.serials.length < qtyNum ? (
+                                  <span className="text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+                                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                    Wajib pilih {qtyNum - row.serials.length} SN lagi ({row.serials.length}/{qtyNum} terpilih)
+                                  </span>
+                                ) : (
+                                  <span className="text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1">
+                                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                    Kelebihan {row.serials.length - qtyNum} SN terpilih (Kuantitas: {qtyNum})
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Trigger Button to Open SN Drawer/Picker */}
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRowChange(idx, "isSelectorOpen", !row.isSelectorOpen)}
+                                  className="flex-1 inline-flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-medium text-slate-700 dark:text-slate-200 transition"
+                                >
+                                  <span className="flex items-center gap-1.5 truncate">
+                                    <Boxes className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                    <span>
+                                      {availableUnits.length > 0
+                                        ? `Pilih dari ${availableUnits.length} SN Tersedia di Stok`
+                                        : `Belum Ada SN Terdaftar di Stok`}
+                                    </span>
+                                  </span>
+                                  <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 ml-1">
+                                    {row.isSelectorOpen ? "Tutup ▲" : "Buka Daftar ▼"}
+                                  </span>
+                                </button>
+
+                                {availableUnits.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAutoSelectSerials(idx)}
+                                    title={`Otomatis pilih ${qtyNum} SN pertama yang tersedia`}
+                                    className="px-2 py-1.5 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 hover:bg-blue-100 text-[11px] font-bold flex items-center gap-1 shrink-0 transition"
+                                  >
+                                    <Zap className="w-3 h-3" />
+                                    Auto {qtyNum}
+                                  </button>
+                                )}
+
+                                {row.serials.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleClearSerials(idx)}
+                                    title="Bersihkan semua pilihan SN"
+                                    className="px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-rose-600 text-[11px] font-medium shrink-0"
+                                  >
+                                    Reset
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Expandable Inventory SN Selector Panel */}
+                              {row.isSelectorOpen && (
+                                <div className="mt-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 shadow-sm space-y-2">
+                                  {/* Filter & Search */}
+                                  <div className="flex items-center gap-2">
+                                    <div className="relative flex-1">
+                                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400" />
+                                      <input
+                                        type="text"
+                                        value={row.searchQuery || ""}
+                                        onChange={(e) => handleRowChange(idx, "searchQuery", e.target.value)}
+                                        placeholder="Cari Serial Number di stok..."
+                                        className="w-full pl-8 pr-2.5 py-1 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono"
+                                      />
+                                    </div>
+                                    <span className="text-[10px] text-slate-500 font-semibold shrink-0">
+                                      {row.serials.length}/{qtyNum} Terpilih
+                                    </span>
+                                  </div>
+
+                                  {/* List of Available Units */}
+                                  {availableUnits.length === 0 ? (
+                                    <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg text-amber-800 dark:text-amber-300 text-[11px] space-y-1">
+                                      <p className="font-semibold flex items-center gap-1">
+                                        <AlertTriangle className="w-3.5 h-3.5" />
+                                        Belum ada unit Serial Number terdaftar di inventory untuk barang ini.
+                                      </p>
+                                      <p className="text-[10px] text-amber-700/80 dark:text-amber-400">
+                                        Anda dapat menginput nomor SN secara manual di bawah ini:
+                                      </p>
+                                    </div>
+                                  ) : filteredUnits.length === 0 ? (
+                                    <p className="p-2 text-center text-slate-400 text-[11px]">
+                                      Tidak ada serial number yang cocok dengan filter pencarian.
+                                    </p>
+                                  ) : (
+                                    <div className="max-h-40 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg bg-white dark:bg-slate-950">
+                                      {filteredUnits.map((u) => {
+                                        const isSelected = row.serials.includes(u.serial_number);
+                                        const isUsedElsewhere = usedInOtherRows.includes(u.serial_number);
+
+                                        return (
+                                          <div
+                                            key={u.id}
+                                            onClick={() => {
+                                              if (!isUsedElsewhere) handleToggleSerial(idx, u.serial_number);
+                                            }}
+                                            className={`p-2 flex items-center justify-between cursor-pointer select-none transition ${
+                                              isSelected
+                                                ? "bg-blue-50/80 dark:bg-blue-950/60 font-semibold text-blue-900 dark:text-blue-200"
+                                                : isUsedElsewhere
+                                                ? "opacity-40 bg-slate-100/50 cursor-not-allowed text-slate-400"
+                                                : "hover:bg-slate-50 dark:hover:bg-slate-800/40 text-slate-800 dark:text-slate-200"
+                                            }`}
+                                          >
+                                            <div className="flex items-center gap-2 truncate">
+                                              <input
+                                                type="checkbox"
+                                                disabled={isUsedElsewhere}
+                                                checked={isSelected}
+                                                onChange={() => {}}
+                                                className="rounded text-blue-600 focus:ring-blue-500 pointer-events-none"
+                                              />
+                                              <span className="font-mono text-xs truncate">
+                                                {u.serial_number}
+                                              </span>
+                                            </div>
+
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
+                                                {u.condition || "BAIK"}
+                                              </span>
+                                              {isUsedElsewhere && (
+                                                <span className="text-[10px] text-rose-500 italic">
+                                                  (Dipilih di baris lain)
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+
+                                  {/* Manual Input Fallback */}
+                                  <div className="pt-1 border-t border-slate-200/80 dark:border-slate-800">
+                                    <div className="flex items-center gap-1.5">
+                                      <input
+                                        type="text"
+                                        value={row.manualSnInput || ""}
+                                        onChange={(e) => handleRowChange(idx, "manualSnInput", e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") {
+                                            e.preventDefault();
+                                            handleAddManualSn(idx);
+                                          }
+                                        }}
+                                        placeholder="Ketik SN manual jika belum terdaftar..."
+                                        className="flex-1 px-2.5 py-1 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => handleAddManualSn(idx)}
+                                        className="px-2.5 py-1 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shrink-0"
+                                      >
+                                        + Tambah SN
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div>
+                              <input
+                                type="text"
+                                disabled
+                                value=""
+                                placeholder="Pilih barang terlebih dahulu..."
+                                className="w-full px-2.5 py-1.5 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 bg-slate-100/50 dark:bg-slate-800/30 text-slate-400 cursor-not-allowed text-xs"
+                              />
+                            </div>
+                          )}
+                        </td>
+
+                        {/* 6. Catatan Baris */}
+                        <td className="py-2.5 px-3 align-top">
                           <input
                             type="text"
                             value={row.notes}
                             onChange={(e) => handleRowChange(idx, "notes", e.target.value)}
-                            placeholder="Catatan / serial number unit..."
-                            className="w-full px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                            placeholder="Catatan..."
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs"
                           />
                         </td>
-                        <td className="py-2 px-3 text-center">
+
+                        {/* 7. Hapus Baris */}
+                        <td className="py-2.5 px-3 text-center align-top pt-3">
                           <button
                             type="button"
                             disabled={rows.length === 1}
                             onClick={() => handleRemoveRow(idx)}
-                            className="p-1 rounded text-slate-400 hover:text-rose-600 disabled:opacity-30"
+                            className="p-1 rounded text-slate-400 hover:text-rose-600 disabled:opacity-30 transition"
+                            title="Hapus baris ini"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -515,7 +972,7 @@ export default function BarangKeluarPage() {
         </div>
       )}
 
-      {/* Recent Out Transactions Table */}
+      {/* Recent Out Transactions Table (Lokasi Penggunaan Column Removed) */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm space-y-3 p-5">
         <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center">
           <ArrowUpRight className="w-4 h-4 mr-2 text-rose-600" />
@@ -524,12 +981,12 @@ export default function BarangKeluarPage() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 font-bold text-[10px] text-slate-600 uppercase border-b">
+            <thead className="bg-slate-50 dark:bg-slate-800/60 font-bold text-[10px] text-slate-600 dark:text-slate-300 uppercase border-b border-slate-200/80 dark:border-slate-800">
               <tr>
                 <th className="py-2.5 px-3">No. Transaksi</th>
                 <th className="py-2.5 px-3">Tanggal</th>
                 <th className="py-2.5 px-3">Nama PIC</th>
-                <th className="py-2.5 px-3">Lokasi Penggunaan</th>
+                <th className="py-2.5 px-3">Departemen</th>
                 <th className="py-2.5 px-3">Status</th>
                 <th className="py-2.5 px-3 text-center">Aksi</th>
               </tr>
@@ -543,18 +1000,18 @@ export default function BarangKeluarPage() {
                 </tr>
               ) : (
                 recentTransactions.map((tx) => (
-                  <tr key={tx.id} className="hover:bg-slate-50/70 transition">
-                    <td className="py-2.5 px-3 font-mono font-bold text-rose-600">
+                  <tr key={tx.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition">
+                    <td className="py-2.5 px-3 font-mono font-bold text-rose-600 dark:text-rose-400">
                       {tx.transaction_number}
                     </td>
-                    <td className="py-2.5 px-3 text-slate-600">
+                    <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
                       {new Date(tx.transaction_date).toLocaleDateString("id-ID")}
                     </td>
                     <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200">
                       {tx.pic_name}
                     </td>
-                    <td className="py-2.5 px-3 text-slate-600">
-                      {tx.location || "-"}
+                    <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
+                      {tx.department || "-"}
                     </td>
                     <td className="py-2.5 px-3">
                       <span
@@ -575,6 +1032,7 @@ export default function BarangKeluarPage() {
                       <button
                         onClick={() => setSelectedTx(tx)}
                         className="p-1 rounded text-slate-500 hover:text-blue-600"
+                        title="Lihat Detail Transaksi"
                       >
                         <Eye className="w-4 h-4" />
                       </button>
@@ -602,7 +1060,7 @@ export default function BarangKeluarPage() {
             </div>
 
             <p className="text-xs text-slate-500">
-              Pilih surat permit resmi yang telah diterbitkan untuk mengisi data PIC, lokasi, dan daftar perangkat secara otomatis:
+              Pilih surat permit resmi yang telah diterbitkan untuk mengisi data PIC dan daftar perangkat secara otomatis:
             </p>
 
             <div className="divide-y divide-slate-100 dark:divide-slate-800 border rounded-xl overflow-hidden max-h-72 overflow-y-auto">
@@ -625,7 +1083,7 @@ export default function BarangKeluarPage() {
                         </span>
                       </div>
                       <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
-                        PIC: {doc.applicantName} &bull; {doc.location}
+                        PIC: {doc.applicantName}
                       </p>
                       <p className="text-[11px] text-slate-500">
                         {doc.devices?.length || 0} Perangkat ({doc.devices?.map((d: any) => d.name).join(", ")})
@@ -656,13 +1114,13 @@ export default function BarangKeluarPage() {
         </div>
       )}
 
-      {/* View Detail Modal */}
+      {/* View Detail Modal (Lokasi & Tujuan Removed) */}
       {selectedTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-xl">
             <div className="flex items-center justify-between pb-3 border-b">
               <div>
-                <span className="font-mono text-xs font-bold text-rose-600">
+                <span className="font-mono text-xs font-bold text-rose-600 dark:text-rose-400">
                   {selectedTx.transaction_number}
                 </span>
                 <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
@@ -676,47 +1134,70 @@ export default function BarangKeluarPage() {
 
             <div className="space-y-2 text-xs">
               <p><span className="font-semibold text-slate-500">PIC:</span> {selectedTx.pic_name} ({selectedTx.pic_phone || "-"})</p>
-              <p><span className="font-semibold text-slate-500">Lokasi:</span> {selectedTx.location || "-"}</p>
-              <p><span className="font-semibold text-slate-500">Tujuan:</span> {selectedTx.purpose || "-"}</p>
+              <p><span className="font-semibold text-slate-500">Departemen:</span> {selectedTx.department || "-"}</p>
               <p><span className="font-semibold text-slate-500">Petugas Gudang:</span> {selectedTx.warehouse_officer}</p>
+              {selectedTx.notes && (
+                <p><span className="font-semibold text-slate-500">Keterangan:</span> {selectedTx.notes}</p>
+              )}
 
-              <div className="border rounded-xl overflow-hidden mt-3">
+              <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden mt-3">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 dark:bg-slate-800 font-bold text-[10px] text-slate-600 border-b">
+                  <thead className="bg-slate-50 dark:bg-slate-800 font-bold text-[10px] text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
                     <tr>
-                      <th className="py-2 px-3">Barang</th>
+                      <th className="py-2 px-3">Barang & Serial Number</th>
                       <th className="py-2 px-3 text-right">Keluar</th>
                       <th className="py-2 px-3 text-right">Kembali</th>
                       <th className="py-2 px-3 text-right">Sisa</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {selectedTx.details?.map((d: any) => (
-                      <tr key={d.id}>
-                        <td className="py-2 px-3">
-                          <p className="font-semibold">{d.item?.name}</p>
-                          <span className="font-mono text-[10px] text-slate-400">{d.item?.code}</span>
-                        </td>
-                        <td className="py-2 px-3 text-right font-bold text-rose-600">
-                          {Number(d.quantity)} {d.unit}
-                        </td>
-                        <td className="py-2 px-3 text-right font-bold text-blue-600">
-                          {Number(d.qty_returned || 0)} {d.unit}
-                        </td>
-                        <td className="py-2 px-3 text-right font-bold text-amber-600">
-                          {Number(d.qty_remaining || 0)} {d.unit}
-                        </td>
-                      </tr>
-                    ))}
+                    {selectedTx.details?.map((d: any) => {
+                      let parsedSns: string[] = [];
+                      if (d.unit_serial_numbers) {
+                        try {
+                          parsedSns = JSON.parse(d.unit_serial_numbers);
+                        } catch {}
+                      }
+
+                      return (
+                        <tr key={d.id}>
+                          <td className="py-2.5 px-3">
+                            <p className="font-semibold text-slate-800 dark:text-slate-200">{d.item?.name}</p>
+                            <span className="font-mono text-[10px] text-slate-400">{d.item?.code}</span>
+                            {parsedSns.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {parsedSns.map((sn, sIdx) => (
+                                  <span
+                                    key={sIdx}
+                                    className="px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-mono text-[10px] border border-blue-200 dark:border-blue-800"
+                                  >
+                                    SN: {sn}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-bold text-rose-600 align-top">
+                            {Number(d.quantity)} {d.unit}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-bold text-blue-600 align-top">
+                            {Number(d.qty_returned || 0)} {d.unit}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-bold text-amber-600 align-top">
+                            {Number(d.qty_remaining || 0)} {d.unit}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             </div>
 
-            <div className="flex justify-end pt-3 border-t">
+            <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 onClick={() => setSelectedTx(null)}
-                className="px-4 py-2 rounded-xl bg-slate-100 font-semibold text-xs"
+                className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 font-semibold text-xs transition"
               >
                 Tutup
               </button>
@@ -727,4 +1208,3 @@ export default function BarangKeluarPage() {
     </div>
   );
 }
-

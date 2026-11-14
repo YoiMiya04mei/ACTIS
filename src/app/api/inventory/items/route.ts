@@ -52,6 +52,17 @@ export async function GET(request: NextRequest) {
         include: {
           category: { select: { id: true, name: true } },
           stock: true,
+          units: {
+            where: { status: "AVAILABLE" },
+            select: {
+              id: true,
+              serial_number: true,
+              mac_address: true,
+              condition: true,
+              status: true,
+            },
+            orderBy: { serial_number: "asc" },
+          },
           _count: {
             select: { units: true, transaction_details: true },
           },

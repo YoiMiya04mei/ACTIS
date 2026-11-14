@@ -404,7 +404,7 @@ export async function processStockOut(payload: StockOutPayload) {
       // Check current stock atomically with row-level lock or select inside tx
       const item = await tx.inventoryItem.findUnique({
         where: { id: itemInput.item_id },
-        include: { stock: true },
+        include: { stock: true, category: true },
       });
 
       if (!item) {
@@ -424,6 +424,22 @@ export async function processStockOut(payload: StockOutPayload) {
       const balanceBefore = currentAvailable;
       const balanceAfter = balanceBefore.minus(qtyNum);
       const isReusable = item.type === "REUSABLE";
+      const isAktif = item.category?.name?.toLowerCase() === "aktif";
+      const isPasif = item.category?.name?.toLowerCase() === "pasif";
+
+      // Validasi Serial Number untuk Barang Kategori Aktif
+      if (isAktif) {
+        const sns = (itemInput.serial_numbers || []).map((s) => String(s).trim()).filter(Boolean);
+        if (sns.length !== qtyNum.toNumber()) {
+          throw new Error(
+            `Barang '${item.name}' berkategori Aktif dengan kuantitas ${qtyNum.toString()} wajib memilih tepat ${qtyNum.toString()} Serial Number (terpilih: ${sns.length}).`
+          );
+        }
+        const snSet = new Set(sns);
+        if (snSet.size !== sns.length) {
+          throw new Error(`Terdapat Serial Number duplikat untuk barang '${item.name}'.`);
+        }
+      }
 
       if (isReusable) {
         hasReusable = true;
@@ -456,14 +472,16 @@ export async function processStockOut(payload: StockOutPayload) {
       const detailStatus = isReusable ? "ACTIVE" : "CONSUMED";
       const qtyRemaining = isReusable ? qtyNum : new Prisma.Decimal(0);
 
+      const serialNumbersToRecord = isPasif ? [] : (itemInput.serial_numbers || []).map((s) => String(s).trim()).filter(Boolean);
+
       await tx.inventoryTransactionDetail.create({
         data: {
           transaction_id: transaction.id,
           item_id: item.id,
           quantity: qtyNum,
           unit: itemInput.unit || item.unit,
-          unit_serial_numbers: itemInput.serial_numbers?.length
-            ? JSON.stringify(itemInput.serial_numbers)
+          unit_serial_numbers: serialNumbersToRecord.length
+            ? JSON.stringify(serialNumbersToRecord)
             : null,
           qty_returned: new Prisma.Decimal(0),
           qty_remaining: qtyRemaining,
@@ -473,8 +491,8 @@ export async function processStockOut(payload: StockOutPayload) {
       });
 
       // Update unit serial numbers if applicable
-      if (isReusable && itemInput.serial_numbers?.length) {
-        for (const sn of itemInput.serial_numbers) {
+      if ((isReusable || isAktif) && serialNumbersToRecord.length) {
+        for (const sn of serialNumbersToRecord) {
           const trimmedSn = sn.trim();
           if (!trimmedSn) continue;
 
@@ -486,12 +504,12 @@ export async function processStockOut(payload: StockOutPayload) {
               status: "IN_USE",
               condition: "BAIK",
               current_pic: payload.pic_name,
-              current_location: payload.location || "Di Luar Gudang",
+              current_location: payload.location || `Digunakan oleh ${payload.pic_name}`,
             },
             update: {
               status: "IN_USE",
               current_pic: payload.pic_name,
-              current_location: payload.location || "Di Luar Gudang",
+              current_location: payload.location || `Digunakan oleh ${payload.pic_name}`,
             },
           });
         }

@@ -706,6 +706,85 @@ async function runInventoryTests() {
       `TEST 17.4: Petugas penerima gudang otomatis tersimpan dari sesi login: ${txAktif?.warehouse_officer}`
     );
 
+    // =========================================================================
+    // TEST 18: VALIDASI BARANG KELUAR: KATEGORI AKTIF VS PASIF & SERIAL NUMBERS
+    // =========================================================================
+    // 18.1: Barang pasif keluar tanpa serial number berhasil & stok berkurang
+    const outPasif = await processStockOut({
+      pic_name: "Teknisi Lapangan",
+      warehouse_officer: "Admin Gudang",
+      notes: "TEST_OUT_PASIF",
+      items: [
+        {
+          item_id: itemPasif.id,
+          quantity: 3,
+          serial_numbers: [], // Pasif tidak memerlukan SN
+        },
+      ],
+    });
+
+    const stockPasifAfter = await prisma.inventoryStock.findUnique({
+      where: { item_id: itemPasif.id },
+    });
+    assert(
+      stockPasifAfter && Number(stockPasifAfter.available_stock) === 7,
+      `TEST 18.1: Barang pasif keluar 3 unit tanpa SN berhasil (stok 10 -> 7).`
+    );
+
+    // 18.2: Barang aktif keluar 2 unit tanpa SN -> ditolak
+    let outAktifWithoutSnRejected = false;
+    try {
+      await processStockOut({
+        pic_name: "Teknisi Lapangan",
+        warehouse_officer: "Admin Gudang",
+        notes: "TEST_OUT_AKTIF_NO_SN",
+        items: [
+          {
+            item_id: itemAktif.id,
+            quantity: 2,
+            serial_numbers: [], // Kurang SN
+          },
+        ],
+      });
+    } catch (e) {
+      outAktifWithoutSnRejected = true;
+    }
+    assert(
+      outAktifWithoutSnRejected,
+      `TEST 18.2: Barang aktif keluar 2 unit tanpa Serial Number wajib ditolak.`
+    );
+
+    // 18.3: Barang aktif keluar 2 unit dengan 2 SN dari unit yang tersedia -> berhasil & status unit menjadi IN_USE
+    const outAktif = await processStockOut({
+      pic_name: "Teknisi Lapangan",
+      warehouse_officer: "Admin Gudang",
+      notes: "TEST_OUT_AKTIF_VALID",
+      items: [
+        {
+          item_id: itemAktif.id,
+          quantity: 2,
+          serial_numbers: ["SN-TEST-AKTIF-001", "SN-TEST-AKTIF-002"],
+        },
+      ],
+    });
+
+    const stockAktifAfter = await prisma.inventoryStock.findUnique({
+      where: { item_id: itemAktif.id },
+    });
+    assert(
+      stockAktifAfter && Number(stockAktifAfter.available_stock) === 0,
+      `TEST 18.3: Stok barang aktif berkurang 2 unit (stok 2 -> 0).`
+    );
+
+    const unitsAfterOut = await prisma.inventoryItemUnit.findMany({
+      where: { item_id: itemAktif.id },
+    });
+    assert(
+      unitsAfterOut.length === 2 &&
+        unitsAfterOut.every((u) => u.status === "IN_USE" && u.current_pic === "Teknisi Lapangan"),
+      `TEST 18.4: Serial number unit otomatis berubah status menjadi IN_USE dengan current_pic Teknisi Lapangan.`
+    );
+
     // Clean up test records
     await prisma.inventoryMovement.deleteMany({
       where: {
