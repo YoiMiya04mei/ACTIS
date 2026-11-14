@@ -1,0 +1,126 @@
+{
+  "app": "ACTIS",
+  "repository": "YoiMiya04mei/ACTIS",
+  "branch": "main",
+  "releases": [
+    {
+      "version": "1.1.0",
+      "date": "2026-11-14",
+      "title": "System Update Manager (Git/Docker & Manual ZIP) + Update History",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Menu Update & Changelog di bawah Integrasi & Sistem untuk memantau versi aktif dan riwayat perubahan fitur"
+        },
+        {
+          "type": "feat",
+          "text": "Dukungan update langsung dari VPS via git pull & docker compose up -d --build actis-app dengan pencatatan versi dan changelog otomatis saat startup"
+        },
+        {
+          "type": "feat",
+          "text": "Dukungan pasang manual file .zip melalui UI (Offline Release Bundle auto-apply dengan restart otomatis, serta staging Source ZIP untuk rebuild via script VPS)"
+        },
+        {
+          "type": "feat",
+          "text": "Generator paket update offline via perintah npm run release:zip dan script helper scripts/vps-update-git.sh serta scripts/vps-update-zip.sh"
+        },
+        {
+          "type": "security",
+          "text": "Validasi magic bytes ZIP (PK\\x03\\x04), proteksi Zip Slip/path traversal, verifikasi manifest ACTIS, serta batas ukuran dan dekompresi file"
+        }
+      ]
+    },
+    {
+      "version": "1.0.5",
+      "date": "2026-11-14",
+      "commit": "14083e9",
+      "title": "Ergonomic Dimmed Dark Mode & VLAN Management",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Kalibrasi Mode Gelap (Anti-Halation Dimmed Charcoal Slate) agar nyaman dipandang lama dan menjaga pratinjau cetak A4 tetap kertas putih"
+        },
+        {
+          "type": "feat",
+          "text": "Menu VLAN Management di bawah Prefix IP Public untuk memantau status VLAN available dan unavailable per server aktivasi"
+        },
+        {
+          "type": "fix",
+          "text": "Self-host asset dan worker pdfjs-dist agar upload kop surat PDF berjalan tanpa terblokir Content-Security-Policy"
+        }
+      ]
+    },
+    {
+      "version": "1.0.4",
+      "date": "2026-11-14",
+      "commit": "be33c09",
+      "title": "Idle Session Timeout & Penyempurnaan Workflow Inventory",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Idle session timeout otomatis dengan dialog peringatan hitung mundur dan redirect aman ke halaman login"
+        },
+        {
+          "type": "feat",
+          "text": "Menu Barang Dipinjamkan dan tombol Selesai pada Barang Sedang Digunakan untuk alokasi pemakaian client vs pengembalian stok"
+        },
+        {
+          "type": "improve",
+          "text": "Kolom Keterangan Barang pada Barang Sedang Digunakan, kolom Kuantitas pada Riwayat Transaksi, serta petugas gudang otomatis dari sesi login"
+        },
+        {
+          "type": "improve",
+          "text": "Penghapusan tombol + Baru di header serta fitur tambah SN manual pada menu Barang Keluar"
+        }
+      ]
+    },
+    {
+      "version": "1.0.3",
+      "date": "2026-11-14",
+      "commit": "0fb46ce",
+      "title": "Penyederhanaan Master Barang, Audit User & Multi-Key Backup",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Penyederhanaan kategori Master Barang menjadi Aktif dan Pasif, huruf kapital otomatis nama barang, serta kode barang otomatis"
+        },
+        {
+          "type": "feat",
+          "text": "Dukungan penghapusan akun user sambil tetap menjaga seluruh jejak audit dan riwayat tiket historis"
+        },
+        {
+          "type": "fix",
+          "text": "Fallback dekripsi multi-key untuk backup konfigurasi jaringan saat rotasi SESSION_SECRET"
+        }
+      ]
+    },
+    {
+      "version": "1.0.2",
+      "date": "2026-11-13",
+      "commit": "bfc1d0a",
+      "title": "Security Hardening Enterprise Core & TACACS+ AAA",
+      "changes": [
+        {
+          "type": "security",
+          "text": "Hardening RBAC sesi HMAC-SHA256, proteksi CSRF/XSS, validasi magic bytes upload, rate limit login, dan keamanan endpoint operasional"
+        },
+        {
+          "type": "feat",
+          "text": "TACACS+ AAA Server (RFC 8907), Multi-Vendor Network Config Backup dengan penjadwalan & Google Drive Sync, serta DCIM 3D Rack & OTB"
+        }
+      ]
+    },
+    {
+      "version": "1.0.0",
+      "date": "2026-11-11",
+      "commit": "c1f448a",
+      "title": "Rilis Awal ACTIS Dual-DB Enterprise Core",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Sistem aktivasi POP Site, Enterprise, Antrean NOC, IPAM Prefix, ICMP Ping Monitor, Inventory Management, dan Generator Dokumen Resmi"
+        }
+      ]
+    }
+  ]
+}

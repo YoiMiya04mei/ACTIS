@@ -10,6 +10,11 @@ export async function register() {
     ensureTacacsServerStarted().catch((err) => {
       console.error("[TACACS+] Startup bootstrap error:", err);
     });
+
+    const { ensureUpdateHistorySynced } = await import("@/lib/updateService");
+    ensureUpdateHistorySynced().catch((err) => {
+      console.error("[SystemUpdate] Startup sync error:", err);
+    });
   }
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { TopHeader } from "@/components/TopHeader";
@@ -16,6 +17,23 @@ export function AppShell({ children }: AppShellProps) {
   const router = useRouter();
   const { isAuthenticated, isLoading } = useCurrentUser();
   const [isOpenMobile, setIsOpenMobile] = useState(false);
+  const [appVersion, setAppVersion] = useState("1.1.0");
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let active = true;
+    fetch("/api/system/updates", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (active && json?.success && json?.data?.currentVersion) {
+          setAppVersion(json.data.currentVersion);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated && pathname !== "/login") {
@@ -66,7 +84,14 @@ export function AppShell({ children }: AppShellProps) {
         {/* Global Footer */}
         <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs py-4 px-6 text-center mt-auto transition-colors duration-150">
           <p>
-            ACTIS v1.0 &bull; Enterprise ISP Provisioning & NOC Desk &bull; Dual-Backend (Primary SQL + Async Google Sheets Mirror)
+            <Link
+              href="/admin/updates"
+              className="font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+              title="Lihat Status Update & History Perubahan Fitur"
+            >
+              ACTIS v{appVersion}
+            </Link>{" "}
+            &bull; Enterprise ISP Provisioning & NOC Desk &bull; Dual-Backend (Primary SQL + Async Google Sheets Mirror)
           </p>
         </footer>
       </div>

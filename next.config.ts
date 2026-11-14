@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   serverExternalPackages: ["ssh2"],
   experimental: {
+    middlewareClientMaxBodySize: "150mb",
     serverActions: {
       bodySizeLimit: "10mb",
     },

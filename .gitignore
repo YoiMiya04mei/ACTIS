@@ -49,3 +49,9 @@ Thumbs.db
 *.pem
 *.key
 backup_export_*.zip
+
+# Build metadata & local release/update artifacts
+/build-info.json
+/releases/
+/updates/*
+!/updates/.gitkeep

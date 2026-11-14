@@ -64,6 +64,11 @@ RUN node -e ' \
 FROM base AS builder
 WORKDIR /app
 
+ARG ACTIS_GIT_COMMIT=""
+ARG ACTIS_GIT_BRANCH="main"
+ENV ACTIS_GIT_COMMIT=${ACTIS_GIT_COMMIT}
+ENV ACTIS_GIT_BRANCH=${ACTIS_GIT_BRANCH}
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
@@ -90,11 +95,13 @@ ENV DATABASE_URL="file:/app/prisma/dev.db"
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Salin public assets & schema
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/scripts ./scripts
+# Salin public assets, schema, build metadata & scripts (dimiliki nextjs agar mendukung offline bundle update)
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=nextjs:nodejs /app/CHANGELOG.json ./CHANGELOG.json
+COPY --from=builder --chown=nextjs:nodejs /app/build-info.json ./build-info.json
+COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 
 # Salin Next.js Standalone server dan file statis
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
@@ -109,12 +116,12 @@ RUN mkdir -p ./node_modules/.bin && \
 ENV PATH="/opt/prisma/node_modules/.bin:${PATH}"
 
 # Salin entrypoint script
-COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh
+COPY --from=builder --chown=nextjs:nodejs /app/docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
 
-# Pastikan folder penyimpanan data dan upload memiliki hak akses yang benar
-RUN mkdir -p /app/prisma /app/public/uploads /app/data && \
-    chown -R nextjs:nodejs /app/prisma /app/public/uploads /app/data /app/node_modules/.bin && \
+# Pastikan folder penyimpanan data, upload, dan staging update memiliki hak akses yang benar
+RUN mkdir -p /app/prisma /app/public/uploads /app/data /app/updates && \
+    chown -R nextjs:nodejs /app /app/prisma /app/public /app/data /app/updates /app/node_modules/.bin && \
     setcap 'cap_net_bind_service=+ep' /usr/local/bin/node || true
 
 USER nextjs

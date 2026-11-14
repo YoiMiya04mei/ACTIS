@@ -745,5 +745,37 @@ model InventorySetting {
   @@map("inventory_settings")
 }
 
+// ============================================================================
+// SYSTEM UPDATE & FEATURE CHANGELOG HISTORY
+// ============================================================================
+
+model SystemUpdateHistory {
+  id               String   @id @default(uuid())
+  version          String
+  previous_version String?
+  title            String
+  method           String   // "GIT_DOCKER" | "MANUAL_ZIP_BUNDLE" | "MANUAL_ZIP_SOURCE" | "BASELINE" | "MANUAL_NOTE"
+  status           String   @default("APPLIED") // "APPLIED" | "STAGED_FOR_REBUILD" | "APPLYING" | "FAILED"
+  commit_hash      String?
+  branch           String?
+  build_signature  String?
+  file_name        String?
+  file_size_bytes  Int?
+  changelog_items  String   @default("[]") @db.Text
+  notes            String?  @db.Text
+  installed_by     String?
+  installed_by_id  String?
+  error_message    String?  @db.Text
+  applied_at       DateTime @default(now())
+  created_at       DateTime @default(now())
+  updated_at       DateTime @default(now()) @updatedAt
+
+  @@index([version, created_at])
+  @@index([status, created_at])
+  @@index([build_signature])
+  @@index([created_at])
+  @@map("system_update_histories")
+}
+
 
 
