@@ -59,6 +59,7 @@ export function Sidebar({
     pathname.startsWith("/pop-sites") ||
     pathname.startsWith("/enterprise") ||
     pathname.startsWith("/ipam") ||
+    pathname.startsWith("/vlan") ||
     pathname.startsWith("/monitoring") ||
     pathname.startsWith("/dcim");
 
@@ -291,6 +292,28 @@ export function Sidebar({
                         }`}
                       />
                       <span>Prefix IP Public</span>
+                    </div>
+                  </Link>
+
+                  <Link
+                    href="/vlan"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                      pathname.startsWith("/vlan")
+                        ? "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200/80 dark:border-indigo-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="VLAN Management (Available & Unavailable per Server)"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Tags
+                        className={`w-5 h-5 shrink-0 ${
+                          pathname.startsWith("/vlan")
+                            ? "text-indigo-600 dark:text-indigo-400"
+                            : "text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
+                        }`}
+                      />
+                      <span>VLAN Management</span>
                     </div>
                   </Link>
 

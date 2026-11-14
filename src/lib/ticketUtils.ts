@@ -228,7 +228,7 @@ export function generateNocCoordinationText(order: {
 ⚡ *PARAMETER LOCALLOOP*
 • Layanan LocalLoop : ${order.layanan_dedicated || "-"}
 • Kapasitas Layanan : ${order.kapasitas_layanan || "-"}
-• Interkoneksi      : ${order.interkoneksi || "-"}
+• Interkoneksi      : ${order.interkoneksi || "-"}${order.vlan ? `\n• VLAN ID           : ${order.vlan}` : ""}
 • Infrastruktur     : ${order.infrastruktur || "-"}
 • Port Interkoneksi : ${order.port_media || "-"}
 • Media Koneksi     : ${order.media_koneksi || "-"}

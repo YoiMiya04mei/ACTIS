@@ -48,6 +48,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { SearchableSelect } from "@/components/SearchableSelect";
+import { VlanAvailabilityHint } from "@/components/VlanAvailabilityHint";
 import {
   DEDICATED_SERVICE_OPTIONS,
   DEFAULT_SERVER_OPTIONS,
@@ -335,6 +336,7 @@ export default function NewOrderPage() {
   const [alamatInstalasiLocalLoop, setAlamatInstalasiLocalLoop] = useState("");
   const [layananLocalLoop, setLayananLocalLoop] = useState("Metro-E Local Loop");
   const [kapasitasLayanan, setKapasitasLayanan] = useState("100Mbps");
+  const [vlanLocalLoop, setVlanLocalLoop] = useState<string>("");
   const [interkoneksiLocalLoop, setInterkoneksiLocalLoop] = useState("JAKARTA P1");
   const [infrastrukturLocalLoop, setInfrastrukturLocalLoop] = useState<string>("JDP");
   const [portMediaLocalLoop, setPortMediaLocalLoop] = useState("Port GE0/0/1 SFP+");
@@ -553,12 +555,23 @@ export default function NewOrderPage() {
 
         const hasCarrierDetails = isTelkom || isMetronexia;
 
+        let parsedLocalLoopVlan: number | null = null;
+        if (vlanLocalLoop.trim()) {
+          const parsed = Number(vlanLocalLoop.trim());
+          if (!Number.isInteger(parsed) || parsed < 1 || parsed > 4094) {
+            setErrorMessage("VLAN ID LocalLoop harus berupa angka bulat antara 1 - 4094.");
+            return;
+          }
+          parsedLocalLoopVlan = parsed;
+        }
+
         payload = {
           ...payload,
           alamat_instalasi: alamatInstalasiLocalLoop.trim(),
           email_pic: emailPic.trim(),
           layanan_dedicated: layananLocalLoop.trim(),
           kapasitas_layanan: kapasitasLayanan.trim(),
+          vlan: parsedLocalLoopVlan,
           interkoneksi: interkoneksiLocalLoop.trim(),
           server: interkoneksiLocalLoop.trim(),
           infrastruktur: infrastrukturLocalLoop.trim(),
@@ -1107,6 +1120,11 @@ export default function NewOrderPage() {
                     placeholder="1420"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono font-bold text-blue-700"
                   />
+                  <VlanAvailabilityHint
+                    server={server}
+                    vlan={vlan}
+                    onUseSuggestion={(v) => setVlan(String(v))}
+                  />
                 </div>
 
                 <div>
@@ -1624,7 +1642,27 @@ export default function NewOrderPage() {
                   />
                 </div>
 
-                <div className="md:col-span-2">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
+                    VLAN ID (1 - 4094) <span className="text-slate-400 font-normal normal-case">(Opsional)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={4094}
+                    value={vlanLocalLoop}
+                    onChange={(e) => setVlanLocalLoop(e.target.value)}
+                    placeholder="Contoh: 1420"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-mono font-bold text-emerald-700"
+                  />
+                  <VlanAvailabilityHint
+                    server={interkoneksiLocalLoop}
+                    vlan={vlanLocalLoop}
+                    onUseSuggestion={(v) => setVlanLocalLoop(String(v))}
+                  />
+                </div>
+
+                <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
                     SN ONT (Serial Number)
                   </label>
@@ -2370,6 +2408,11 @@ export default function NewOrderPage() {
                     placeholder="2100"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-mono font-bold text-amber-700 focus:ring-2 focus:ring-amber-500 outline-none"
                   />
+                  <VlanAvailabilityHint
+                    server={serverContent}
+                    vlan={vlanContent}
+                    onUseSuggestion={(v) => setVlanContent(String(v))}
+                  />
                 </div>
 
                 <div>
@@ -2495,11 +2538,17 @@ export default function NewOrderPage() {
                   <input
                     type="text"
                     required
+                    list="server-content-list"
                     value={serverContent}
                     onChange={(e) => setServerContent(e.target.value)}
                     placeholder="Contoh: CORE-BGP-JKT-01 (Huawei NE40E)"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-amber-500 outline-none"
                   />
+                  <datalist id="server-content-list">
+                    {serverOptions.map((srv) => (
+                      <option key={srv} value={srv} />
+                    ))}
+                  </datalist>
                 </div>
 
                 <div>
@@ -2693,6 +2742,11 @@ export default function NewOrderPage() {
                     onChange={(e) => setVlanEntDedicated(e.target.value)}
                     placeholder="1420"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono font-bold text-blue-700"
+                  />
+                  <VlanAvailabilityHint
+                    server={serverEntDedicated}
+                    vlan={vlanEntDedicated}
+                    onUseSuggestion={(v) => setVlanEntDedicated(String(v))}
                   />
                 </div>
 

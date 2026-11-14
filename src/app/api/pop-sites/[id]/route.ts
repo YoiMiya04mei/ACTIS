@@ -182,6 +182,15 @@ export async function PATCH(
       }
     }
 
+    if (updatedData.vlan !== undefined && updatedData.vlan !== null) {
+      if (isNaN(updatedData.vlan) || updatedData.vlan < 1 || updatedData.vlan > 4094) {
+        return NextResponse.json(
+          { success: false, error: "VLAN ID harus berupa angka valid antara 1 hingga 4094." },
+          { status: 400 }
+        );
+      }
+    }
+
     if (diffList.length === 0) {
       return NextResponse.json({
         success: true,

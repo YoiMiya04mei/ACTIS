@@ -9,9 +9,11 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { LightboxModal } from "@/components/LightboxModal";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { IcmpMonitorWidget } from "@/components/IcmpMonitorWidget";
+import { VlanAvailabilityHint } from "@/components/VlanAvailabilityHint";
 import {
   generateNocCoordinationText,
   DEDICATED_SERVICE_OPTIONS,
+  DEFAULT_SERVER_OPTIONS,
   getUpgradeOptions,
   getDowngradeOptions,
   parseBandwidthToMbps,
@@ -164,18 +166,6 @@ interface PopSiteDetail {
   data_change_logs?: DataChangeLogItem[];
 }
 
-const DEFAULT_SERVER_OPTIONS = [
-  "JAKARTA P1",
-  "JAKARTA P2",
-  "BANDUNG (BBU)",
-  "CIANJUR (GEKBRONG)",
-  "PELABUHAN RATU",
-  "SUKABUMI",
-  "CIKIDANG",
-  "SURABAYA",
-  "POP MARGA'ASIH (FERIHANZANI)",
-];
-
 const DEFAULT_INFRASTRUCTURE_OPTIONS = [
   "JDP",
   "MITRA (jemput)",
@@ -201,6 +191,7 @@ export default function PopSiteDetailPage({
   const [site, setSite] = useState<PopSiteDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [serverOptions, setServerOptions] = useState<string[]>(DEFAULT_SERVER_OPTIONS);
 
   // History classification tab on the right
   const [historyTab, setHistoryTab] = useState("Semua");
@@ -280,6 +271,39 @@ export default function PopSiteDetailPage({
   useEffect(() => {
     fetchSiteDetail();
   }, [fetchSiteDetail]);
+
+  useEffect(() => {
+    const loadServerOptions = async () => {
+      let merged = [...DEFAULT_SERVER_OPTIONS];
+      try {
+        const saved = localStorage.getItem("actis_server_options");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            merged = Array.from(new Set([...merged, ...parsed.filter((x) => typeof x === "string" && x.trim())]));
+          }
+        }
+      } catch {
+        // ignore localStorage errors
+      }
+      try {
+        const res = await fetch("/api/settings");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && data.data?.server_options) {
+            const parsed = JSON.parse(data.data.server_options);
+            if (Array.isArray(parsed)) {
+              merged = Array.from(new Set([...merged, ...parsed.filter((x) => typeof x === "string" && x.trim())]));
+            }
+          }
+        }
+      } catch {
+        // fallback to defaults
+      }
+      setServerOptions(merged);
+    };
+    loadServerOptions();
+  }, []);
 
   const handleDeleteSite = async () => {
     if (!site) return;
@@ -512,6 +536,14 @@ export default function PopSiteDetailPage({
     if (validContacts.length === 0) {
       setEditError("Minimal cantumkan 1 nomor kontak PIC / WhatsApp.");
       return;
+    }
+
+    if (editForm.vlan.trim()) {
+      const parsedVlan = Number(editForm.vlan.trim());
+      if (!Number.isInteger(parsedVlan) || parsedVlan < 1 || parsedVlan > 4094) {
+        setEditError("VLAN ID harus berupa angka bulat antara 1 - 4094.");
+        return;
+      }
     }
 
     setIsSubmittingEdit(true);
@@ -1601,9 +1633,17 @@ export default function PopSiteDetailPage({
                         </label>
                         <input
                           type="number"
+                          min={1}
+                          max={4094}
                           value={newVlan}
                           onChange={(e) => setNewVlan(e.target.value)}
                           className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-mono font-bold text-blue-700 outline-none"
+                        />
+                        <VlanAvailabilityHint
+                          server={site.server || ""}
+                          vlan={newVlan}
+                          excludeSiteId={site.id}
+                          onUseSuggestion={(v) => setNewVlan(String(v))}
                         />
                       </div>
                     </div>
@@ -1845,10 +1885,18 @@ export default function PopSiteDetailPage({
                     </label>
                     <input
                       type="number"
+                      min={1}
+                      max={4094}
                       value={editForm.vlan}
                       onChange={(e) => setEditForm({ ...editForm, vlan: e.target.value })}
                       placeholder="Contoh: 3005"
                       className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-mono font-bold focus:ring-2 focus:ring-emerald-500 outline-none"
+                    />
+                    <VlanAvailabilityHint
+                      server={editForm.server}
+                      vlan={editForm.vlan}
+                      excludeSiteId={site.id}
+                      onUseSuggestion={(v) => setEditForm((prev) => ({ ...prev, vlan: String(v) }))}
                     />
                   </div>
 
@@ -1903,7 +1951,7 @@ export default function PopSiteDetailPage({
                       className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-emerald-500 outline-none"
                     />
                     <datalist id="server-list">
-                      {DEFAULT_SERVER_OPTIONS.map((item) => (
+                      {serverOptions.map((item) => (
                         <option key={item} value={item} />
                       ))}
                     </datalist>

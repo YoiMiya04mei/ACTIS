@@ -344,6 +344,17 @@ export async function POST(request: NextRequest) {
       finalNomorOrder = String(nomor_order).trim();
     }
 
+    // Validate VLAN ID if provided (1 - 4094)
+    if (vlan !== undefined && vlan !== null && String(vlan).trim() !== "") {
+      const parsedVlanCheck = parseInt(String(vlan), 10);
+      if (isNaN(parsedVlanCheck) || parsedVlanCheck < 1 || parsedVlanCheck > 4094) {
+        return NextResponse.json(
+          { success: false, error: "VLAN ID harus berupa angka valid antara 1 hingga 4094." },
+          { status: 400 }
+        );
+      }
+    }
+
     // Validate optional 3D Rack / OTB reservations before ticket creation
     let finalRackId: string | null = null;
     let finalRackCode: string | null = null;
