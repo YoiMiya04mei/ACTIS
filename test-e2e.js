@@ -650,6 +650,129 @@ async function runTests() {
     assert(checkDeleted === null, "Administrator successfully deletes user account from database");
 
     // ==========================================
+    // 12.1 Test Safe User Deletion with Preserved History (Zero Data Loss Audit Trail)
+    // ==========================================
+    const userToArchive = await prisma.user.create({
+      data: {
+        nama: "Staff Eksperimental (Akan Dihapus)",
+        email: "staff.eksperimen@isp-enterprise.net",
+        role: "field_engineer",
+        password_hash: hashPassword("testingPass123!"),
+      },
+    });
+
+    const historicalOrder = await prisma.popSiteOrder.create({
+      data: {
+        ticket_number: "ACT-20261102-HIST",
+        nama_pic: "Klien Audit Trail",
+        kontak_pic: JSON.stringify(["081299999999"]),
+        alamat_instalasi: "Jl. Audit Trail No. 99",
+        layanan_dedicated: "500Mbps",
+        infrastruktur: "Fiber Optic",
+        media_koneksi: "Direct Fiber ISP",
+        status: "In Progress",
+        created_by: userToArchive.id,
+      },
+    });
+
+    const historicalLog = await prisma.orderProgressLog.create({
+      data: {
+        order_id: historicalOrder.id,
+        user_id: userToArchive.id,
+        action_type: "Progress Note",
+        catatan_progress: "Instalasi kabel drop core selesai di site klien.",
+      },
+    });
+
+    const historicalTest = await prisma.testResult.create({
+      data: {
+        order_id: historicalOrder.id,
+        file_url: "https://example.com/test-audit.pdf",
+        file_name: "test-audit.pdf",
+        file_type: "application/pdf",
+        uploaded_by: userToArchive.id,
+      },
+    });
+
+    // Execute safe archiving and deletion logic as implemented in DELETE /api/users/[id]
+    const ARCHIVE_EMAIL = "system.archived@actis.internal";
+    const ARCHIVE_ID = "usr-system-archived";
+    const archiveUser = await prisma.user.upsert({
+      where: { email: ARCHIVE_EMAIL },
+      update: {},
+      create: {
+        id: ARCHIVE_ID,
+        email: ARCHIVE_EMAIL,
+        nama: "Arsip Sistem (Akun Nonaktif)",
+        role: "noc_engineer",
+        password_hash: null,
+      },
+    });
+
+    // Update order with author annotation and re-assign created_by
+    const ordNote = `[Pembuat Tiket Awal: ${userToArchive.nama} (${userToArchive.email})]`;
+    await prisma.popSiteOrder.update({
+      where: { id: historicalOrder.id },
+      data: {
+        catatan_tambahan: ordNote,
+        created_by: archiveUser.id,
+      },
+    });
+
+    // Update log with author prefix and re-assign user_id
+    await prisma.orderProgressLog.update({
+      where: { id: historicalLog.id },
+      data: {
+        catatan_progress: `[${userToArchive.nama}] ${historicalLog.catatan_progress}`,
+        user_id: archiveUser.id,
+      },
+    });
+
+    // Re-assign test result uploaded_by
+    await prisma.testResult.updateMany({
+      where: { uploaded_by: userToArchive.id },
+      data: { uploaded_by: archiveUser.id },
+    });
+
+    // Now delete target user from users table
+    await prisma.user.delete({ where: { id: userToArchive.id } });
+
+    // Assert user account is truly deleted
+    const deletedUserCheck = await prisma.user.findUnique({ where: { id: userToArchive.id } });
+    assert(deletedUserCheck === null, "User account is successfully removed from database");
+
+    // Assert historical order still exists and is intact
+    const preservedOrder = await prisma.popSiteOrder.findUnique({
+      where: { id: historicalOrder.id },
+      include: { creator: true },
+    });
+    assert(!!preservedOrder, "Historical order is fully preserved (not deleted)");
+    assert(preservedOrder.created_by === archiveUser.id, "Historical order foreign key re-assigned to system archive user");
+    assert(preservedOrder.catatan_tambahan.includes("Staff Eksperimental"), "Original ticket author identity preserved in notes");
+
+    // Assert historical progress log still exists and is intact
+    const preservedLog = await prisma.orderProgressLog.findUnique({
+      where: { id: historicalLog.id },
+      include: { user: true },
+    });
+    assert(!!preservedLog, "Historical progress log is fully preserved (not deleted)");
+    assert(preservedLog.user_id === archiveUser.id, "Historical log foreign key re-assigned to system archive user");
+    assert(preservedLog.catatan_progress.includes("Staff Eksperimental"), "Original log author identity preserved in log content");
+
+    // Assert test result still exists and is intact
+    const preservedTest = await prisma.testResult.findUnique({
+      where: { id: historicalTest.id },
+      include: { uploader: true },
+    });
+    assert(!!preservedTest, "Historical test result is fully preserved (not deleted)");
+    assert(preservedTest.uploaded_by === archiveUser.id, "Historical test result foreign key re-assigned to system archive user");
+
+    // Cleanup test historical order and sub-records
+    await prisma.testResult.deleteMany({ where: { order_id: historicalOrder.id } });
+    await prisma.orderProgressLog.deleteMany({ where: { order_id: historicalOrder.id } });
+    await prisma.popSiteOrder.delete({ where: { id: historicalOrder.id } });
+
+    // ==========================================
     // 13. Dedicated Service Options Format & Search Tests
     // ==========================================
     const dedicatedOptions = (() => {

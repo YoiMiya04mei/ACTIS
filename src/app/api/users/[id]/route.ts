@@ -28,6 +28,13 @@ export async function PUT(
       );
     }
 
+    if (existingUser.email === "system.archived@actis.internal" || existingUser.id === "usr-system-archived") {
+      return NextResponse.json(
+        { success: false, error: "Akun arsip sistem dilindungi dan tidak dapat diubah." },
+        { status: 400 }
+      );
+    }
+
     if (!nama || !email) {
       return NextResponse.json(
         { success: false, error: "Nama dan email wajib diisi." },
@@ -151,20 +158,118 @@ export async function DELETE(
       );
     }
 
-    const orderCount = await prisma.popSiteOrder.count({ where: { created_by: id } });
-    const logCount = await prisma.orderProgressLog.count({ where: { user_id: id } });
-    const testCount = await prisma.testResult.count({ where: { uploaded_by: id } });
-
-    if (orderCount > 0 || logCount > 0 || testCount > 0) {
+    // Protect system archived account from deletion
+    if (targetUser.email === "system.archived@actis.internal" || targetUser.id === "usr-system-archived") {
       return NextResponse.json(
         {
           success: false,
-          error: `Pengguna '${targetUser.nama}' tidak dapat dihapus karena memiliki riwayat tiket/aktivitas (${orderCount} tiket, ${logCount} log aktivitas) untuk menjaga audit trail.`,
+          error: "Akun arsip sistem dilindungi dan tidak dapat dihapus untuk menjaga integritas data.",
         },
         { status: 400 }
       );
     }
 
+    const orderCount = await prisma.popSiteOrder.count({ where: { created_by: id } });
+    const logCount = await prisma.orderProgressLog.count({ where: { user_id: id } });
+    const testCount = await prisma.testResult.count({ where: { uploaded_by: id } });
+    const changeLogCount = await prisma.siteDataChangeLog.count({ where: { user_id: id } });
+
+    const totalHistory = orderCount + logCount + testCount + changeLogCount;
+
+    // Jika pengguna memiliki riwayat tiket, log, atau uji coba:
+    // Alihkan relasi ke akun Arsip Sistem agar data riwayat/history tetap utuh (Zero Data Loss)
+    if (totalHistory > 0) {
+      const ARCHIVE_EMAIL = "system.archived@actis.internal";
+      const ARCHIVE_ID = "usr-system-archived";
+
+      const archiveUser = await prisma.user.upsert({
+        where: { email: ARCHIVE_EMAIL },
+        update: {},
+        create: {
+          id: ARCHIVE_ID,
+          email: ARCHIVE_EMAIL,
+          nama: "Arsip Sistem (Akun Nonaktif)",
+          role: "noc_engineer",
+          password_hash: null, // Akun arsip tidak memiliki password dan tidak dapat login
+        },
+      });
+
+      // 1. Catat pembuat awal tiket pada catatan_tambahan dan relokasi created_by
+      if (orderCount > 0) {
+        const userOrders = await prisma.popSiteOrder.findMany({
+          where: { created_by: id },
+          select: { id: true, catatan_tambahan: true },
+        });
+
+        for (const ord of userOrders) {
+          const authorNote = `[Pembuat Tiket Awal: ${targetUser.nama} (${targetUser.email})]`;
+          const updatedCatatan = ord.catatan_tambahan
+            ? `${ord.catatan_tambahan}\n${authorNote}`
+            : authorNote;
+          await prisma.popSiteOrder.update({
+            where: { id: ord.id },
+            data: {
+              catatan_tambahan: updatedCatatan,
+              created_by: archiveUser.id,
+            },
+          });
+        }
+      }
+
+      // 2. Cantumkan nama pembuat log pada catatan_progress dan relokasi user_id
+      if (logCount > 0) {
+        const userLogs = await prisma.orderProgressLog.findMany({
+          where: { user_id: id },
+          select: { id: true, catatan_progress: true },
+        });
+
+        for (const log of userLogs) {
+          const authorPrefix = `[${targetUser.nama}] `;
+          const updatedCatatan = log.catatan_progress.startsWith(authorPrefix)
+            ? log.catatan_progress
+            : `${authorPrefix}${log.catatan_progress}`;
+          await prisma.orderProgressLog.update({
+            where: { id: log.id },
+            data: {
+              catatan_progress: updatedCatatan,
+              user_id: archiveUser.id,
+            },
+          });
+        }
+      }
+
+      // 3. Relokasi testResult uploaded_by ke akun arsip
+      if (testCount > 0) {
+        await prisma.testResult.updateMany({
+          where: { uploaded_by: id },
+          data: { uploaded_by: archiveUser.id },
+        });
+      }
+
+      // 4. Catat author pada siteDataChangeLog dan relokasi user_id
+      if (changeLogCount > 0) {
+        const changeLogs = await prisma.siteDataChangeLog.findMany({
+          where: { user_id: id },
+          select: { id: true, catatan: true },
+        });
+
+        for (const cl of changeLogs) {
+          const authorNote = `[Oleh: ${targetUser.nama}]`;
+          const updatedCatatan = cl.catatan
+            ? `${cl.catatan}\n${authorNote}`
+            : authorNote;
+          await prisma.siteDataChangeLog.update({
+            where: { id: cl.id },
+            data: {
+              catatan: updatedCatatan,
+              user_id: archiveUser.id,
+            },
+          });
+        }
+      }
+    }
+
+    // Hapus akun pengguna target secara permanen dari tabel users
     await prisma.user.delete({
       where: { id },
     });
@@ -177,13 +282,15 @@ export async function DELETE(
       ip_address: clientIp,
       tipe: "DELETE_USER",
       aktifitas: `Menghapus akun pengguna: ${targetUser.nama} (${targetUser.email})`,
-      detail: `Role sebelumnya: ${targetUser.role}`,
+      detail: totalHistory > 0
+        ? `Role: ${targetUser.role}. Riwayat dialihkan ke Arsip Sistem (${orderCount} tiket, ${logCount} log aktivitas, ${testCount} hasil tes).`
+        : `Role: ${targetUser.role}. Tidak memiliki riwayat tiket/aktivitas.`,
       user_agent: userAgent,
     }).catch(() => {});
 
     return NextResponse.json({
       success: true,
-      message: `Pengguna '${targetUser.nama}' (${targetUser.email}) berhasil dihapus.`,
+      message: `Pengguna '${targetUser.nama}' (${targetUser.email}) berhasil dihapus. Seluruh riwayat sistem tetap tersimpan aman.`,
     });
   } catch (err: any) {
     console.error("DELETE /api/users/[id] error:", err);

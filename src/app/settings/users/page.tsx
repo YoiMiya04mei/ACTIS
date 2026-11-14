@@ -1406,8 +1406,8 @@ export default function UserSettingsPage() {
             <h3 className="text-base font-bold text-slate-900">
               Hapus Pengguna?
             </h3>
-            <p className="text-xs text-slate-500 mt-1">
-              Apakah Anda yakin ingin menghapus akun <strong>{deleteTarget.nama}</strong> ({deleteTarget.email})? Tindakan ini tidak dapat dibatalkan.
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              Apakah Anda yakin ingin menghapus akun <strong>{deleteTarget.nama}</strong> ({deleteTarget.email})? Akses login akun ini akan dicabut permanen, dan seluruh data riwayat tiket serta log aktivitas akan tetap tersimpan aman di sistem.
             </p>
 
             {deleteError && (

@@ -12,6 +12,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const users = await prisma.user.findMany({
+      where: {
+        email: { not: "system.archived@actis.internal" },
+      },
       orderBy: { nama: "asc" },
       select: {
         id: true,
@@ -57,6 +60,12 @@ export async function POST(request: NextRequest) {
     }
 
     const cleanEmail = String(email).trim().toLowerCase();
+    if (cleanEmail === "system.archived@actis.internal") {
+      return NextResponse.json(
+        { success: false, error: "Email ini dicadangkan untuk keperluan arsip sistem internal." },
+        { status: 400 }
+      );
+    }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(cleanEmail)) {
       return NextResponse.json(
