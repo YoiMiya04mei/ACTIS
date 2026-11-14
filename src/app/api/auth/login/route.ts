@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
   } catch (err: any) {
     console.error("POST /api/auth/login error:", err);
     return NextResponse.json(
-      { success: false, error: "Gagal melakukan proses autentikasi." },
+      { success: false, error: err?.message || "Gagal melakukan proses autentikasi." },
       { status: 500 }
     );
   }
