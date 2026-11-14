@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useCurrentUser } from "@/context/UserContext";
 import {
@@ -14,6 +14,7 @@ import {
   User,
   CheckCircle2,
   AlertCircle,
+  Clock,
 } from "lucide-react";
 
 export default function LoginPage() {
@@ -26,6 +27,18 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [isTimeout, setIsTimeout] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedReason = sessionStorage.getItem("actis_logout_reason");
+      const urlParams = new URLSearchParams(window.location.search);
+      if (storedReason === "timeout" || urlParams.get("reason") === "timeout") {
+        setIsTimeout(true);
+        sessionStorage.removeItem("actis_logout_reason");
+      }
+    }
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -80,6 +93,18 @@ export default function LoginPage() {
               Masukkan kredensial akun ISP untuk mengakses antrean dan operasional.
             </p>
           </div>
+
+          {isTimeout && !error && !success && (
+            <div className="mb-5 p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-start space-x-2.5 animate-fadeIn">
+              <Clock className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+              <div>
+                <p className="font-bold">Sesi Anda Telah Berakhir</p>
+                <p className="mt-0.5 text-[11px] text-amber-700 leading-relaxed">
+                  Anda telah lama meninggalkan web atau tidak ada aktivitas yang terdeteksi. Demi keamanan akun ISP, silakan masuk kembali.
+                </p>
+              </div>
+            </div>
+          )}
 
           {error && (
             <div className="mb-5 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start space-x-2.5 animate-fadeIn">

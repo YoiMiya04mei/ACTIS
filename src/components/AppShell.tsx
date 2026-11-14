@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/Sidebar";
 import { TopHeader } from "@/components/TopHeader";
+import { IdleSessionManager } from "@/components/IdleSessionManager";
 import { useCurrentUser } from "@/context/UserContext";
 
 interface AppShellProps {
@@ -18,7 +19,12 @@ export function AppShell({ children }: AppShellProps) {
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated && pathname !== "/login") {
-      router.push("/login");
+      const reason = typeof window !== "undefined" ? sessionStorage.getItem("actis_logout_reason") : null;
+      if (reason === "timeout") {
+        router.push("/login?reason=timeout");
+      } else {
+        router.push("/login");
+      }
     }
   }, [isLoading, isAuthenticated, pathname, router]);
 
@@ -38,6 +44,9 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="min-h-screen w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col md:flex-row transition-colors duration-150">
+      {/* Automatic Inactivity / Idle Session Logout Watcher */}
+      <IdleSessionManager />
+
       {/* Vertical Left Sidebar */}
       <Sidebar
         isOpenMobile={isOpenMobile}

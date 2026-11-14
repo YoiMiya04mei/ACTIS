@@ -26,6 +26,7 @@ import {
   Plus,
   Network,
   Radio,
+  Clock,
 } from "lucide-react";
 import {
   DEFAULT_SERVER_OPTIONS,
@@ -367,6 +368,63 @@ export default function UserSettingsPage() {
       }
     } catch (err: any) {
       setServerError(err.message || "Gagal menghapus server.");
+    }
+  };
+
+  // Session Idle Timeout Settings (Admin Only)
+  const [idleTimeoutMinutes, setIdleTimeoutMinutes] = useState<string>("15");
+  const [timeoutLoading, setTimeoutLoading] = useState(false);
+  const [timeoutSuccess, setTimeoutSuccess] = useState<string | null>(null);
+  const [timeoutError, setTimeoutError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadSessionSettings = async () => {
+      try {
+        const saved = localStorage.getItem("actis_session_idle_timeout");
+        if (saved) setIdleTimeoutMinutes(saved);
+
+        const res = await fetch("/api/settings");
+        const json = await res.json();
+        if (json.success && json.data?.session_idle_timeout_minutes !== undefined) {
+          setIdleTimeoutMinutes(String(json.data.session_idle_timeout_minutes));
+          localStorage.setItem("actis_session_idle_timeout", String(json.data.session_idle_timeout_minutes));
+        }
+      } catch (err) {
+        console.error("Failed to load session timeout setting", err);
+      }
+    };
+    loadSessionSettings();
+  }, []);
+
+  const handleSaveIdleTimeout = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTimeoutLoading(true);
+    setTimeoutError(null);
+    setTimeoutSuccess(null);
+
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: "session_idle_timeout_minutes",
+          value: idleTimeoutMinutes,
+          actorRole: currentUser?.role,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setTimeoutError(data.error || "Gagal menyimpan batas waktu sesi.");
+      } else {
+        localStorage.setItem("actis_session_idle_timeout", idleTimeoutMinutes);
+        window.dispatchEvent(new Event("actis_session_timeout_updated"));
+        setTimeoutSuccess("Pengaturan batas waktu sesi tidak aktif berhasil diperbarui!");
+        setTimeout(() => setTimeoutSuccess(null), 3000);
+      }
+    } catch (err: any) {
+      setTimeoutError(err.message || "Gagal menyimpan batas waktu sesi.");
+    } finally {
+      setTimeoutLoading(false);
     }
   };
 
@@ -987,6 +1045,69 @@ export default function UserSettingsPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Session Inactivity Timeout Management Section (Admin Only) */}
+          <div className="p-4 sm:p-5 border-t border-slate-100 bg-amber-50/20">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+              <div>
+                <h4 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
+                  <Clock className="w-4 h-4 text-amber-600" />
+                  <span>Batas Waktu Ketidakaktifan Sesi (Auto-Logout)</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                    {idleTimeoutMinutes === "0" ? "Dinonaktifkan" : `${idleTimeoutMinutes} Menit`}
+                  </span>
+                </h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Secara otomatis mengeluarkan akun (logout) jika pengguna meninggalkan web atau tidak ada aktivitas (mouse, keyboard, scroll) dalam jangka waktu tertentu demi keamanan.
+                </p>
+              </div>
+
+              {/* Select timeout form */}
+              <form onSubmit={handleSaveIdleTimeout} className="flex items-center space-x-2 w-full sm:w-auto">
+                <select
+                  value={idleTimeoutMinutes}
+                  onChange={(e) => setIdleTimeoutMinutes(e.target.value)}
+                  className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-amber-500 transition flex-1 sm:w-64"
+                >
+                  <option value="5">5 Menit (Sangat Ketat)</option>
+                  <option value="10">10 Menit (Ketat)</option>
+                  <option value="15">15 Menit (Rekomendasi Standar)</option>
+                  <option value="30">30 Menit</option>
+                  <option value="60">60 Menit (1 Jam)</option>
+                  <option value="120">120 Menit (2 Jam)</option>
+                  <option value="0">Nonaktifkan (Tidak Pernah Logout Otomatis)</option>
+                </select>
+                <button
+                  type="submit"
+                  disabled={timeoutLoading}
+                  className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition shadow-xs flex items-center space-x-1 shrink-0 cursor-pointer disabled:opacity-50"
+                >
+                  {timeoutLoading ? (
+                    <span>Menyimpan...</span>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Simpan</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+
+            {timeoutError && (
+              <div className="mb-3 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{timeoutError}</span>
+              </div>
+            )}
+
+            {timeoutSuccess && (
+              <div className="mb-3 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center space-x-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{timeoutSuccess}</span>
+              </div>
+            )}
           </div>
         </div>
       ) : (
