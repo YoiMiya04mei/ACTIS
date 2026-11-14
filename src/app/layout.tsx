@@ -37,7 +37,11 @@ export default function RootLayout({
               (function() {
                 try {
                   var stored = localStorage.getItem('actis-theme');
-                  var isDark = stored === 'dark' || (!stored && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                  var meta = document.querySelector('meta[name="color-scheme"]');
+                  if (meta) {
+                    meta.setAttribute('content', (stored === 'light' || stored === 'dark') ? stored : 'light dark');
+                  }
+                  var isDark = stored === 'dark' || (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
                   if (isDark) {
                     document.documentElement.classList.add('dark');
                     document.documentElement.style.colorScheme = 'dark';

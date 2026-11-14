@@ -164,10 +164,6 @@ function IpamModernUsageGraph({
                   <stop offset="0%" stopColor="#10b981" />
                   <stop offset="100%" stopColor="#06b6d4" />
                 </linearGradient>
-                <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="3" result="blur" />
-                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                </filter>
               </defs>
 
               {/* Background Ring (Free Host) */}
@@ -191,7 +187,6 @@ function IpamModernUsageGraph({
                 strokeDashoffset={0}
                 strokeLinecap="round"
                 fill="transparent"
-                filter={usedIps > 0 ? "url(#softGlow)" : undefined}
                 className="transition-all duration-1000 ease-out"
               />
             </svg>
@@ -370,14 +365,14 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8 pb-12">
       {/* Top Welcome & Summary Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 text-white p-6 md:p-8 shadow-lg border border-slate-800">
-        <div className="absolute right-0 top-0 -mt-10 -mr-10 w-72 h-72 rounded-full bg-blue-500/10 blur-3xl pointer-events-none" />
-        <div className="absolute left-1/3 bottom-0 -mb-10 w-64 h-64 rounded-full bg-indigo-500/10 blur-3xl pointer-events-none" />
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 dark:from-[#162032] dark:via-[#192640] dark:to-[#1d2842] text-white p-6 md:p-8 shadow-lg border border-slate-800 dark:border-slate-700/70">
+        <div className="absolute right-0 top-0 -mt-10 -mr-10 w-72 h-72 rounded-full bg-blue-500/5 blur-3xl pointer-events-none" />
+        <div className="absolute left-1/3 bottom-0 -mb-10 w-64 h-64 rounded-full bg-indigo-500/5 blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 border border-blue-400/30 text-xs font-semibold text-blue-200">
-              <Sparkles className="w-3.5 h-3.5 text-blue-300 animate-pulse" />
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/15 border border-blue-400/25 text-xs font-semibold text-blue-200">
+              <Sparkles className="w-3.5 h-3.5 text-blue-300" />
               <span>NOC Unified Control Center • ACTIS</span>
             </div>
             <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">

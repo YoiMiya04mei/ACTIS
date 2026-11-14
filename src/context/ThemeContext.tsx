@@ -7,6 +7,7 @@ export type Theme = "light" | "dark" | "system";
 interface ThemeContextType {
   theme: Theme;
   resolvedTheme: "light" | "dark";
+  systemPreference: "light" | "dark";
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
 }
@@ -40,8 +41,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setThemeState(stored);
     }
 
+    // Sinkronkan preferensi tema antar tab secara real-time
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key !== THEME_STORAGE_KEY) return;
+      if (e.newValue === "light" || e.newValue === "dark" || e.newValue === "system") {
+        setThemeState(e.newValue);
+      } else if (e.newValue === null) {
+        setThemeState("system");
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+
     return () => {
       mediaQuery.removeEventListener("change", handleSystemChange);
+      window.removeEventListener("storage", handleStorageChange);
     };
   }, []);
 
@@ -93,7 +106,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, resolvedTheme, setTheme, toggleTheme }}>
+    <ThemeContext.Provider value={{ theme, resolvedTheme, systemPreference, setTheme, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   );

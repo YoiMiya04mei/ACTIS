@@ -10,7 +10,7 @@ interface ThemeToggleProps {
 }
 
 export function ThemeToggle({ variant = "dropdown", className = "" }: ThemeToggleProps) {
-  const { theme, resolvedTheme, setTheme, toggleTheme } = useTheme();
+  const { theme, resolvedTheme, systemPreference, setTheme, toggleTheme } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -69,7 +69,7 @@ export function ThemeToggle({ variant = "dropdown", className = "" }: ThemeToggl
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute right-0 top-full mt-1.5 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl py-1.5 z-50 animate-fadeIn text-xs">
+        <div className="absolute right-0 top-full mt-1.5 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl shadow-xl py-1.5 z-50 animate-fadeIn text-xs">
           {[
             {
               id: "light" as Theme,
@@ -83,7 +83,7 @@ export function ThemeToggle({ variant = "dropdown", className = "" }: ThemeToggl
             },
             {
               id: "system" as Theme,
-              label: "Ikuti Sistem",
+              label: `Ikuti Sistem (${systemPreference === "dark" ? "Gelap" : "Terang"})`,
               icon: <Laptop className="w-3.5 h-3.5 text-slate-400" />,
             },
           ].map((item) => {

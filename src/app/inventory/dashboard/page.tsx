@@ -289,7 +289,7 @@ export default function InventoryDashboardPage() {
             <AlertTriangle
               className={`w-4 h-4 ${
                 summary.low_stock_count > 0
-                  ? "text-rose-600 animate-bounce"
+                  ? "text-rose-600 dark:text-rose-400"
                   : "text-slate-400"
               }`}
             />
@@ -431,7 +431,7 @@ export default function InventoryDashboardPage() {
         <div className="bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/60 rounded-2xl p-5 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2.5">
-              <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 animate-pulse" />
+              <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
               <div>
                 <h2 className="text-sm font-bold text-rose-900 dark:text-rose-200">
                   Peringatan Stok Minimum ({data.low_stock_items.length} Barang)

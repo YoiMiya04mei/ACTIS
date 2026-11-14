@@ -18,7 +18,7 @@ export function StatusBadge({ status, className = "", size = "md" }: StatusBadge
       break;
     case "In Progress":
       badgeStyle = "bg-blue-50 dark:bg-blue-950/70 text-blue-800 dark:text-blue-300 border-blue-300 dark:border-blue-800";
-      icon = <PlayCircle className="w-3.5 h-3.5 mr-1 text-blue-600 dark:text-blue-400 animate-pulse" />;
+      icon = <PlayCircle className="w-3.5 h-3.5 mr-1 text-blue-600 dark:text-blue-400" />;
       break;
     case "Pending Issue":
       badgeStyle = "bg-rose-50 dark:bg-rose-950/70 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-800";
