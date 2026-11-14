@@ -587,6 +587,125 @@ async function runInventoryTests() {
     // Clean up temporary test items
     await prisma.inventoryItem.delete({ where: { id: testItemSeq1.id } });
 
+    // =========================================================================
+    // TEST 16: Barang Masuk (Stock In) - Kategori Pasif (Tanpa SN)
+    // =========================================================================
+    const catPasif = await prisma.inventoryCategory.upsert({
+      where: { name: "Pasif" },
+      update: {},
+      create: { name: "Pasif", description: "Perangkat / Material Pasif" },
+    });
+
+    const itemPasif = await prisma.inventoryItem.create({
+      data: {
+        code: "TEST-PASIF-001",
+        name: "TEST KABEL PATCH CORD SC-UPC",
+        category_id: catPasif.id,
+        type: "CONSUMABLE",
+        unit: "Pcs",
+      },
+    });
+
+    const stockInPasif = await processStockIn({
+      warehouse_officer: "Petugas Sesi Login",
+      notes: "TEST_STOCK_IN_PASIF",
+      items: [
+        {
+          item_id: itemPasif.id,
+          quantity: 10,
+          // Pasif: input serial numbers diabaikan/dikosongkan otomatis
+          serial_numbers: ["ACCIDENTAL-SN-001"],
+        },
+      ],
+    });
+
+    const stockPasif = await prisma.inventoryStock.findUnique({
+      where: { item_id: itemPasif.id },
+    });
+    assert(
+      stockPasif && Number(stockPasif.available_stock) === 10,
+      `TEST 16.1: Stok barang pasif bertambah 10 unit tanpa mewajibkan SN.`
+    );
+
+    const unitsPasif = await prisma.inventoryItemUnit.count({
+      where: { item_id: itemPasif.id },
+    });
+    assert(
+      unitsPasif === 0,
+      `TEST 16.2: Barang pasif tidak membuat unit individual di InventoryItemUnit (units: ${unitsPasif}).`
+    );
+
+    // =========================================================================
+    // TEST 17: Barang Masuk (Stock In) - Kategori Aktif (Wajib SN & Masuk Stok Unit)
+    // =========================================================================
+    const itemAktif = await prisma.inventoryItem.create({
+      data: {
+        code: "TEST-AKTIF-001",
+        name: "TEST SWITCH MIKROTIK CRS326",
+        category_id: catAktif.id,
+        type: "REUSABLE",
+        unit: "Unit",
+      },
+    });
+
+    // 17.1: Validasi error jika jumlah SN tidak cocok dengan kuantitas
+    let snMismatchError = false;
+    try {
+      await processStockIn({
+        warehouse_officer: "Petugas Sesi Login",
+        notes: "TEST_MISMATCH_SN",
+        items: [
+          {
+            item_id: itemAktif.id,
+            quantity: 2,
+            serial_numbers: ["SN-TEST-AKTIF-001"], // Hanya 1 SN padahal kuantitas 2
+          },
+        ],
+      });
+    } catch (e) {
+      snMismatchError = true;
+    }
+    assert(snMismatchError, "TEST 17.1: Barang aktif kuantitas 2 wajib 2 SN, gagal jika hanya diberi 1 SN.");
+
+    // 17.2: Berhasil jika SN sesuai kuantitas & otomatis masuk InventoryItemUnit (AVAILABLE)
+    const stockInAktif = await processStockIn({
+      warehouse_officer: "Petugas Sesi Login",
+      notes: "TEST_STOCK_IN_AKTIF",
+      items: [
+        {
+          item_id: itemAktif.id,
+          quantity: 2,
+          serial_numbers: ["SN-TEST-AKTIF-001", "SN-TEST-AKTIF-002"],
+        },
+      ],
+    });
+
+    const stockAktif = await prisma.inventoryStock.findUnique({
+      where: { item_id: itemAktif.id },
+    });
+    assert(
+      stockAktif && Number(stockAktif.available_stock) === 2,
+      `TEST 17.2: Stok barang aktif bertambah menjadi 2 unit.`
+    );
+
+    const unitsAktif = await prisma.inventoryItemUnit.findMany({
+      where: { item_id: itemAktif.id },
+    });
+    assert(
+      unitsAktif.length === 2 &&
+        unitsAktif.every((u) => u.status === "AVAILABLE" && u.condition === "BAIK"),
+      `TEST 17.3: Serial number otomatis terdaftar di InventoryItemUnit dengan status AVAILABLE dan kondisi BAIK.`
+    );
+
+    // 17.4: Transaksi tersimpan dengan Petugas dari sesi login
+    const txAktif = await prisma.inventoryTransaction.findUnique({
+      where: { id: stockInAktif.id },
+    });
+    assert(
+      txAktif && txAktif.warehouse_officer === "Petugas Sesi Login",
+      `TEST 17.4: Petugas penerima gudang otomatis tersimpan dari sesi login: ${txAktif?.warehouse_officer}`
+    );
+
     // Clean up test records
     await prisma.inventoryMovement.deleteMany({
       where: {

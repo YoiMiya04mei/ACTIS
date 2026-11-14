@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const transaction = await processStockIn({
       transaction_date: body.transaction_date,
-      warehouse_officer: body.warehouse_officer || auth.user.nama,
+      warehouse_officer: auth.user.nama || body.warehouse_officer || "Petugas Gudang",
       notes: body.notes,
       permit_id: body.permit_id,
       permit_number: body.permit_number,

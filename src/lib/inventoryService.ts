@@ -128,7 +128,7 @@ export interface StockInPayload {
   permit_number?: string;
   items: StockInItemInput[];
   created_by?: string;
-  user_name: string;
+  user_name?: string;
 }
 
 /**
@@ -157,6 +157,8 @@ export async function processStockIn(payload: StockInPayload) {
       },
     });
 
+    const allTxSerialNumbers = new Set<string>();
+
     for (const itemInput of payload.items) {
       const qtyNum = new Prisma.Decimal(itemInput.quantity);
       if (qtyNum.lessThanOrEqualTo(0)) {
@@ -165,11 +167,51 @@ export async function processStockIn(payload: StockInPayload) {
 
       const item = await tx.inventoryItem.findUnique({
         where: { id: itemInput.item_id },
-        include: { stock: true },
+        include: { stock: true, category: true },
       });
 
       if (!item) {
         throw new Error(`Barang dengan ID ${itemInput.item_id} tidak ditemukan.`);
+      }
+
+      const isAktif = item.category?.name?.toLowerCase() === "aktif";
+      const isPasif = item.category?.name?.toLowerCase() === "pasif";
+
+      // 1. Validasi bisnis kategori Pasif: tidak bisa/tidak perlu serial number
+      if (isPasif) {
+        itemInput.serial_numbers = [];
+      }
+
+      // 2. Validasi bisnis kategori Aktif: serial number wajib diisi tepat sesuai kuantitas
+      if (isAktif) {
+        const rawSns = itemInput.serial_numbers || [];
+        const cleanSns = rawSns.map((s) => s.trim()).filter(Boolean);
+        const expectedCount = Number(qtyNum);
+
+        if (cleanSns.length !== expectedCount) {
+          throw new Error(
+            `Barang aktif '${item.name}' kuantitas ${expectedCount} wajib menyertakan ${expectedCount} Serial Number (terisi: ${cleanSns.length}).`
+          );
+        }
+
+        const snSet = new Set(cleanSns);
+        if (snSet.size !== cleanSns.length) {
+          throw new Error(
+            `Terdapat Serial Number duplikat pada input barang aktif '${item.name}'. Setiap unit wajib memiliki SN unik.`
+          );
+        }
+
+        // Cek duplikasi antar baris dalam transaksi yang sama
+        for (const sn of cleanSns) {
+          if (allTxSerialNumbers.has(sn)) {
+            throw new Error(
+              `Serial Number '${sn}' dimasukkan lebih dari satu kali dalam transaksi barang masuk ini.`
+            );
+          }
+          allTxSerialNumbers.add(sn);
+        }
+
+        itemInput.serial_numbers = cleanSns;
       }
 
       // Ensure stock record exists
@@ -212,11 +254,26 @@ export async function processStockIn(payload: StockInPayload) {
         },
       });
 
-      // If serial numbers provided for reusable units, create or activate them
-      if (item.type === "REUSABLE" && itemInput.serial_numbers?.length) {
+      // 3. Masukkan serial number otomatis ke stock inventory (inventoryItemUnit)
+      if (itemInput.serial_numbers && itemInput.serial_numbers.length > 0) {
         for (const sn of itemInput.serial_numbers) {
           const trimmedSn = sn.trim();
           if (!trimmedSn) continue;
+
+          const existingUnit = await tx.inventoryItemUnit.findUnique({
+            where: { serial_number: trimmedSn },
+          });
+
+          if (existingUnit && existingUnit.status === "AVAILABLE") {
+            throw new Error(
+              `Serial Number '${trimmedSn}' sudah terdaftar dan saat ini berstatus TERSEDIA di stok gudang.`
+            );
+          }
+          if (existingUnit && existingUnit.status === "IN_USE") {
+            throw new Error(
+              `Serial Number '${trimmedSn}' sedang berstatus DIGUNAKAN (${existingUnit.current_pic || "teknisi"}). Harap gunakan alur Pengembalian Barang terlebih dahulu.`
+            );
+          }
 
           await tx.inventoryItemUnit.upsert({
             where: { serial_number: trimmedSn },
@@ -225,13 +282,14 @@ export async function processStockIn(payload: StockInPayload) {
               serial_number: trimmedSn,
               status: "AVAILABLE",
               condition: "BAIK",
-              current_location: item.storage_location || "Gudang",
+              current_location: item.storage_location || "Gudang Utama",
             },
             update: {
+              item_id: item.id,
               status: "AVAILABLE",
               condition: "BAIK",
               current_pic: null,
-              current_location: item.storage_location || "Gudang",
+              current_location: item.storage_location || "Gudang Utama",
             },
           });
         }
@@ -248,7 +306,7 @@ export async function processStockIn(payload: StockInPayload) {
           reference_type: "TRANSACTION",
           reference_id: transaction.id,
           transaction_id: transaction.id,
-          performed_by: payload.user_name,
+          performed_by: payload.user_name || payload.warehouse_officer || "Admin Gudang",
           notes: `Barang Masuk (${txNumber})`,
         },
       });
@@ -261,7 +319,7 @@ export async function processStockIn(payload: StockInPayload) {
         entity_id: transaction.id,
         action: "CREATE",
         user_id: payload.created_by,
-        user_name: payload.user_name,
+        user_name: payload.user_name || payload.warehouse_officer || "Admin Gudang",
         data_after: JSON.stringify(transaction),
         reason: `Pencatatan Barang Masuk ${txNumber}`,
       },
@@ -292,7 +350,7 @@ export interface StockOutPayload {
   permit_number?: string;
   items: StockOutItemInput[];
   created_by?: string;
-  user_name: string;
+  user_name?: string;
 }
 
 /**
@@ -450,7 +508,7 @@ export async function processStockOut(payload: StockOutPayload) {
           reference_type: "TRANSACTION",
           reference_id: transaction.id,
           transaction_id: transaction.id,
-          performed_by: payload.user_name,
+          performed_by: payload.user_name || payload.warehouse_officer || "Admin Gudang",
           notes: `Barang Keluar (${txNumber}) kepada ${payload.pic_name}`,
         },
       });
@@ -471,7 +529,7 @@ export async function processStockOut(payload: StockOutPayload) {
         entity_id: transaction.id,
         action: "CREATE",
         user_id: payload.created_by,
-        user_name: payload.user_name,
+        user_name: payload.user_name || payload.warehouse_officer || "Admin Gudang",
         data_after: JSON.stringify(transaction),
         reason: `Pencatatan Barang Keluar ${txNumber}`,
       },
@@ -498,7 +556,7 @@ export interface ReturnPayload {
   notes?: string;
   details: ReturnDetailInput[];
   created_by?: string;
-  user_name: string;
+  user_name?: string;
 }
 
 /**
@@ -679,7 +737,7 @@ export async function processReturn(payload: ReturnPayload) {
           reference_type: "RETURN",
           reference_id: returnTx.id,
           transaction_id: outTx.id,
-          performed_by: payload.user_name,
+          performed_by: payload.user_name || payload.recipient_officer || "Admin Gudang",
           notes: `Pengembalian (${returnNumber}) Kondisi: ${returnInput.condition}`,
         },
       });
@@ -716,7 +774,7 @@ export async function processReturn(payload: ReturnPayload) {
         entity_id: returnTx.id,
         action: "CREATE",
         user_id: payload.created_by,
-        user_name: payload.user_name,
+        user_name: payload.user_name || payload.recipient_officer || "Admin Gudang",
         data_after: JSON.stringify(returnTx),
         reason: `Pencatatan Pengembalian Barang ${returnNumber}`,
       },
