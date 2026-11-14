@@ -301,33 +301,6 @@ export default function BarangKeluarPage() {
     setRows(updated);
   };
 
-  const handleAddManualSn = (rowIndex: number) => {
-    const updated = [...rows];
-    const row = updated[rowIndex];
-    const sn = (row.manualSnInput || "").trim();
-    if (!sn) return;
-
-    const qtyNum = Number(row.quantity) || 1;
-    const current = row.serials || [];
-
-    if (current.includes(sn)) {
-      setNotification({ type: "error", message: `Serial Number '${sn}' sudah terpilih pada baris ini.` });
-      return;
-    }
-
-    if (current.length >= qtyNum) {
-      setNotification({
-        type: "error",
-        message: `Kuantitas adalah ${qtyNum}. Tidak dapat memilih lebih dari ${qtyNum} SN.`,
-      });
-      return;
-    }
-
-    updated[rowIndex].serials = [...current, sn];
-    updated[rowIndex].manualSnInput = "";
-    setRows(updated);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!picName.trim()) {
@@ -876,32 +849,6 @@ export default function BarangKeluarPage() {
                                       })}
                                     </div>
                                   )}
-
-                                  {/* Manual Input Fallback */}
-                                  <div className="pt-1 border-t border-slate-200/80 dark:border-slate-800">
-                                    <div className="flex items-center gap-1.5">
-                                      <input
-                                        type="text"
-                                        value={row.manualSnInput || ""}
-                                        onChange={(e) => handleRowChange(idx, "manualSnInput", e.target.value)}
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter") {
-                                            e.preventDefault();
-                                            handleAddManualSn(idx);
-                                          }
-                                        }}
-                                        placeholder="Ketik SN manual jika belum terdaftar..."
-                                        className="flex-1 px-2.5 py-1 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-mono"
-                                      />
-                                      <button
-                                        type="button"
-                                        onClick={() => handleAddManualSn(idx)}
-                                        className="px-2.5 py-1 bg-slate-700 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shrink-0"
-                                      >
-                                        + Tambah SN
-                                      </button>
-                                    </div>
-                                  </div>
                                 </div>
                               )}
                             </div>
