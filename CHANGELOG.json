@@ -4,8 +4,64 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.0",
+      "date": "2026-11-15T10:46:00+07:00",
+      "title": "Remember Me Simpan Kredensial Password & Log Update Akurat Berbasis Waktu",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Fitur Ingat Saya (Remember Me) kini menyimpan kredensial password secara terenkripsi untuk Masuk Kembali 1-Klik maupun tombol Masuk ke Akun tanpa mengetik ulang, serta terintegrasi PasswordCredential browser"
+        },
+        {
+          "type": "improve",
+          "text": "Token Ingat Saya dipertahankan lintas logout standar maupun idle session timeout (hanya dihapus saat klik Ganti Akun atau login tanpa centang Ingat Saya)"
+        },
+        {
+          "type": "fix",
+          "text": "Deteksi adaptif flag cookie Secure berdasarkan protokol HTTPS/HTTP agar sesi dan Remember Me bekerja andal di VPS HTTP maupun reverse proxy HTTPS"
+        },
+        {
+          "type": "improve",
+          "text": "Pencatatan riwayat update otomatis via GitHub (git pull & docker compose) dan File ZIP dengan timestamp lengkap WIB (+07:00), hash sourceDigest pada build-info.json, serta backfill rilis v1.1.1 & v1.1.2"
+        }
+      ]
+    },
+    {
+      "version": "1.1.2",
+      "date": "2026-11-15T10:33:58+07:00",
+      "commit": "c40143c",
+      "title": "Tema Gelap Midnight Sapphire Navy (Selaras Halaman Login)",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Penyelarasan palet tema gelap aplikasi ke Midnight Sapphire Navy seperti latar halaman login dengan kalibrasi kontras WCAG AA & Forced Colors"
+        },
+        {
+          "type": "improve",
+          "text": "Pembaruan gradien latar shell, sidebar, top header, halaman login, dan hero banner dashboard sambil menjaga pratinjau dokumen cetak tetap putih"
+        }
+      ]
+    },
+    {
+      "version": "1.1.1",
+      "date": "2026-11-15T10:14:27+07:00",
+      "commit": "63187f3",
+      "title": "Fitur Remember Me (1-Click Quick Login & Autofill)",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Penambahan fitur Ingat Saya (Remember Me) dengan token kriptografis HttpOnly 30 hari terikat sidik jari password dan rotasi JTI anti-replay"
+        },
+        {
+          "type": "feat",
+          "text": "Kartu Masuk Cepat 1-klik saat sesi berakhir beserta dukungan atribut autofill username & current-password"
+        }
+      ]
+    },
+    {
       "version": "1.1.0",
-      "date": "2026-11-14",
+      "date": "2026-11-14T23:51:18+07:00",
+      "commit": "04a3a6e",
       "title": "System Update Manager (Git/Docker & Manual ZIP) + Update History",
       "changes": [
         {
@@ -32,7 +88,7 @@
     },
     {
       "version": "1.0.5",
-      "date": "2026-11-14",
+      "date": "2026-11-14T23:27:08+07:00",
       "commit": "14083e9",
       "title": "Ergonomic Dimmed Dark Mode & VLAN Management",
       "changes": [
@@ -52,7 +108,7 @@
     },
     {
       "version": "1.0.4",
-      "date": "2026-11-14",
+      "date": "2026-11-14T21:48:55+07:00",
       "commit": "be33c09",
       "title": "Idle Session Timeout & Penyempurnaan Workflow Inventory",
       "changes": [
@@ -76,7 +132,7 @@
     },
     {
       "version": "1.0.3",
-      "date": "2026-11-14",
+      "date": "2026-11-14T11:35:59+07:00",
       "commit": "0fb46ce",
       "title": "Penyederhanaan Master Barang, Audit User & Multi-Key Backup",
       "changes": [
@@ -96,7 +152,7 @@
     },
     {
       "version": "1.0.2",
-      "date": "2026-11-13",
+      "date": "2026-11-14T06:53:10+07:00",
       "commit": "bfc1d0a",
       "title": "Security Hardening Enterprise Core & TACACS+ AAA",
       "changes": [
@@ -112,7 +168,7 @@
     },
     {
       "version": "1.0.0",
-      "date": "2026-11-11",
+      "date": "2026-11-11T10:48:57+07:00",
       "commit": "c1f448a",
       "title": "Rilis Awal ACTIS Dual-DB Enterprise Core",
       "changes": [

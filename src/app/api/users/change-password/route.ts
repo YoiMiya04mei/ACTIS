@@ -101,9 +101,9 @@ export async function POST(request: NextRequest) {
       message: "Password Anda berhasil diperbarui dan sesi baru telah dibuat.",
     });
 
-    response.cookies.set("actis_session", newToken, getSessionCookieOptions(60 * 60 * 24 * 7));
+    response.cookies.set("actis_session", newToken, getSessionCookieOptions(60 * 60 * 24 * 7, request));
     response.cookies.set(REMEMBER_COOKIE_NAME, "", {
-      ...getRememberCookieOptions(0),
+      ...getRememberCookieOptions(0, request),
       maxAge: 0,
     });
 

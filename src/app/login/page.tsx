@@ -34,6 +34,8 @@ const ROLE_LABELS: Record<string, string> = {
   warehouse_admin: "Admin Gudang",
 };
 
+const SAVED_PASSWORD_SENTINEL = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
+
 function getInitials(name: string): string {
   const parts = String(name || "")
     .trim()
@@ -50,9 +52,11 @@ export default function LoginPage() {
 
   const emailInputRef = useRef<HTMLInputElement>(null);
   const errorBannerRef = useRef<HTMLDivElement>(null);
+  const userEditedPasswordRef = useRef(false);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [usingSavedCredential, setUsingSavedCredential] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -103,6 +107,10 @@ export default function LoginPage() {
               localStorage.setItem("actis_remember_me", "true");
             } catch {}
           }
+          if (!userEditedPasswordRef.current) {
+            setUsingSavedCredential(true);
+            setShowPassword(false);
+          }
         }
       })
       .catch(() => {})
@@ -121,11 +129,12 @@ export default function LoginPage() {
     setStatusNote(null);
     setQuickLoading(true);
 
-    const result = await loginWithRememberMe();
+    const result = await loginWithRememberMe({ rememberMe: true });
     setQuickLoading(false);
 
     if (!result.success) {
       setRememberedUser(null);
+      setUsingSavedCredential(false);
       setError(result.error || "Sesi Ingat Saya tidak berlaku lagi. Silakan masuk manual.");
       emailInputRef.current?.focus();
     } else {
@@ -152,12 +161,15 @@ export default function LoginPage() {
       localStorage.removeItem("actis_remember_me");
     } catch {}
 
+    userEditedPasswordRef.current = false;
+    setUsingSavedCredential(false);
     setRememberedUser(null);
     setEmail("");
     setPassword("");
+    setShowPassword(false);
     setRememberMe(false);
     setForgettingAccount(false);
-    setStatusNote("Akun tersimpan di perangkat ini dihapus. Silakan masukkan akun baru.");
+    setStatusNote("Akun & kredensial tersimpan di perangkat ini dihapus. Silakan masukkan akun baru.");
     setTimeout(() => {
       emailInputRef.current?.focus();
     }, 50);
@@ -168,22 +180,80 @@ export default function LoginPage() {
     setError(null);
     setStatusNote(null);
 
-    if (!email.trim() || !password) {
+    const trimmedEmail = email.trim();
+    const matchesRememberedEmail = Boolean(
+      rememberedUser && trimmedEmail.toLowerCase() === rememberedUser.email.toLowerCase()
+    );
+
+    if (usingSavedCredential && matchesRememberedEmail) {
+      setLoading(true);
+      const result = await loginWithRememberMe({ rememberMe });
+      setLoading(false);
+
+      if (!result.success) {
+        setRememberedUser(null);
+        setUsingSavedCredential(false);
+        setError(result.error || "Sesi Ingat Saya tidak berlaku lagi. Silakan masukkan password kembali.");
+        errorBannerRef.current?.focus();
+        return;
+      }
+
+      if (!rememberMe) {
+        setRememberedUser(null);
+        setUsingSavedCredential(false);
+      }
+
+      setStatusNote("Login berhasil! Mengalihkan ke dashboard antrean.");
+      setSuccess(true);
+      setTimeout(() => {
+        router.push("/queue");
+      }, 450);
+      return;
+    }
+
+    if (!trimmedEmail || !password) {
       setError("Silakan masukkan email dan password akun Anda.");
-      if (!email.trim()) {
+      if (!trimmedEmail) {
         emailInputRef.current?.focus();
       }
       return;
     }
 
     setLoading(true);
-    const result = await login(email, password, rememberMe);
+    const result = await login(trimmedEmail, password, rememberMe);
     setLoading(false);
 
     if (!result.success) {
       setError(result.error || "Login gagal. Periksa email atau password Anda.");
       errorBannerRef.current?.focus();
     } else {
+      if (
+        rememberMe &&
+        typeof window !== "undefined" &&
+        "PasswordCredential" in window &&
+        navigator.credentials?.store
+      ) {
+        try {
+          const CredCtor = (
+            window as unknown as {
+              PasswordCredential: new (data: {
+                id: string;
+                password: string;
+                name?: string;
+              }) => Credential;
+            }
+          ).PasswordCredential;
+          const cred = new CredCtor({
+            id: result.user?.email || trimmedEmail.toLowerCase(),
+            password,
+            name: result.user?.nama || trimmedEmail,
+          });
+          await navigator.credentials.store(cred);
+        } catch {
+          // Ignore browser password manager storage rejections
+        }
+      }
+
       setStatusNote("Login berhasil! Mengalihkan ke dashboard antrean.");
       setSuccess(true);
       setTimeout(() => {
@@ -234,7 +304,7 @@ export default function LoginPage() {
                 <p className="font-bold">Sesi Anda Telah Berakhir</p>
                 <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-300/90 leading-relaxed">
                   {rememberedUser
-                    ? "Demi keamanan akun ISP, sesi ditutup karena tidak ada aktivitas. Gunakan tombol Masuk Cepat di bawah atau isi password untuk masuk kembali."
+                    ? "Demi keamanan akun ISP, sesi ditutup karena tidak ada aktivitas. Klik Masuk Kembali atau Masuk ke Akun tanpa mengetik ulang kredensial."
                     : "Anda telah lama meninggalkan web atau tidak ada aktivitas yang terdeteksi. Demi keamanan akun ISP, silakan masuk kembali."}
                 </p>
               </div>
@@ -283,7 +353,7 @@ export default function LoginPage() {
                       </span>
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-[10px] font-bold">
                         <ShieldCheck className="w-3 h-3" />
-                        Ingat Saya
+                        Email &amp; Password Tersimpan
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-600 dark:text-slate-300 truncate">
@@ -374,10 +444,24 @@ export default function LoginPage() {
                   name="email"
                   type="email"
                   autoComplete="username"
+                  autoCorrect="off"
+                  autoCapitalize="none"
                   spellCheck={false}
                   enterKeyHint="next"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    const nextEmail = e.target.value;
+                    setEmail(nextEmail);
+                    if (
+                      usingSavedCredential &&
+                      rememberedUser &&
+                      nextEmail.trim().toLowerCase() !== rememberedUser.email.toLowerCase()
+                    ) {
+                      userEditedPasswordRef.current = true;
+                      setUsingSavedCredential(false);
+                      setPassword("");
+                    }
+                  }}
                   placeholder="nama.pengguna@isp-enterprise.net"
                   className="w-full min-h-[46px] pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white dark:focus:bg-slate-900 transition"
                   required
@@ -386,12 +470,20 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label
-                htmlFor="login-password"
-                className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5"
-              >
-                Password
-              </label>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <label
+                  htmlFor="login-password"
+                  className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider"
+                >
+                  Password
+                </label>
+                {usingSavedCredential && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/60 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                    <ShieldCheck className="w-3 h-3" />
+                    Tersimpan
+                  </span>
+                )}
+              </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
                   <Lock className="w-4 h-4" />
@@ -399,25 +491,65 @@ export default function LoginPage() {
                 <input
                   id="login-password"
                   name="password"
-                  type={showPassword ? "text" : "password"}
+                  type={usingSavedCredential ? "password" : showPassword ? "text" : "password"}
                   autoComplete="current-password"
                   enterKeyHint="done"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  value={usingSavedCredential ? SAVED_PASSWORD_SENTINEL : password}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    userEditedPasswordRef.current = true;
+                    if (usingSavedCredential) {
+                      setUsingSavedCredential(false);
+                      const cleaned = raw.includes("\u2022") ? raw.replace(/\u2022+/g, "") : raw;
+                      setPassword(cleaned);
+                    } else {
+                      setPassword(raw);
+                    }
+                  }}
+                  aria-describedby={usingSavedCredential || (!rememberedUser && email && rememberMe) ? "password-saved-hint" : undefined}
                   placeholder="Masukkan password"
                   className="w-full min-h-[46px] pl-10 pr-12 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white dark:focus:bg-slate-900 transition"
                   required
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={() => {
+                    if (!usingSavedCredential) setShowPassword(!showPassword);
+                  }}
+                  disabled={usingSavedCredential}
                   aria-pressed={showPassword}
-                  aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
-                  className="absolute inset-y-0 right-0 px-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus:outline-none focus-visible:text-blue-600 cursor-pointer"
+                  aria-label={
+                    usingSavedCredential
+                      ? "Password tersimpan terenkripsi di server"
+                      : showPassword
+                      ? "Sembunyikan password"
+                      : "Tampilkan password"
+                  }
+                  title={
+                    usingSavedCredential
+                      ? "Password tersimpan terenkripsi oleh server untuk keamanan. Ketik ulang jika ingin mengganti."
+                      : undefined
+                  }
+                  className="absolute inset-y-0 right-0 px-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 focus:outline-none focus-visible:text-blue-600 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword && !usingSavedCredential ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
                 </button>
               </div>
+              {usingSavedCredential && (
+                <p id="password-saved-hint" className="text-[11px] text-emerald-700 dark:text-emerald-300 mt-1.5 leading-relaxed">
+                  Kredensial password tersimpan terenkripsi. Langsung klik{" "}
+                  <span className="font-semibold">Masuk ke Akun</span> atau ketik password baru untuk mengganti.
+                </p>
+              )}
+              {!usingSavedCredential && !rememberedUser && !checkingRemember && email && rememberMe && (
+                <p id="password-saved-hint" className="text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed">
+                  Masukkan password satu kali agar kredensial akun &amp; password Anda disimpan oleh fitur Ingat Saya di perangkat ini.
+                </p>
+              )}
             </div>
 
             {/* Remember Me Checkbox Row (Placed immediately before inline label per form semantics) */}
@@ -442,7 +574,7 @@ export default function LoginPage() {
                   id="remember-me-hint"
                   className="block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed"
                 >
-                  Simpan email dan aktifkan Masuk Cepat 1-klik saat sesi idle berakhir.
+                  Simpan email &amp; kredensial password terenkripsi untuk masuk kembali tanpa mengetik ulang.
                 </span>
               </label>
             </div>

@@ -1,6 +1,6 @@
 {
   "name": "actis",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "scripts": {
     "predev": "node scripts/sync-pdfjs-assets.js && node scripts/sync-build-info.js",
@@ -11,6 +11,7 @@
     "build": "next build",
     "start": "next start",
     "release:zip": "node scripts/build-release-zip.js",
+    "release:log": "node scripts/record-release.js",
     "sync:build-info": "node scripts/sync-build-info.js",
     "lint": "next lint",
     "test": "node test-e2e.js",

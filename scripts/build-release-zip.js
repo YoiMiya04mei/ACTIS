@@ -82,10 +82,11 @@ async function main() {
     schemaVersion: 1,
     version,
     title: matchingRelease?.title || `ACTIS Release v${version}`,
+    releasedAt: matchingRelease?.date || buildInfo.builtAt || new Date().toISOString(),
     commitHash: buildInfo.commitHash || matchingRelease?.commit || null,
     branch: buildInfo.branch || "main",
     buildSignature: buildInfo.buildSignature,
-    builtAt: new Date().toISOString(),
+    builtAt: buildInfo.builtAt || new Date().toISOString(),
     changelog: Array.isArray(matchingRelease?.changes) ? matchingRelease.changes : [],
     recentCommits: Array.isArray(buildInfo.recentCommits)
       ? buildInfo.recentCommits.slice(0, 8)

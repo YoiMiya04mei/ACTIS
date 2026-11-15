@@ -66,6 +66,7 @@ interface BuildInfo {
   repository: string;
   buildSignature: string;
   builtAt: string;
+  recentCommits?: { hash: string; date: string; message: string }[];
   runtimeMode: "docker" | "standalone" | "node-server";
   isDocker: boolean;
 }
@@ -87,7 +88,11 @@ interface RemoteCheckResult {
 
 function formatWibDate(iso: string | null | undefined): string {
   if (!iso) return "-";
-  const d = new Date(iso);
+  const trimmed = String(iso).trim();
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(trimmed)
+    ? `${trimmed}T12:00:00+07:00`
+    : trimmed;
+  const d = new Date(normalized);
   if (isNaN(d.getTime())) return String(iso);
   return (
     new Intl.DateTimeFormat("id-ID", {
@@ -97,6 +102,7 @@ function formatWibDate(iso: string | null | undefined): string {
       year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      second: "2-digit",
       hourCycle: "h23",
     }).format(d) + " WIB"
   );
@@ -595,7 +601,7 @@ export default function SystemUpdatesPage() {
             <button
               type="button"
               onClick={() => {
-                setNoteVersion(buildInfo?.version || "1.1.0");
+                setNoteVersion(buildInfo?.version || "1.2.0");
                 setShowAddModal(true);
               }}
               className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white shadow-sm transition"
@@ -772,14 +778,36 @@ export default function SystemUpdatesPage() {
             )}
           </div>
 
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-            <span>
-              Build Signature:{" "}
-              <code className="font-mono font-semibold text-slate-700 dark:text-slate-300">
-                {buildInfo?.buildSignature || "-"}
-              </code>
-            </span>
-            <span>Build Time: {formatWibDate(buildInfo?.builtAt)}</span>
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2.5 text-[11px] text-slate-500 dark:text-slate-400">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>
+                Build Signature:{" "}
+                <code className="font-mono font-semibold text-slate-700 dark:text-slate-300">
+                  {buildInfo?.buildSignature || "-"}
+                </code>
+              </span>
+              <span>Build Time: {formatWibDate(buildInfo?.builtAt)}</span>
+            </div>
+            {buildInfo?.recentCommits && buildInfo.recentCommits.length > 0 && (
+              <div className="rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/70 dark:border-slate-700/60 p-2.5 space-y-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
+                  Log Commit Build Aktif ({buildInfo.recentCommits.slice(0, 3).length} terbaru)
+                </p>
+                {buildInfo.recentCommits.slice(0, 3).map((c) => (
+                  <div key={c.hash} className="flex items-start justify-between gap-2 text-[11px]">
+                    <span className="truncate text-slate-700 dark:text-slate-300">
+                      <code className="font-mono font-bold text-blue-600 dark:text-blue-400 mr-1.5">
+                        #{c.hash}
+                      </code>
+                      {c.message}
+                    </span>
+                    <span className="shrink-0 text-[10px] text-slate-500 dark:text-slate-400">
+                      {formatWibDate(c.date)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

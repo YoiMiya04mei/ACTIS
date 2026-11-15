@@ -51,9 +51,9 @@ async function resolveRememberedUser(request: NextRequest) {
   };
 }
 
-function clearRememberCookie(response: NextResponse) {
+function clearRememberCookie(response: NextResponse, request?: NextRequest) {
   response.cookies.set(REMEMBER_COOKIE_NAME, "", {
-    ...getRememberCookieOptions(0),
+    ...getRememberCookieOptions(0, request),
     maxAge: 0,
   });
   return response;
@@ -69,11 +69,11 @@ export async function GET(request: NextRequest) {
 
     if (resolved.status !== "valid") {
       const response = NextResponse.json(
-        { success: true, remembered: false, user: null },
+        { success: true, remembered: false, hasSavedCredential: false, user: null },
         { headers: { "Cache-Control": "no-store" } }
       );
       if (resolved.status === "invalid") {
-        clearRememberCookie(response);
+        clearRememberCookie(response, request);
       }
       return response;
     }
@@ -82,6 +82,7 @@ export async function GET(request: NextRequest) {
       {
         success: true,
         remembered: true,
+        hasSavedCredential: true,
         user: {
           id: resolved.dbUser.id,
           nama: resolved.dbUser.nama,
@@ -107,6 +108,9 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const body = await request.json().catch(() => ({}));
+    const keepRememberMe = body?.rememberMe !== false;
+
     const clientIp = getRequestClientIp(request);
     const userAgent = parseUserAgent(request.headers.get("user-agent"));
 
@@ -133,7 +137,7 @@ export async function POST(request: NextRequest) {
         },
         { status: 401 }
       );
-      return clearRememberCookie(response);
+      return clearRememberCookie(response, request);
     }
 
     const accountLimit = checkRateLimit(`remember:acc:${resolved.dbUser.id}`, 10, 300);
@@ -157,14 +161,10 @@ export async function POST(request: NextRequest) {
     // Rotate Remember Me token to prevent token replay
     invalidateRememberToken(resolved.rememberCookie);
 
-    const sessionToken = createSessionToken(sessionPayload, REMEMBER_TOKEN_MAX_AGE, {
-      rememberMe: true,
+    const sessionMaxAge = keepRememberMe ? REMEMBER_TOKEN_MAX_AGE : 60 * 60 * 24;
+    const sessionToken = createSessionToken(sessionPayload, sessionMaxAge, {
+      rememberMe: keepRememberMe,
     });
-    const nextRememberToken = createRememberToken(
-      { id: resolved.dbUser.id, email: resolved.dbUser.email },
-      resolved.dbUser.password_hash,
-      REMEMBER_TOKEN_MAX_AGE
-    );
 
     recordActivity({
       nama_lengkap: resolved.dbUser.nama,
@@ -179,15 +179,29 @@ export async function POST(request: NextRequest) {
       success: true,
       message: "Berhasil masuk kembali dengan Ingat Saya.",
       user: sessionPayload,
-      rememberMe: true,
+      rememberMe: keepRememberMe,
     });
 
-    response.cookies.set("actis_session", sessionToken, getSessionCookieOptions(REMEMBER_TOKEN_MAX_AGE));
     response.cookies.set(
-      REMEMBER_COOKIE_NAME,
-      nextRememberToken,
-      getRememberCookieOptions(REMEMBER_TOKEN_MAX_AGE)
+      "actis_session",
+      sessionToken,
+      getSessionCookieOptions(sessionMaxAge, request)
     );
+
+    if (keepRememberMe) {
+      const nextRememberToken = createRememberToken(
+        { id: resolved.dbUser.id, email: resolved.dbUser.email },
+        resolved.dbUser.password_hash,
+        REMEMBER_TOKEN_MAX_AGE
+      );
+      response.cookies.set(
+        REMEMBER_COOKIE_NAME,
+        nextRememberToken,
+        getRememberCookieOptions(REMEMBER_TOKEN_MAX_AGE, request)
+      );
+    } else {
+      clearRememberCookie(response, request);
+    }
 
     return response;
   } catch (err: any) {
@@ -213,5 +227,5 @@ export async function DELETE(request: NextRequest) {
     success: true,
     message: "Data Ingat Saya di perangkat ini berhasil dihapus.",
   });
-  return clearRememberCookie(response);
+  return clearRememberCookie(response, request);
 }

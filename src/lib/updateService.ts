@@ -196,6 +196,38 @@ export function getInstalledBuildMetadata(): BuildMetadata {
   };
 }
 
+export function parseReleaseTimestamp(
+  rawDate: string | null | undefined,
+  fallback: Date = new Date()
+): Date {
+  if (!rawDate || typeof rawDate !== "string") return fallback;
+  const trimmed = rawDate.trim();
+  if (!trimmed) return fallback;
+  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(trimmed)
+    ? `${trimmed}T12:00:00+07:00`
+    : trimmed;
+  const parsed = new Date(normalized);
+  return isNaN(parsed.getTime()) ? fallback : parsed;
+}
+
+function formatWibTimestampLabel(dateInput: Date | string | null | undefined): string {
+  if (!dateInput) return "-";
+  const d = typeof dateInput === "string" ? parseReleaseTimestamp(dateInput) : dateInput;
+  if (isNaN(d.getTime())) return "-";
+  return (
+    new Intl.DateTimeFormat("id-ID", {
+      timeZone: "Asia/Jakarta",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    }).format(d) + " WIB"
+  );
+}
+
 /**
  * Synchronizes current build version & CHANGELOG.json releases with SystemUpdateHistory
  * on container startup / git pull + docker rebuild / offline ZIP restart.
@@ -213,6 +245,7 @@ export async function ensureUpdateHistorySynced(): Promise<void> {
   syncPromise = (async () => {
     try {
       const root = process.cwd();
+      const currentBuildTime = parseReleaseTimestamp(meta.builtAt, new Date());
 
       // 1. Complete any pending offline release bundle that just restarted cleanly
       const pendingStatePath = path.join(root, "data", "updates", "last-applied.json");
@@ -278,8 +311,8 @@ export async function ensureUpdateHistorySynced(): Promise<void> {
                 status: "APPLIED",
                 build_signature: meta.buildSignature,
                 commit_hash: meta.commitHash || staged.commit_hash,
-                applied_at: new Date(),
-                notes: `${staged.notes ? `${staged.notes}\n` : ""}Container berhasil di-rebuild & diaktifkan pada versi v${meta.version}.`,
+                applied_at: currentBuildTime,
+                notes: `${staged.notes ? `${staged.notes}\n` : ""}Container berhasil di-rebuild & diaktifkan pada versi v${meta.version} (${formatWibTimestampLabel(currentBuildTime)}).`,
               },
             });
           }
@@ -287,7 +320,7 @@ export async function ensureUpdateHistorySynced(): Promise<void> {
       }
 
       const existingHistory = await prisma.systemUpdateHistory.findMany({
-        orderBy: { created_at: "desc" },
+        orderBy: [{ applied_at: "desc" }, { created_at: "desc" }],
       });
 
       // 3. Initial seed from CHANGELOG.json if database has zero update records yet
@@ -297,6 +330,7 @@ export async function ensureUpdateHistorySynced(): Promise<void> {
         for (let i = 0; i < orderedOldestFirst.length; i++) {
           const rel = orderedOldestFirst[i];
           const isLatest = i === orderedOldestFirst.length - 1;
+          const releaseTime = parseReleaseTimestamp(rel.date, currentBuildTime);
           await prisma.systemUpdateHistory.create({
             data: {
               version: rel.version,
@@ -309,12 +343,12 @@ export async function ensureUpdateHistorySynced(): Promise<void> {
               build_signature: isLatest ? meta.buildSignature : null,
               changelog_items: JSON.stringify(rel.changes),
               notes: isLatest
-                ? "Terdeteksi otomatis saat inisialisasi / build aplikasi."
-                : "Catatan rilis historis sistem ACTIS.",
+                ? `Terdeteksi otomatis saat build/startup sistem (${formatWibTimestampLabel(currentBuildTime)})${rel.date ? ` • Rilis fitur: ${formatWibTimestampLabel(releaseTime)}` : ""}.`
+                : `Catatan rilis historis sistem ACTIS (${formatWibTimestampLabel(releaseTime)}).`,
               installed_by: isLatest
                 ? "Sistem (Git Pull / Docker Rebuild)"
                 : "ACTIS Release Archive",
-              applied_at: rel.date ? new Date(`${rel.date}T12:00:00+07:00`) : new Date(),
+              applied_at: isLatest ? currentBuildTime : releaseTime,
             },
           });
           prevVer = rel.version;
@@ -323,7 +357,7 @@ export async function ensureUpdateHistorySynced(): Promise<void> {
         return;
       }
 
-      // 4. Subsequent updates: record any newly added release in CHANGELOG.json after git pull + rebuild
+      // 4. Subsequent updates: record any newly added release in CHANGELOG.json after git pull + rebuild or ZIP update
       const existingAppliedVersions = new Set(
         existingHistory
           .filter((r) => r.status === "APPLIED")
@@ -346,7 +380,12 @@ export async function ensureUpdateHistorySynced(): Promise<void> {
       let newlyRecordedVersion: string | null = null;
       let rollingPrev = previousAppliedVersion;
 
-      for (const rel of missingReleases) {
+      for (let i = 0; i < missingReleases.length; i++) {
+        const rel = missingReleases[i];
+        const isNewestRelease = i === missingReleases.length - 1;
+        const releaseTime = parseReleaseTimestamp(rel.date, currentBuildTime);
+        const appliedTime = isNewestRelease ? currentBuildTime : releaseTime;
+
         await prisma.systemUpdateHistory.create({
           data: {
             version: rel.version,
@@ -360,9 +399,11 @@ export async function ensureUpdateHistorySynced(): Promise<void> {
             build_signature:
               rel.version === meta.version ? meta.buildSignature : null,
             changelog_items: JSON.stringify(rel.changes),
-            notes: "Terdeteksi otomatis dari git pull / rebuild container Docker.",
+            notes: isNewestRelease
+              ? `Terdeteksi otomatis dari Git Pull / Rebuild Container pada ${formatWibTimestampLabel(appliedTime)}${rel.date ? ` (waktu rilis fitur: ${formatWibTimestampLabel(releaseTime)})` : ""}.`
+              : `Log rilis fitur v${rel.version} (${formatWibTimestampLabel(releaseTime)}) yang disinkronkan saat pembaruan.`,
             installed_by: "Sistem (Git Pull / Docker Rebuild)",
-            applied_at: new Date(),
+            applied_at: appliedTime,
           },
         });
         newlyRecordedVersion = rel.version;
@@ -370,8 +411,14 @@ export async function ensureUpdateHistorySynced(): Promise<void> {
         rollingPrev = rel.version;
       }
 
-      // 5. Even if package.json version stayed the same across commits (hotfix git pull + rebuild), record new build signature
+      // 5. Even if package.json version stayed the same across commits (hotfix git pull + rebuild in prod/Docker), record new build signature
+      const isDeploymentRuntime =
+        meta.isDocker ||
+        meta.runtimeMode === "standalone" ||
+        process.env.NODE_ENV === "production";
+
       if (
+        isDeploymentRuntime &&
         missingReleases.length === 0 &&
         meta.buildSignature &&
         !existingSignatures.has(meta.buildSignature)
@@ -386,12 +433,12 @@ export async function ensureUpdateHistorySynced(): Promise<void> {
                   : c.message.toLowerCase().startsWith("feat")
                   ? "feat"
                   : "improve",
-                text: `${c.message} (${c.hash})`,
+                text: `${c.message} (${c.hash}${c.date ? ` · ${formatWibTimestampLabel(c.date)}` : ""})`,
               }))
             : latestRel?.changes || [
                 {
                   type: "improve",
-                  text: `Rebuild container ACTIS v${meta.version}${meta.commitHash ? ` (${meta.commitHash})` : ""}`,
+                  text: `Rebuild container ACTIS v${meta.version}${meta.commitHash ? ` (${meta.commitHash})` : ""} pada ${formatWibTimestampLabel(currentBuildTime)}`,
                 },
               ];
 
@@ -409,9 +456,9 @@ export async function ensureUpdateHistorySynced(): Promise<void> {
             branch: meta.branch,
             build_signature: meta.buildSignature,
             changelog_items: JSON.stringify(commitBullets),
-            notes: "Rebuild otomatis terdeteksi via Docker / Git.",
+            notes: `Rebuild otomatis terdeteksi via Docker / Git pada ${formatWibTimestampLabel(currentBuildTime)}.`,
             installed_by: "Sistem (Git Pull / Docker Rebuild)",
-            applied_at: new Date(),
+            applied_at: currentBuildTime,
           },
         });
         newlyRecordedVersion = meta.version;
@@ -425,7 +472,7 @@ export async function ensureUpdateHistorySynced(): Promise<void> {
           ip_address: "127.0.0.1",
           tipe: "SYSTEM",
           aktifitas: `Pembaruan sistem v${newlyRecordedVersion} berhasil diaktifkan (${newlyRecordedTitle || "Git/Docker Rebuild"})`,
-          detail: `Build signature: ${meta.buildSignature}${meta.commitHash ? ` | Commit: ${meta.commitHash}` : ""}`,
+          detail: `Waktu: ${formatWibTimestampLabel(currentBuildTime)} | Build signature: ${meta.buildSignature}${meta.commitHash ? ` | Commit: ${meta.commitHash}` : ""}`,
         }).catch(() => {});
       }
 
@@ -793,7 +840,11 @@ export async function processUploadedUpdateZip(params: {
             ? combinedChanges
             : [{ type: "feat", text: `Pemasangan manual paket offline ${path.basename(fileName)}` }]
         ),
-        notes: customNotes?.trim() || `Offline Release Bundle (${extractedCount} file divalidasi).`,
+        notes:
+          customNotes?.trim() ||
+          `Offline Release Bundle (${extractedCount} file divalidasi)${
+            manifest.releasedAt ? ` • Rilis fitur: ${formatWibTimestampLabel(manifest.releasedAt)}` : ""
+          }.`,
         installed_by: actor.nama,
         installed_by_id: actor.id,
       },
@@ -930,7 +981,9 @@ export async function processUploadedUpdateZip(params: {
         changelog_items: JSON.stringify(changes),
         notes:
           customNotes?.trim() ||
-          `Source ZIP tersimpan di ${hostDir ? "./updates/source-pending/" : "volume data container"}. Jalankan ./scripts/vps-update-zip.sh di server VPS untuk mem-build ulang actis-app.`,
+          `Source ZIP tersimpan di ${hostDir ? "./updates/source-pending/" : "volume data container"}${
+            matchedRelease?.date ? ` • Rilis fitur: ${formatWibTimestampLabel(matchedRelease.date)}` : ""
+          }. Jalankan ./scripts/vps-update-zip.sh di server VPS untuk mem-build ulang actis-app.`,
         installed_by: actor.nama,
         installed_by_id: actor.id,
       },

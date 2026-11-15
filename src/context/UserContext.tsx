@@ -53,8 +53,10 @@ interface UserContextType {
     email: string,
     password: string,
     rememberMe?: boolean
-  ) => Promise<{ success: boolean; error?: string; rememberMe?: boolean }>;
-  loginWithRememberMe: () => Promise<{ success: boolean; error?: string }>;
+  ) => Promise<{ success: boolean; error?: string; rememberMe?: boolean; user?: AppUser }>;
+  loginWithRememberMe: (options?: {
+    rememberMe?: boolean;
+  }) => Promise<{ success: boolean; error?: string; rememberMe?: boolean }>;
   logout: (options?: { reason?: "timeout" | "manual" }) => Promise<void>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   addUser: (data: { nama: string; email: string; password: string; role: string }) => Promise<{ success: boolean; error?: string; data?: any }>;
@@ -183,17 +185,23 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       handleSetUser(data.user);
       await fetchUsers();
 
-      return { success: true, rememberMe: Boolean(data.rememberMe ?? rememberMe) };
+      return {
+        success: true,
+        user: data.user,
+        rememberMe: Boolean(data.rememberMe ?? rememberMe),
+      };
     } catch (err: any) {
       return { success: false, error: err.message || "Terjadi kesalahan koneksi server." };
     }
   };
 
-  const loginWithRememberMe = async () => {
+  const loginWithRememberMe = async (options?: { rememberMe?: boolean }) => {
+    const keepRememberMe = options?.rememberMe !== false;
     try {
       const res = await fetch("/api/auth/remember", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rememberMe: keepRememberMe }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.success || !data.user) {
@@ -206,10 +214,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       const cleanEmail = String(data.user.email || "").trim().toLowerCase();
       try {
         localStorage.setItem("actis_last_active_timestamp", String(Date.now()));
-        if (cleanEmail) {
-          localStorage.setItem("actis_remembered_email", cleanEmail);
+        if (keepRememberMe) {
+          if (cleanEmail) {
+            localStorage.setItem("actis_remembered_email", cleanEmail);
+          }
+          localStorage.setItem("actis_remember_me", "true");
+        } else {
+          localStorage.removeItem("actis_remembered_email");
+          localStorage.setItem("actis_remember_me", "false");
         }
-        localStorage.setItem("actis_remember_me", "true");
         localStorage.setItem("actis_active_user", JSON.stringify(data.user));
       } catch {}
 
@@ -217,7 +230,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       setIsAuthenticated(true);
       await fetchUsers();
 
-      return { success: true };
+      return { success: true, rememberMe: keepRememberMe };
     } catch (err: any) {
       return { success: false, error: err.message || "Terjadi kesalahan koneksi server." };
     }

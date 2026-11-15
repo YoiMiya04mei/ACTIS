@@ -14,9 +14,11 @@ function getClientIp(req: NextRequest): string {
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const isIdleTimeout = body?.reason === "timeout";
+  const forgetDevice = Boolean(body?.forgetDevice);
 
   const sessionCookie = request.cookies.get("actis_session")?.value;
   const sessionUser = verifySessionToken(sessionCookie);
+  const hasRememberCookie = Boolean(request.cookies.get(REMEMBER_COOKIE_NAME)?.value);
   const clientIp = getClientIp(request);
   const userAgent = parseUserAgent(request.headers.get("user-agent"));
 
@@ -36,27 +38,29 @@ export async function POST(request: NextRequest) {
     }).catch(() => {});
   }
 
+  const preservedRememberMe = hasRememberCookie && !forgetDevice;
+
   const response = NextResponse.json({
     success: true,
     message: "Logout berhasil.",
-    preservedRememberMe: isIdleTimeout,
+    preservedRememberMe,
   });
 
-  // Always clear active session cookie
+  // Always revoke and clear active session cookie
   response.cookies.set("actis_session", "", {
-    ...getSessionCookieOptions(0),
+    ...getSessionCookieOptions(0, request),
     maxAge: 0,
   });
 
-  // Preserve Remember Me quick-login token across idle timeouts,
-  // but revoke and clear it on explicit manual logout for shared-PC safety.
-  if (!isIdleTimeout) {
+  // Preserve Remember Me token across idle timeouts and standard logouts when opted in;
+  // only revoke when explicitly requested (`forgetDevice`), via `Ganti Akun`, or unchecking Remember Me at next login.
+  if (forgetDevice) {
     const rememberCookie = request.cookies.get(REMEMBER_COOKIE_NAME)?.value;
     if (rememberCookie) {
       invalidateRememberToken(rememberCookie);
     }
     response.cookies.set(REMEMBER_COOKIE_NAME, "", {
-      ...getRememberCookieOptions(0),
+      ...getRememberCookieOptions(0, request),
       maxAge: 0,
     });
   }

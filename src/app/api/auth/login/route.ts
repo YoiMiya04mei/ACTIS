@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Set secure HttpOnly session cookie
-    response.cookies.set("actis_session", token, getSessionCookieOptions(sessionMaxAge));
+    response.cookies.set("actis_session", token, getSessionCookieOptions(sessionMaxAge, request));
 
     if (useRemember) {
       const existingRemember = request.cookies.get(REMEMBER_COOKIE_NAME)?.value;
@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
       response.cookies.set(
         REMEMBER_COOKIE_NAME,
         rememberToken,
-        getRememberCookieOptions(REMEMBER_TOKEN_MAX_AGE)
+        getRememberCookieOptions(REMEMBER_TOKEN_MAX_AGE, request)
       );
     } else {
       const existingRemember = request.cookies.get(REMEMBER_COOKIE_NAME)?.value;
@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
         invalidateRememberToken(existingRemember);
       }
       response.cookies.set(REMEMBER_COOKIE_NAME, "", {
-        ...getRememberCookieOptions(0),
+        ...getRememberCookieOptions(0, request),
         maxAge: 0,
       });
     }

@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
           repository: meta.repository,
           buildSignature: meta.buildSignature,
           builtAt: meta.builtAt,
+          recentCommits: meta.recentCommits,
           runtimeMode: meta.runtimeMode,
           isDocker: meta.isDocker,
         },

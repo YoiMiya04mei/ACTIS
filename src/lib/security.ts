@@ -379,12 +379,44 @@ export async function requireAuth(
 }
 
 /**
+ * Determines whether cookies should carry the `Secure` attribute.
+ * Respects reverse proxies (`x-forwarded-proto` / `x-forwarded-ssl`), request URL protocol,
+ * or explicit `FORCE_SECURE_COOKIES`, so direct HTTP LAN/VPS IP deployments don't silently drop session/remember cookies.
+ */
+export function shouldUseSecureCookie(request?: NextRequest | Request): boolean {
+  const forced = process.env.FORCE_SECURE_COOKIES?.trim().toLowerCase();
+  if (forced === "true") return true;
+  if (forced === "false") return false;
+
+  if (request) {
+    const protoHeader = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim().toLowerCase();
+    if (protoHeader === "https") return true;
+    if (protoHeader === "http") return false;
+
+    const sslHeader = request.headers.get("x-forwarded-ssl")?.trim().toLowerCase();
+    if (sslHeader === "on") return true;
+
+    try {
+      const url = "nextUrl" in request && request.nextUrl ? request.nextUrl : new URL(request.url);
+      return url.protocol === "https:";
+    } catch {
+      // Fallback below
+    }
+  }
+
+  return process.env.NODE_ENV === "production";
+}
+
+/**
  * Standard secure session cookie options.
  */
-export function getSessionCookieOptions(maxAgeSeconds = DEFAULT_SESSION_MAX_AGE) {
+export function getSessionCookieOptions(
+  maxAgeSeconds = DEFAULT_SESSION_MAX_AGE,
+  request?: NextRequest | Request
+) {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: shouldUseSecureCookie(request),
     sameSite: "lax" as const,
     path: "/",
     maxAge: maxAgeSeconds,
@@ -394,10 +426,13 @@ export function getSessionCookieOptions(maxAgeSeconds = DEFAULT_SESSION_MAX_AGE)
 /**
  * Standard secure Remember Me cookie options (HttpOnly, SameSite=Lax).
  */
-export function getRememberCookieOptions(maxAgeSeconds = REMEMBER_TOKEN_MAX_AGE) {
+export function getRememberCookieOptions(
+  maxAgeSeconds = REMEMBER_TOKEN_MAX_AGE,
+  request?: NextRequest | Request
+) {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: shouldUseSecureCookie(request),
     sameSite: "lax" as const,
     path: "/",
     maxAge: maxAgeSeconds,

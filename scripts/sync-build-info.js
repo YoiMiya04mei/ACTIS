@@ -23,6 +23,54 @@ function safeExecGit(cmd) {
   }
 }
 
+function collectFilesRecursive(dirPath, exts, out = []) {
+  if (!fs.existsSync(dirPath)) return out;
+  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  entries.sort((a, b) => a.name.localeCompare(b.name));
+  for (const entry of entries) {
+    if (entry.name === "node_modules" || entry.name === ".next" || entry.name === ".git") {
+      continue;
+    }
+    const full = path.join(dirPath, entry.name);
+    if (entry.isDirectory()) {
+      collectFilesRecursive(full, exts, out);
+    } else if (entry.isFile()) {
+      if (!exts || exts.some((ext) => entry.name.endsWith(ext))) {
+        out.push(full);
+      }
+    }
+  }
+  return out;
+}
+
+function computeSourceDigest() {
+  const hash = crypto.createHash("sha256");
+  const candidateFiles = [
+    path.join(projectRoot, "package.json"),
+    path.join(projectRoot, "CHANGELOG.json"),
+    path.join(projectRoot, "next.config.ts"),
+    path.join(projectRoot, "prisma", "schema.prisma"),
+    ...collectFilesRecursive(path.join(projectRoot, "src"), [
+      ".ts",
+      ".tsx",
+      ".js",
+      ".jsx",
+      ".css",
+    ]),
+  ];
+
+  for (const filePath of candidateFiles) {
+    if (!fs.existsSync(filePath)) continue;
+    const rel = path.relative(projectRoot, filePath).replace(/\\/g, "/");
+    hash.update(rel);
+    hash.update("\0");
+    hash.update(fs.readFileSync(filePath));
+    hash.update("\0");
+  }
+
+  return hash.digest("hex").slice(0, 16);
+}
+
 function main() {
   const pkgPath = path.join(projectRoot, "package.json");
   const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
@@ -49,9 +97,9 @@ function main() {
   const gitCommit = envCommit || safeExecGit("git rev-parse --short HEAD");
   const gitBranch =
     envBranch || safeExecGit("git rev-parse --abbrev-ref HEAD") || changelog.branch || "main";
-  const gitDate = safeExecGit("git log -1 --format=%cs");
+  const gitDate = safeExecGit("git log -1 --format=%cI");
 
-  const recentCommitsRaw = safeExecGit('git log -15 --pretty=format:"%h|%cs|%s"');
+  const recentCommitsRaw = safeExecGit('git log -15 --pretty=format:"%h|%cI|%s"');
   const recentCommits = recentCommitsRaw
     ? recentCommitsRaw
         .split(/\r?\n/)
@@ -72,12 +120,15 @@ function main() {
       : null;
 
   const effectiveCommit = gitCommit || (latestRelease && latestRelease.commit) || "";
+  const sourceDigest = computeSourceDigest();
 
   const signatureSeed = JSON.stringify({
     version,
     commit: effectiveCommit,
+    sourceDigest,
     releaseTitle: latestRelease?.title || "",
     releaseVersion: latestRelease?.version || "",
+    releaseDate: latestRelease?.date || "",
     changesCount: Array.isArray(latestRelease?.changes) ? latestRelease.changes.length : 0,
     changesDigest: Array.isArray(latestRelease?.changes)
       ? latestRelease.changes.map((c) => `${c.type}:${c.text}`).join("|")
@@ -109,6 +160,7 @@ function main() {
     commitDate: gitDate || (latestRelease && latestRelease.date) || null,
     branch: gitBranch,
     repository: changelog.repository || "YoiMiya04mei/ACTIS",
+    sourceDigest,
     buildSignature,
     builtAt: existingBuiltAt || new Date().toISOString(),
     recentCommits,
