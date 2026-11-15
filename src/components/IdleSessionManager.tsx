@@ -78,7 +78,7 @@ export function IdleSessionManager() {
     try {
       sessionStorage.setItem(STORAGE_KEY_LOGOUT_REASON, "timeout");
       localStorage.removeItem(STORAGE_KEY_LAST_ACTIVE);
-      await logout();
+      await logout({ reason: "timeout" });
     } catch (err) {
       console.error("Error during idle timeout logout:", err);
     } finally {
@@ -110,6 +110,8 @@ export function IdleSessionManager() {
       setIsWarningOpen(false);
       return;
     }
+
+    isLoggingOutRef.current = false;
 
     // 0 means disabled
     if (timeoutMinutes <= 0) {

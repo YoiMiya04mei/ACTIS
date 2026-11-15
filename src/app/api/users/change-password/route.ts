@@ -5,8 +5,14 @@ import {
   hashPassword,
   createSessionToken,
   invalidateSessionToken,
+  invalidateRememberToken,
 } from "@/lib/auth";
-import { requireAuth, getSessionCookieOptions } from "@/lib/security";
+import {
+  requireAuth,
+  getSessionCookieOptions,
+  getRememberCookieOptions,
+  REMEMBER_COOKIE_NAME,
+} from "@/lib/security";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 
 export async function POST(request: NextRequest) {
@@ -61,9 +67,13 @@ export async function POST(request: NextRequest) {
       data: { password_hash: newHash },
     });
 
-    // Invalidate old session token for session rotation
+    // Invalidate old session & remember tokens on password change
     const oldCookie = request.cookies.get("actis_session")?.value;
     invalidateSessionToken(oldCookie);
+    const oldRememberCookie = request.cookies.get(REMEMBER_COOKIE_NAME)?.value;
+    if (oldRememberCookie) {
+      invalidateRememberToken(oldRememberCookie);
+    }
 
     // Issue new rotated session token
     const newToken = createSessionToken({
@@ -92,6 +102,10 @@ export async function POST(request: NextRequest) {
     });
 
     response.cookies.set("actis_session", newToken, getSessionCookieOptions(60 * 60 * 24 * 7));
+    response.cookies.set(REMEMBER_COOKIE_NAME, "", {
+      ...getRememberCookieOptions(0),
+      maxAge: 0,
+    });
 
     return response;
   } catch (err: any) {

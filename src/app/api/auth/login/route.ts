@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifyPassword, createSessionToken } from "@/lib/auth";
+import {
+  verifyPassword,
+  createSessionToken,
+  createRememberToken,
+  invalidateRememberToken,
+} from "@/lib/auth";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
-import { checkRateLimit, getSessionCookieOptions } from "@/lib/security";
+import {
+  checkRateLimit,
+  getSessionCookieOptions,
+  getRememberCookieOptions,
+  REMEMBER_COOKIE_NAME,
+  REMEMBER_TOKEN_MAX_AGE,
+} from "@/lib/security";
+
+const STANDARD_SESSION_MAX_AGE = 60 * 60 * 24; // 24 hours without Remember Me
 
 function getClientIp(req: NextRequest): string {
   const forwarded = req.headers.get("x-forwarded-for");
@@ -30,7 +43,8 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json().catch(() => ({}));
-    const { email, password } = body;
+    const { email, password, rememberMe } = body;
+    const useRemember = Boolean(rememberMe);
 
     if (!email || !password) {
       return NextResponse.json(
@@ -97,7 +111,8 @@ export async function POST(request: NextRequest) {
       role: user.role,
     };
 
-    const token = createSessionToken(sessionPayload);
+    const sessionMaxAge = useRemember ? REMEMBER_TOKEN_MAX_AGE : STANDARD_SESSION_MAX_AGE;
+    const token = createSessionToken(sessionPayload, sessionMaxAge, { rememberMe: useRemember });
 
     // Record login success log
     recordActivity({
@@ -105,7 +120,9 @@ export async function POST(request: NextRequest) {
       email: user.email,
       ip_address: clientIp,
       tipe: "LOGIN_SUCCESS",
-      aktifitas: `Berhasil login ke aplikasi — ${userAgent}`,
+      aktifitas: useRemember
+        ? `Berhasil login ke aplikasi (Ingat Saya aktif) — ${userAgent}`
+        : `Berhasil login ke aplikasi — ${userAgent}`,
       user_agent: userAgent,
     }).catch(() => {});
 
@@ -113,10 +130,37 @@ export async function POST(request: NextRequest) {
       success: true,
       message: "Login berhasil.",
       user: sessionPayload,
+      rememberMe: useRemember,
     });
 
     // Set secure HttpOnly session cookie
-    response.cookies.set("actis_session", token, getSessionCookieOptions(60 * 60 * 24 * 7));
+    response.cookies.set("actis_session", token, getSessionCookieOptions(sessionMaxAge));
+
+    if (useRemember) {
+      const existingRemember = request.cookies.get(REMEMBER_COOKIE_NAME)?.value;
+      if (existingRemember) {
+        invalidateRememberToken(existingRemember);
+      }
+      const rememberToken = createRememberToken(
+        { id: user.id, email: user.email },
+        user.password_hash,
+        REMEMBER_TOKEN_MAX_AGE
+      );
+      response.cookies.set(
+        REMEMBER_COOKIE_NAME,
+        rememberToken,
+        getRememberCookieOptions(REMEMBER_TOKEN_MAX_AGE)
+      );
+    } else {
+      const existingRemember = request.cookies.get(REMEMBER_COOKIE_NAME)?.value;
+      if (existingRemember) {
+        invalidateRememberToken(existingRemember);
+      }
+      response.cookies.set(REMEMBER_COOKIE_NAME, "", {
+        ...getRememberCookieOptions(0),
+        maxAge: 0,
+      });
+    }
 
     return response;
   } catch (err: any) {

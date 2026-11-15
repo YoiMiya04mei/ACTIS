@@ -49,8 +49,13 @@ interface UserContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   users: AppUser[];
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  logout: () => Promise<void>;
+  login: (
+    email: string,
+    password: string,
+    rememberMe?: boolean
+  ) => Promise<{ success: boolean; error?: string; rememberMe?: boolean }>;
+  loginWithRememberMe: () => Promise<{ success: boolean; error?: string }>;
+  logout: (options?: { reason?: "timeout" | "manual" }) => Promise<void>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   addUser: (data: { nama: string; email: string; password: string; role: string }) => Promise<{ success: boolean; error?: string; data?: any }>;
   updateUser: (id: string, data: { nama: string; email: string; role: string; password?: string }) => Promise<{ success: boolean; error?: string; data?: any; message?: string }>;
@@ -139,12 +144,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, rememberMe = false) => {
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, rememberMe }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
@@ -163,21 +168,54 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: data.error || "Login gagal. Periksa email dan password Anda." };
       }
 
+      const cleanEmail = String(data.user?.email || email).trim().toLowerCase();
+      try {
+        localStorage.setItem("actis_last_active_timestamp", String(Date.now()));
+        if (rememberMe) {
+          localStorage.setItem("actis_remembered_email", cleanEmail);
+          localStorage.setItem("actis_remember_me", "true");
+        } else {
+          localStorage.removeItem("actis_remembered_email");
+          localStorage.setItem("actis_remember_me", "false");
+        }
+      } catch {}
+
       handleSetUser(data.user);
       await fetchUsers();
 
+      return { success: true, rememberMe: Boolean(data.rememberMe ?? rememberMe) };
+    } catch (err: any) {
+      return { success: false, error: err.message || "Terjadi kesalahan koneksi server." };
+    }
+  };
+
+  const loginWithRememberMe = async () => {
+    try {
+      const res = await fetch("/api/auth/remember", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success || !data.user) {
+        return {
+          success: false,
+          error: data.error || "Sesi Ingat Saya sudah kedaluwarsa. Silakan masuk dengan email dan password.",
+        };
+      }
+
+      const cleanEmail = String(data.user.email || "").trim().toLowerCase();
       try {
-        fetch("/api/logs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            nama_lengkap: data.user.nama,
-            email: data.user.email,
-            tipe: "LOGIN_SUCCESS",
-            aktifitas: `Berhasil login ke aplikasi`,
-          }),
-        }).catch(() => {});
+        localStorage.setItem("actis_last_active_timestamp", String(Date.now()));
+        if (cleanEmail) {
+          localStorage.setItem("actis_remembered_email", cleanEmail);
+        }
+        localStorage.setItem("actis_remember_me", "true");
+        localStorage.setItem("actis_active_user", JSON.stringify(data.user));
       } catch {}
+
+      setCurrentUserState(data.user);
+      setIsAuthenticated(true);
+      await fetchUsers();
 
       return { success: true };
     } catch (err: any) {
@@ -185,21 +223,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const logout = async () => {
+  const logout = async (options?: { reason?: "timeout" | "manual" }) => {
+    const reason = options?.reason || "manual";
     try {
-      if (currentUser) {
-        fetch("/api/logs", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            nama_lengkap: currentUser.nama,
-            email: currentUser.email,
-            tipe: "LOGOUT",
-            aktifitas: `Sesi ditutup — logout dari aplikasi`,
-          }),
-        }).catch(() => {});
-      }
-      await fetch("/api/auth/logout", { method: "POST" });
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
     } catch (e) {
       console.error("Logout error", e);
     } finally {
@@ -315,6 +346,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         users,
         login,
+        loginWithRememberMe,
         logout,
         changePassword,
         addUser,

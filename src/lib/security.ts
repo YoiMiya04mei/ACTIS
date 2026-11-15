@@ -5,11 +5,27 @@ import { prisma } from "@/lib/prisma";
 
 export type UserRole = "admin" | "noc_engineer" | "field_engineer" | "sales_corporate" | "warehouse_admin";
 
+export const REMEMBER_COOKIE_NAME = "actis_remember";
+export const REMEMBER_TOKEN_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+export const DEFAULT_SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+
 export interface SessionPayload {
   id: string;
   nama: string;
   email: string;
   role: string;
+  iat: number;
+  exp: number;
+  jti: string;
+  purpose?: "session";
+  rememberMe?: boolean;
+}
+
+export interface RememberTokenPayload {
+  purpose: "remember_me";
+  id: string;
+  email: string;
+  pwdSig: string;
   iat: number;
   exp: number;
   jti: string;
@@ -90,7 +106,8 @@ export function getSafeSessionSecret(): string {
  */
 export function createSecureSessionToken(
   user: { id: string; nama: string; email: string; role: string },
-  expiresInSeconds = 60 * 60 * 24 * 7 // 7 days default
+  expiresInSeconds = DEFAULT_SESSION_MAX_AGE,
+  extra?: { rememberMe?: boolean }
 ): string {
   const now = Math.floor(Date.now() / 1000);
   const payload: SessionPayload = {
@@ -101,6 +118,8 @@ export function createSecureSessionToken(
     iat: now,
     exp: now + expiresInSeconds,
     jti: crypto.randomBytes(16).toString("hex"),
+    purpose: "session",
+    ...(extra?.rememberMe !== undefined ? { rememberMe: extra.rememberMe } : {}),
   };
 
   const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
@@ -111,7 +130,31 @@ export function createSecureSessionToken(
 }
 
 /**
- * Verifies and decodes a session token. Checks signature, expiry, and revocation.
+ * Computes a server-keyed fingerprint of a user's stored password hash so
+ * Remember Me tokens invalidate automatically whenever the password changes.
+ */
+export function computePasswordFingerprint(passwordHash: string | null | undefined): string {
+  const secret = getSafeSessionSecret();
+  return crypto
+    .createHmac("sha256", secret)
+    .update(`pwd:${passwordHash || ""}`)
+    .digest("base64url");
+}
+
+export function verifyPasswordFingerprint(
+  tokenPwdSig: string | undefined,
+  currentPasswordHash: string | null | undefined
+): boolean {
+  if (!tokenPwdSig || typeof tokenPwdSig !== "string") return false;
+  const expected = computePasswordFingerprint(currentPasswordHash);
+  const actualBuf = Buffer.from(tokenPwdSig);
+  const expectedBuf = Buffer.from(expected);
+  if (actualBuf.length !== expectedBuf.length) return false;
+  return crypto.timingSafeEqual(actualBuf, expectedBuf);
+}
+
+/**
+ * Verifies and decodes a session token. Checks signature, expiry, purpose isolation, and revocation.
  */
 export function verifySecureSessionToken(token: string | null | undefined): SessionPayload | null {
   if (!token || typeof token !== "string") return null;
@@ -135,7 +178,12 @@ export function verifySecureSessionToken(token: string | null | undefined): Sess
 
   try {
     const jsonStr = Buffer.from(payloadB64, "base64url").toString("utf8");
-    const payload = JSON.parse(jsonStr) as SessionPayload;
+    const payload = JSON.parse(jsonStr) as SessionPayload & { purpose?: string };
+
+    // Prevent token-type confusion: remember_me tokens must never act as session tokens
+    if (payload.purpose && payload.purpose !== "session") {
+      return null;
+    }
 
     const now = Math.floor(Date.now() / 1000);
     // Expiration check
@@ -161,6 +209,88 @@ export function revokeSessionToken(token: string | null | undefined): void {
   const session = verifySecureSessionToken(token);
   if (session && session.jti) {
     revokedTokens.set(session.jti, session.exp);
+  }
+}
+
+/**
+ * Creates a signed, tamper-proof Remember Me token bound to user's password fingerprint.
+ */
+export function createRememberMeToken(
+  user: { id: string; email: string },
+  passwordHash: string | null | undefined,
+  expiresInSeconds = REMEMBER_TOKEN_MAX_AGE
+): string {
+  const now = Math.floor(Date.now() / 1000);
+  const payload: RememberTokenPayload = {
+    purpose: "remember_me",
+    id: user.id,
+    email: user.email,
+    pwdSig: computePasswordFingerprint(passwordHash),
+    iat: now,
+    exp: now + expiresInSeconds,
+    jti: crypto.randomBytes(16).toString("hex"),
+  };
+
+  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const secret = getSafeSessionSecret();
+  const signature = crypto.createHmac("sha256", secret).update(payloadB64).digest("base64url");
+
+  return `${payloadB64}.${signature}`;
+}
+
+/**
+ * Verifies a Remember Me token signature, purpose, expiration, and revocation list.
+ */
+export function verifyRememberMeToken(token: string | null | undefined): RememberTokenPayload | null {
+  if (!token || typeof token !== "string") return null;
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+
+  const [payloadB64, signature] = parts;
+  let secret: string;
+  try {
+    secret = getSafeSessionSecret();
+  } catch {
+    return null;
+  }
+
+  const expectedSignature = crypto.createHmac("sha256", secret).update(payloadB64).digest("base64url");
+  const sigBuffer = Buffer.from(signature);
+  const expBuffer = Buffer.from(expectedSignature);
+
+  if (sigBuffer.length !== expBuffer.length) return null;
+  if (!crypto.timingSafeEqual(sigBuffer, expBuffer)) return null;
+
+  try {
+    const jsonStr = Buffer.from(payloadB64, "base64url").toString("utf8");
+    const payload = JSON.parse(jsonStr) as RememberTokenPayload;
+
+    if (payload.purpose !== "remember_me" || !payload.id || !payload.email || !payload.pwdSig) {
+      return null;
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    if (!payload.exp || now > payload.exp) {
+      return null;
+    }
+
+    if (payload.jti && revokedTokens.has(payload.jti)) {
+      return null;
+    }
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Revokes a Remember Me token so it cannot be replayed again.
+ */
+export function revokeRememberMeToken(token: string | null | undefined): void {
+  const remembered = verifyRememberMeToken(token);
+  if (remembered && remembered.jti) {
+    revokedTokens.set(remembered.jti, remembered.exp);
   }
 }
 
@@ -251,7 +381,20 @@ export async function requireAuth(
 /**
  * Standard secure session cookie options.
  */
-export function getSessionCookieOptions(maxAgeSeconds = 60 * 60 * 24 * 7) {
+export function getSessionCookieOptions(maxAgeSeconds = DEFAULT_SESSION_MAX_AGE) {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: maxAgeSeconds,
+  };
+}
+
+/**
+ * Standard secure Remember Me cookie options (HttpOnly, SameSite=Lax).
+ */
+export function getRememberCookieOptions(maxAgeSeconds = REMEMBER_TOKEN_MAX_AGE) {
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -426,4 +569,15 @@ export function validateUploadedBuffer(
     valid: false,
     error: "Signature file tidak cocok dengan tipe file yang diizinkan. Upload dibatalkan.",
   };
+}
+
+/**
+ * Extracts best-effort client IP from reverse proxy headers.
+ */
+export function getRequestClientIp(request: NextRequest): string {
+  const forwarded = request.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  const realIp = request.headers.get("x-real-ip");
+  if (realIp) return realIp.trim();
+  return "103.155.196.63";
 }

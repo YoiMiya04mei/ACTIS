@@ -3,7 +3,12 @@ import {
   createSecureSessionToken,
   verifySecureSessionToken,
   revokeSessionToken,
+  createRememberMeToken,
+  verifyRememberMeToken,
+  revokeRememberMeToken,
+  verifyPasswordFingerprint,
   getSafeSessionSecret,
+  type RememberTokenPayload,
 } from "@/lib/security";
 
 export interface SessionUser {
@@ -14,6 +19,7 @@ export interface SessionUser {
   exp?: number;
   iat?: number;
   jti?: string;
+  rememberMe?: boolean;
 }
 
 /**
@@ -57,8 +63,12 @@ export function verifyPassword(
 /**
  * Create a secure, tamper-proof session token with expiration and JTI.
  */
-export function createSessionToken(user: SessionUser): string {
-  return createSecureSessionToken(user);
+export function createSessionToken(
+  user: SessionUser,
+  expiresInSeconds?: number,
+  extra?: { rememberMe?: boolean }
+): string {
+  return createSecureSessionToken(user, expiresInSeconds, extra);
 }
 
 /**
@@ -77,6 +87,7 @@ export function verifySessionToken(token: string | null | undefined): SessionUse
     exp: verified.exp,
     iat: verified.iat,
     jti: verified.jti,
+    rememberMe: verified.rememberMe,
   };
 }
 
@@ -87,4 +98,29 @@ export function invalidateSessionToken(token: string | null | undefined): void {
   revokeSessionToken(token);
 }
 
-export { getSafeSessionSecret };
+/**
+ * Create a cryptographic Remember Me token bound to user's password fingerprint.
+ */
+export function createRememberToken(
+  user: { id: string; email: string },
+  passwordHash: string | null | undefined,
+  expiresInSeconds?: number
+): string {
+  return createRememberMeToken(user, passwordHash, expiresInSeconds);
+}
+
+/**
+ * Verify a cryptographic Remember Me token.
+ */
+export function verifyRememberToken(token: string | null | undefined): RememberTokenPayload | null {
+  return verifyRememberMeToken(token);
+}
+
+/**
+ * Revoke a Remember Me token.
+ */
+export function invalidateRememberToken(token: string | null | undefined): void {
+  revokeRememberMeToken(token);
+}
+
+export { getSafeSessionSecret, verifyPasswordFingerprint };

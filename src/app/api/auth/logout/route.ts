@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifySessionToken, invalidateSessionToken } from "@/lib/auth";
+import { verifySessionToken, invalidateSessionToken, invalidateRememberToken } from "@/lib/auth";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
-import { getSessionCookieOptions } from "@/lib/security";
+import { getSessionCookieOptions, getRememberCookieOptions, REMEMBER_COOKIE_NAME } from "@/lib/security";
 
 function getClientIp(req: NextRequest): string {
   const forwarded = req.headers.get("x-forwarded-for");
@@ -12,13 +12,16 @@ function getClientIp(req: NextRequest): string {
 }
 
 export async function POST(request: NextRequest) {
+  const body = await request.json().catch(() => ({}));
+  const isIdleTimeout = body?.reason === "timeout";
+
   const sessionCookie = request.cookies.get("actis_session")?.value;
   const sessionUser = verifySessionToken(sessionCookie);
   const clientIp = getClientIp(request);
   const userAgent = parseUserAgent(request.headers.get("user-agent"));
 
   if (sessionUser) {
-    // Cryptographically revoke the token so it cannot be re-used
+    // Cryptographically revoke the session token so it cannot be re-used
     invalidateSessionToken(sessionCookie);
 
     recordActivity({
@@ -26,7 +29,9 @@ export async function POST(request: NextRequest) {
       email: sessionUser.email,
       ip_address: clientIp,
       tipe: "LOGOUT",
-      aktifitas: `Sesi ditutup — logout dari aplikasi — ${userAgent}`,
+      aktifitas: isIdleTimeout
+        ? `Sesi ditutup otomatis (idle timeout) — logout dari aplikasi — ${userAgent}`
+        : `Sesi ditutup — logout dari aplikasi — ${userAgent}`,
       user_agent: userAgent,
     }).catch(() => {});
   }
@@ -34,13 +39,27 @@ export async function POST(request: NextRequest) {
   const response = NextResponse.json({
     success: true,
     message: "Logout berhasil.",
+    preservedRememberMe: isIdleTimeout,
   });
 
-  // Clear cookie completely
+  // Always clear active session cookie
   response.cookies.set("actis_session", "", {
     ...getSessionCookieOptions(0),
     maxAge: 0,
   });
+
+  // Preserve Remember Me quick-login token across idle timeouts,
+  // but revoke and clear it on explicit manual logout for shared-PC safety.
+  if (!isIdleTimeout) {
+    const rememberCookie = request.cookies.get(REMEMBER_COOKIE_NAME)?.value;
+    if (rememberCookie) {
+      invalidateRememberToken(rememberCookie);
+    }
+    response.cookies.set(REMEMBER_COOKIE_NAME, "", {
+      ...getRememberCookieOptions(0),
+      maxAge: 0,
+    });
+  }
 
   return response;
 }

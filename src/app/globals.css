@@ -4,6 +4,8 @@
 
 :root {
   color-scheme: light dark;
+  --brand-color: light-dark(#2563eb, #60a5fa);
+  accent-color: #2563eb;
   --foreground-rgb: 15, 23, 42;
   --background-start-rgb: 248, 250, 252;
   --background-end-rgb: 241, 245, 249;
@@ -619,5 +621,106 @@ dialog.actis-dialog[open]:where(:not([data-closing]))::backdrop {
   dialog.actis-dialog,
   dialog.actis-dialog::backdrop {
     transition-duration: 0.1s;
+  }
+}
+
+/* ========================================================================== */
+/* AUTOFILL HIGHLIGHT & BRAND-CONSISTENT CHECKBOX FALLBACKS                   */
+/* ========================================================================== */
+
+/* Non-color inset indicator + legible surface on browser autofill (no layout shift) */
+input:is(:autofill, :-webkit-autofill) {
+  box-shadow:
+    inset 0 0 0 2px #3b82f6,
+    inset 0 0 0 100vmax #eff6ff;
+  -webkit-text-fill-color: #0f172a;
+  caret-color: #0f172a;
+  border-color: #3b82f6;
+}
+
+input:is(:autofill, :-webkit-autofill):focus-visible {
+  outline: 3px solid #1d4ed8;
+  outline-offset: 2px;
+}
+
+html.dark input:is(:autofill, :-webkit-autofill) {
+  box-shadow:
+    inset 0 0 0 2px #60a5fa,
+    inset 0 0 0 100vmax #141c28;
+  -webkit-text-fill-color: #d8e0eb;
+  caret-color: #d8e0eb;
+  border-color: #60a5fa;
+}
+
+html.dark input:is(:autofill, :-webkit-autofill):focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+/* Custom checkbox fallback strictly for older browsers lacking CSS accent-color */
+@supports not (accent-color: #2563eb) {
+  input[type="checkbox"].actis-brand-checkbox {
+    position: absolute !important;
+    clip-path: inset(50%) !important;
+    overflow: hidden !important;
+    width: 1px !important;
+    height: 1px !important;
+    margin: -1px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    white-space: nowrap !important;
+  }
+
+  .actis-remember-label {
+    position: relative;
+    padding-left: 1.75rem;
+    cursor: pointer;
+    display: inline-flex;
+    flex-direction: column;
+  }
+
+  input[type="checkbox"].actis-brand-checkbox + .actis-remember-label::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.125rem;
+    width: 1.125rem;
+    height: 1.125rem;
+    border: 2px solid #64748b;
+    background: #ffffff;
+    border-radius: 0.25rem;
+    box-sizing: border-box;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+
+  html.dark input[type="checkbox"].actis-brand-checkbox + .actis-remember-label::before {
+    border-color: #5a6f8c;
+    background: #121822;
+  }
+
+  input[type="checkbox"].actis-brand-checkbox:focus-visible + .actis-remember-label::before {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
+
+  input[type="checkbox"].actis-brand-checkbox:checked + .actis-remember-label::before {
+    background-color: #2563eb;
+    border-color: #2563eb;
+  }
+
+  html.dark input[type="checkbox"].actis-brand-checkbox:checked + .actis-remember-label::before {
+    background-color: #60a5fa;
+    border-color: #60a5fa;
+  }
+
+  input[type="checkbox"].actis-brand-checkbox:checked + .actis-remember-label::after {
+    content: "\2713";
+    position: absolute;
+    left: 0.22rem;
+    top: 0.02rem;
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 0.85rem;
+    line-height: 1.125rem;
   }
 }
