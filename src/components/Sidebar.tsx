@@ -112,7 +112,7 @@ export function Sidebar({
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 w-64 lg:w-72 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col transition-all duration-300 ease-in-out shadow-sm ${
+        className={`fixed top-0 bottom-0 left-0 z-50 w-64 lg:w-72 bg-white dark:bg-slate-900/95 dark:backdrop-blur-md border-r border-slate-200 dark:border-slate-700/80 flex flex-col transition-all duration-300 ease-in-out shadow-sm ${
           isOpenMobile ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
       >

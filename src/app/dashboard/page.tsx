@@ -365,7 +365,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8 pb-12">
       {/* Top Welcome & Summary Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 dark:from-[#162032] dark:via-[#192640] dark:to-[#1d2842] text-white p-6 md:p-8 shadow-lg border border-slate-800 dark:border-slate-700/70">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-blue-950 to-indigo-950 dark:from-[#0f1933] dark:via-[#162652] dark:to-[#192652] text-white p-6 md:p-8 shadow-lg border border-slate-800 dark:border-slate-700/80">
         <div className="absolute right-0 top-0 -mt-10 -mr-10 w-72 h-72 rounded-full bg-blue-500/5 blur-3xl pointer-events-none" />
         <div className="absolute left-1/3 bottom-0 -mb-10 w-64 h-64 rounded-full bg-indigo-500/5 blur-3xl pointer-events-none" />
 

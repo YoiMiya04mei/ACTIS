@@ -54,14 +54,14 @@ export function AppShell({ children }: AppShellProps) {
   // If verifying authentication state, show loading indicator
   if (isLoading && !isAuthenticated) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen w-full bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col md:flex-row transition-colors duration-150">
+    <div className="min-h-screen w-full bg-slate-50 dark:bg-transparent text-slate-900 dark:text-slate-100 flex flex-col md:flex-row transition-colors duration-150">
       {/* Automatic Inactivity / Idle Session Logout Watcher */}
       <IdleSessionManager />
 
@@ -82,7 +82,7 @@ export function AppShell({ children }: AppShellProps) {
         </main>
 
         {/* Global Footer */}
-        <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-xs py-4 px-6 text-center mt-auto transition-colors duration-150">
+        <footer className="bg-white dark:bg-slate-900/90 dark:backdrop-blur-md border-t border-slate-200 dark:border-slate-700/80 text-slate-500 dark:text-slate-400 text-xs py-4 px-6 text-center mt-auto transition-colors duration-150">
           <p>
             <Link
               href="/admin/updates"

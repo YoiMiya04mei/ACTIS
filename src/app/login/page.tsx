@@ -195,9 +195,9 @@ export default function LoginPage() {
   const isBusy = loading || quickLoading || forgettingAccount || success;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 dark:from-[#10151f] dark:via-[#152033] dark:to-[#111722] flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 dark:from-[#0c1426] dark:via-[#132042] dark:to-[#0d162c] flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 relative overflow-hidden">
       {/* Background Glow */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-600/15 dark:bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-blue-600/15 dark:bg-blue-500/14 rounded-full blur-3xl pointer-events-none" />
 
       <div className="w-full max-w-md relative z-10">
         {/* Brand Header */}
@@ -217,7 +217,7 @@ export default function LoginPage() {
         </div>
 
         {/* Login Card */}
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-100 dark:border-slate-800">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-100 dark:border-slate-700/80">
           <div className="mb-5">
             <h2 id="login-heading" className="text-xl font-bold text-slate-900 dark:text-slate-100">
               Masuk ke Sistem

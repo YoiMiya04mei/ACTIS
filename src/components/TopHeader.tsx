@@ -59,7 +59,7 @@ export function TopHeader({ onOpenMobileSidebar }: TopHeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200/90 dark:border-slate-800 h-16 px-4 sm:px-6 lg:px-8 2xl:px-10 flex items-center justify-between gap-3 shadow-xs w-full transition-colors duration-150">
+    <header className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/90 dark:border-slate-700/80 h-16 px-4 sm:px-6 lg:px-8 2xl:px-10 flex items-center justify-between gap-3 shadow-xs w-full transition-colors duration-150">
       {/* Left: Mobile Toggle & Live WIB Date/Time + Logged-in User */}
       <div className="flex items-center space-x-3 min-w-0">
         <button
