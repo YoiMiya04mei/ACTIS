@@ -3,26 +3,52 @@
 import React, { useEffect, useId, useRef } from "react";
 import { AlertTriangle, Trash2, X } from "lucide-react";
 
+export type DeleteTargetEntity = "IN" | "OUT" | "MOVEMENTS" | "AUDITS";
+
+export type DeleteDialogTarget =
+  | {
+      scope: "single";
+      entity: "IN" | "OUT";
+      id: string;
+      transaction_number: string;
+      warehouse_officer?: string | null;
+      pic_name?: string | null;
+    }
+  | {
+      scope: "selected";
+      entity: DeleteTargetEntity;
+      ids: string[];
+    }
+  | {
+      scope: "all";
+      entity: DeleteTargetEntity;
+      totalCount?: number;
+      allowClearBothHistoryTabs?: boolean;
+      clearBothHistoryTabs?: boolean;
+      onToggleClearBothHistoryTabs?: (val: boolean) => void;
+    };
+
 interface DeleteTransactionDialogProps {
-  transaction: {
-    id: string;
-    transaction_number: string;
-    type: "IN" | "OUT";
-    warehouse_officer?: string | null;
-    pic_name?: string | null;
-  } | null;
+  target: DeleteDialogTarget | null;
   deleting: boolean;
   error: string | null;
   onCancel: () => void;
   onConfirm: () => void;
 }
 
+const ENTITY_LABELS: Record<DeleteTargetEntity, string> = {
+  IN: "Riwayat Transaksi Barang Masuk",
+  OUT: "Riwayat Transaksi Barang Keluar",
+  MOVEMENTS: "Riwayat Pergerakan Fisik Stok (Movements)",
+  AUDITS: "Log Audit & Perubahan Data (Audit Trail)",
+};
+
 /**
  * Destructive confirmation modal using native <dialog>.
  * Keeps focus initially on the safe Cancel button per modern accessibility guidance.
  */
 export function DeleteTransactionDialog({
-  transaction,
+  target,
   deleting,
   error,
   onCancel,
@@ -30,7 +56,7 @@ export function DeleteTransactionDialog({
 }: DeleteTransactionDialogProps) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const titleId = useId();
-  const isOpen = Boolean(transaction);
+  const isOpen = Boolean(target);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -47,7 +73,7 @@ export function DeleteTransactionDialog({
     if (dialogRef.current) {
       dialogRef.current.returnValue = "";
     }
-    if (transaction && !deleting) {
+    if (target && !deleting) {
       onCancel();
     }
   };
@@ -58,7 +84,42 @@ export function DeleteTransactionDialog({
     }
   };
 
-  const isOut = transaction?.type === "OUT";
+  const renderTitle = () => {
+    if (!target) return "";
+    if (target.scope === "single") {
+      return `Hapus Riwayat Transaksi ${target.entity === "OUT" ? "Barang Keluar" : "Barang Masuk"}?`;
+    }
+    if (target.scope === "selected") {
+      return `Hapus ${target.ids.length} Data Terpilih?`;
+    }
+    if (target.allowClearBothHistoryTabs && target.clearBothHistoryTabs) {
+      return "Hapus Keseluruhan Riwayat Transaksi & Audit Log?";
+    }
+    return `Hapus Keseluruhan ${ENTITY_LABELS[target.entity]}?`;
+  };
+
+  const renderImpactNote = () => {
+    if (!target) return null;
+    if (target.entity === "OUT") {
+      return (
+        <>
+          Saldo <strong>Stok Inventory</strong>, status Serial Number terkait, riwayat pemakaian client, dan data pengembalian dari transaksi keluar yang dihapus akan otomatis dikembalikan ke kondisi sebelum barang keluar.
+        </>
+      );
+    }
+    if (target.entity === "IN") {
+      return (
+        <>
+          Saldo <strong>Stok Inventory</strong> dan Serial Number dari transaksi masuk yang dihapus akan otomatis dikurangi/dibatalkan. Penghapusan ditolak bila stok atau SN sudah terpakai di transaksi keluar.
+        </>
+      );
+    }
+    return (
+      <>
+        Catatan log histori yang dihapus tidak akan mengubah saldo fisik <strong>Stok Inventory</strong> yang sedang berjalan, namun tidak dapat dipulihkan setelah dihapus.
+      </>
+    );
+  };
 
   return (
     <dialog
@@ -69,7 +130,7 @@ export function DeleteTransactionDialog({
       onClose={handleClose}
       className="actis-dialog m-auto w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 shadow-2xl p-0 overflow-hidden"
     >
-      {transaction && (
+      {target && (
         <div className="flex flex-col">
           <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-slate-100 dark:border-slate-800 bg-rose-50/60 dark:bg-rose-950/20">
             <div className="flex items-center gap-2.5">
@@ -81,11 +142,17 @@ export function DeleteTransactionDialog({
                   id={titleId}
                   className="text-sm font-extrabold text-slate-900 dark:text-slate-100"
                 >
-                  Hapus Riwayat Transaksi {isOut ? "Barang Keluar" : "Barang Masuk"}?
+                  {renderTitle()}
                 </h2>
-                <p className="font-mono text-xs font-bold text-rose-600 dark:text-rose-400">
-                  {transaction.transaction_number}
-                </p>
+                {target.scope === "single" ? (
+                  <p className="font-mono text-xs font-bold text-rose-600 dark:text-rose-400">
+                    {target.transaction_number}
+                  </p>
+                ) : (
+                  <p className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
+                    {ENTITY_LABELS[target.entity]}
+                  </p>
+                )}
               </div>
             </div>
             <button
@@ -100,25 +167,56 @@ export function DeleteTransactionDialog({
           </div>
 
           <div className="p-5 space-y-3 text-xs text-slate-600 dark:text-slate-300">
-            <p className="leading-relaxed">
-              Transaksi <strong className="font-mono text-slate-900 dark:text-slate-100">{transaction.transaction_number}</strong>{" "}
-              {isOut && transaction.pic_name
-                ? `(PIC: ${transaction.pic_name})`
-                : transaction.warehouse_officer
-                  ? `(Petugas: ${transaction.warehouse_officer})`
-                  : ""}{" "}
-              akan dihapus secara permanen.
-            </p>
+            {target.scope === "single" && (
+              <p className="leading-relaxed">
+                Transaksi{" "}
+                <strong className="font-mono text-slate-900 dark:text-slate-100">
+                  {target.transaction_number}
+                </strong>{" "}
+                {target.entity === "OUT" && target.pic_name
+                  ? `(PIC: ${target.pic_name})`
+                  : target.warehouse_officer
+                    ? `(Petugas: ${target.warehouse_officer})`
+                    : ""}{" "}
+                akan dihapus secara permanen.
+              </p>
+            )}
+
+            {target.scope === "selected" && (
+              <p className="leading-relaxed">
+                Sebanyak <strong className="text-slate-900 dark:text-slate-100">{target.ids.length}</strong> data terpilih dari{" "}
+                <strong>{ENTITY_LABELS[target.entity]}</strong> akan dihapus secara permanen.
+              </p>
+            )}
+
+            {target.scope === "all" && (
+              <p className="leading-relaxed">
+                Seluruh data{" "}
+                <strong className="text-slate-900 dark:text-slate-100">
+                  {target.allowClearBothHistoryTabs && target.clearBothHistoryTabs
+                    ? "Riwayat Pergerakan Fisik Stok (Movements) dan Log Audit (Audit Trail)"
+                    : ENTITY_LABELS[target.entity]}
+                </strong>{" "}
+                akan dihapus secara keseluruhan.
+              </p>
+            )}
+
+            {target.scope === "all" && target.allowClearBothHistoryTabs && (
+              <label className="flex items-start gap-2.5 p-3 rounded-xl border border-rose-200/80 dark:border-rose-800/60 bg-rose-50/40 dark:bg-rose-950/20 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Boolean(target.clearBothHistoryTabs)}
+                  onChange={(e) => target.onToggleClearBothHistoryTabs?.(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500"
+                />
+                <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-200 leading-snug">
+                  Sekaligus hapus keseluruhan kedua tab (Pergerakan Stok &amp; Log Audit)
+                </span>
+              </label>
+            )}
+
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 text-[11px] leading-relaxed">
-              {isOut ? (
-                <>
-                  Saldo <strong>Stok Inventory</strong>, status Serial Number terkait, riwayat pemakaian client, dan data pengembalian dari transaksi ini akan otomatis dikembalikan ke kondisi sebelum barang keluar.
-                </>
-              ) : (
-                <>
-                  Saldo <strong>Stok Inventory</strong> dan Serial Number yang berasal dari transaksi masuk ini akan otomatis dikurangi/dibatalkan. Penghapusan ditolak bila stok atau SN sudah terpakai di transaksi keluar.
-                </>
-              )}
+              {renderImpactNote()}
             </div>
 
             {error && (
@@ -150,7 +248,13 @@ export function DeleteTransactionDialog({
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition disabled:opacity-50 cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              {deleting ? "Menghapus..." : "Ya, Hapus Transaksi"}
+              {deleting
+                ? "Menghapus..."
+                : target.scope === "all"
+                  ? "Ya, Hapus Semua"
+                  : target.scope === "selected"
+                    ? `Ya, Hapus (${target.ids.length})`
+                    : "Ya, Hapus Transaksi"}
             </button>
           </div>
         </div>

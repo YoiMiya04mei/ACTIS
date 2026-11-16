@@ -15,6 +15,7 @@ import { fetchActiveMasterItems } from "@/lib/inventoryMasterSync";
 import { useRealtimeMasterItems } from "@/hooks/useRealtimeMasterItems";
 import { useDeleteInventoryTransaction } from "@/hooks/useDeleteInventoryTransaction";
 import { DeleteTransactionDialog } from "@/components/inventory/DeleteTransactionDialog";
+import { HistoryBulkActionsBar } from "@/components/inventory/HistoryBulkActionsBar";
 
 interface ItemOption {
   id: string;
@@ -85,16 +86,24 @@ export default function BarangMasukPage() {
   }, [fetchData]);
 
   const {
-    txToDelete,
-    deletingTx,
+    selectedIds,
+    deleteTarget,
+    deleting,
     deleteError,
-    openDeleteDialog,
+    toggleSelectOne,
+    toggleSelectAll,
+    openSingleDelete,
+    openSelectedDelete,
+    openAllDelete,
     closeDeleteDialog,
     confirmDelete,
   } = useDeleteInventoryTransaction({
     isAdministrator,
-    onSuccess: (deletedId, message) => {
-      if (selectedTx?.id === deletedId) setSelectedTx(null);
+    entity: "IN",
+    onSuccess: (deletedIds, message) => {
+      if (selectedTx && (deletedIds === "ALL" || deletedIds.includes(selectedTx.id))) {
+        setSelectedTx(null);
+      }
       setNotification({ type: "success", message });
       fetchData();
     },
@@ -553,13 +562,23 @@ export default function BarangMasukPage() {
 
       {/* Recent In Transactions Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm space-y-3 p-5">
-        <h2
-          id="recent-in-transactions-heading"
-          className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center"
-        >
-          <ArrowDownLeft className="w-4 h-4 mr-2 text-emerald-600" />
-          Riwayat Transaksi Barang Masuk
-        </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <h2
+            id="recent-in-transactions-heading"
+            className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center"
+          >
+            <ArrowDownLeft className="w-4 h-4 mr-2 text-emerald-600" />
+            Riwayat Transaksi Barang Masuk
+          </h2>
+
+          <HistoryBulkActionsBar
+            visible={isAdministrator}
+            selectedCount={selectedIds.length}
+            hasItems={recentTransactions.length > 0}
+            onDeleteSelected={openSelectedDelete}
+            onDeleteAll={() => openAllDelete(recentTransactions.length)}
+          />
+        </div>
 
         <div
           tabIndex={0}
@@ -570,6 +589,20 @@ export default function BarangMasukPage() {
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800/60 font-bold text-[10px] text-slate-600 dark:text-slate-300 uppercase border-b border-slate-200/80 dark:border-slate-800">
               <tr>
+                {isAdministrator && (
+                  <th scope="col" className="py-2.5 px-3 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      aria-label="Pilih semua transaksi barang masuk"
+                      checked={
+                        recentTransactions.length > 0 &&
+                        recentTransactions.every((t) => selectedIds.includes(t.id))
+                      }
+                      onChange={() => toggleSelectAll(recentTransactions.map((t) => t.id))}
+                      className="w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                    />
+                  </th>
+                )}
                 <th scope="col" className="py-2.5 px-3">No. Transaksi</th>
                 <th scope="col" className="py-2.5 px-3">Nama Barang</th>
                 <th scope="col" className="py-2.5 px-3">Petugas Gudang</th>
@@ -587,7 +620,7 @@ export default function BarangMasukPage() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {recentTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdministrator ? 8 : 7} className="py-8 text-center text-slate-400">
+                  <td colSpan={isAdministrator ? 9 : 7} className="py-8 text-center text-slate-400">
                     Belum ada riwayat transaksi barang masuk.
                   </td>
                 </tr>
@@ -617,6 +650,17 @@ export default function BarangMasukPage() {
 
                   return (
                     <tr key={tx.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition">
+                      {isAdministrator && (
+                        <td className="py-2.5 px-3 text-center">
+                          <input
+                            type="checkbox"
+                            aria-label={`Pilih transaksi ${tx.transaction_number}`}
+                            checked={selectedIds.includes(tx.id)}
+                            onChange={() => toggleSelectOne(tx.id)}
+                            className="w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                          />
+                        </td>
+                      )}
                       <th scope="row" className="py-2.5 px-3 font-normal text-left whitespace-nowrap">
                         <button
                           type="button"
@@ -660,7 +704,7 @@ export default function BarangMasukPage() {
                           <button
                             type="button"
                             onClick={() =>
-                              openDeleteDialog({
+                              openSingleDelete({
                                 id: tx.id,
                                 transaction_number: tx.transaction_number,
                                 type: "IN",
@@ -773,8 +817,8 @@ export default function BarangMasukPage() {
         </div>
       )}
       <DeleteTransactionDialog
-        transaction={txToDelete}
-        deleting={deletingTx}
+        target={deleteTarget}
+        deleting={deleting}
         error={deleteError}
         onCancel={closeDeleteDialog}
         onConfirm={confirmDelete}

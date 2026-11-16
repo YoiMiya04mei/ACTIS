@@ -15,13 +15,23 @@ import {
   FileText,
   User,
   ShieldCheck,
+  AlertTriangle,
+  CheckCircle2,
 } from "lucide-react";
+import { useCurrentUser } from "@/context/UserContext";
+import { useDeleteInventoryTransaction } from "@/hooks/useDeleteInventoryTransaction";
+import { DeleteTransactionDialog } from "@/components/inventory/DeleteTransactionDialog";
+import { HistoryBulkActionsBar } from "@/components/inventory/HistoryBulkActionsBar";
 
 export default function RiwayatTransaksiPage() {
+  const { currentUser } = useCurrentUser();
+  const isAdministrator = currentUser?.role === "admin";
+
   const [activeTab, setActiveTab] = useState<"movements" | "audits">("movements");
   const [dataList, setDataList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Filters
   const [search, setSearch] = useState("");
@@ -45,7 +55,7 @@ export default function RiwayatTransaksiPage() {
         limit: "25",
       });
 
-      const res = await fetch(`/api/inventory/history?${params.toString()}`);
+      const res = await fetch(`/api/inventory/history?${params.toString()}`, { cache: "no-store" });
       const json = await res.json();
       if (json.success) {
         setDataList(json.data);
@@ -60,6 +70,30 @@ export default function RiwayatTransaksiPage() {
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
+
+  const {
+    selectedIds,
+    deleteTarget,
+    deleting,
+    deleteError,
+    toggleSelectOne,
+    toggleSelectAll,
+    clearSelection,
+    openSelectedDelete,
+    openAllDelete,
+    closeDeleteDialog,
+    confirmDelete,
+  } = useDeleteInventoryTransaction({
+    isAdministrator,
+    entity: activeTab === "audits" ? "AUDITS" : "MOVEMENTS",
+    onSuccess: (deletedIds, message) => {
+      if (selectedAudit && (deletedIds === "ALL" || deletedIds.includes(selectedAudit.id))) {
+        setSelectedAudit(null);
+      }
+      setNotification({ type: "success", message });
+      fetchHistory();
+    },
+  });
 
   return (
     <div className="space-y-6 pb-12 animate-fadeIn">
@@ -92,12 +126,35 @@ export default function RiwayatTransaksiPage() {
         </button>
       </div>
 
+      {notification && (
+        <div
+          className={`p-4 rounded-xl border text-sm flex items-center justify-between ${
+            notification.type === "success"
+              ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 text-emerald-800 dark:text-emerald-200"
+              : "bg-rose-50 dark:bg-rose-950/40 border-rose-200 text-rose-800 dark:text-rose-200"
+          }`}
+        >
+          <div className="flex items-center space-x-2">
+            {notification.type === "success" ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+            )}
+            <span className="font-medium">{notification.message}</span>
+          </div>
+          <button onClick={() => setNotification(null)} className="text-slate-400 hover:text-slate-600">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="flex space-x-2 border-b border-slate-200 dark:border-slate-800">
         <button
           onClick={() => {
             setActiveTab("movements");
             setPage(1);
+            clearSelection();
           }}
           className={`pb-3 px-4 text-xs font-bold transition border-b-2 ${
             activeTab === "movements"
@@ -111,6 +168,7 @@ export default function RiwayatTransaksiPage() {
           onClick={() => {
             setActiveTab("audits");
             setPage(1);
+            clearSelection();
           }}
           className={`pb-3 px-4 text-xs font-bold transition border-b-2 ${
             activeTab === "audits"
@@ -167,10 +225,37 @@ export default function RiwayatTransaksiPage() {
       {/* Table: Movements */}
       {activeTab === "movements" && (
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+          <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <History className="w-4 h-4 text-blue-600" />
+              Pergerakan Fisik Stok
+            </h2>
+            <HistoryBulkActionsBar
+              visible={isAdministrator}
+              selectedCount={selectedIds.length}
+              hasItems={dataList.length > 0}
+              onDeleteSelected={openSelectedDelete}
+              onDeleteAll={() => openAllDelete(totalCount)}
+            />
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 dark:bg-slate-800/60 font-bold text-[10px] text-slate-600 uppercase border-b">
                 <tr>
+                  {isAdministrator && (
+                    <th className="py-3 px-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label="Pilih semua riwayat pergerakan stok"
+                        checked={
+                          dataList.length > 0 &&
+                          dataList.every((m) => selectedIds.includes(m.id))
+                        }
+                        onChange={() => toggleSelectAll(dataList.map((m) => m.id))}
+                        className="w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                      />
+                    </th>
+                  )}
                   <th className="py-3 px-4">Waktu</th>
                   <th className="py-3 px-4">Nama & Kode Barang</th>
                   <th className="py-3 px-4">Tipe Mutasi</th>
@@ -184,14 +269,14 @@ export default function RiwayatTransaksiPage() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400">
+                    <td colSpan={isAdministrator ? 9 : 8} className="py-12 text-center text-slate-400">
                       <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
                       Memuat riwayat pergerakan stok...
                     </td>
                   </tr>
                 ) : dataList.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-slate-400">
+                    <td colSpan={isAdministrator ? 9 : 8} className="py-12 text-center text-slate-400">
                       Tidak ada catatan pergerakan stok.
                     </td>
                   </tr>
@@ -201,6 +286,17 @@ export default function RiwayatTransaksiPage() {
 
                     return (
                       <tr key={m.id} className="hover:bg-slate-50/70 transition">
+                        {isAdministrator && (
+                          <td className="py-3 px-3 text-center">
+                            <input
+                              type="checkbox"
+                              aria-label={`Pilih mutasi ${m.item?.name || m.id}`}
+                              checked={selectedIds.includes(m.id)}
+                              onChange={() => toggleSelectOne(m.id)}
+                              className="w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                            />
+                          </td>
+                        )}
                         <td className="py-3 px-4 font-mono text-slate-500 text-[11px]">
                           {new Date(m.created_at).toLocaleString("id-ID")}
                         </td>
@@ -272,10 +368,37 @@ export default function RiwayatTransaksiPage() {
       {/* Table: Audits */}
       {activeTab === "audits" && (
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+          <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-blue-600" />
+              Log Audit &amp; Perubahan Data
+            </h2>
+            <HistoryBulkActionsBar
+              visible={isAdministrator}
+              selectedCount={selectedIds.length}
+              hasItems={dataList.length > 0}
+              onDeleteSelected={openSelectedDelete}
+              onDeleteAll={() => openAllDelete(totalCount)}
+            />
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 dark:bg-slate-800/60 font-bold text-[10px] text-slate-600 uppercase border-b">
                 <tr>
+                  {isAdministrator && (
+                    <th className="py-3 px-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label="Pilih semua catatan audit log"
+                        checked={
+                          dataList.length > 0 &&
+                          dataList.every((a) => selectedIds.includes(a.id))
+                        }
+                        onChange={() => toggleSelectAll(dataList.map((a) => a.id))}
+                        className="w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                      />
+                    </th>
+                  )}
                   <th className="py-3 px-4">Waktu</th>
                   <th className="py-3 px-4">User</th>
                   <th className="py-3 px-4">Aksi</th>
@@ -287,20 +410,31 @@ export default function RiwayatTransaksiPage() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                    <td colSpan={isAdministrator ? 7 : 6} className="py-12 text-center text-slate-400">
                       <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
                       Memuat log audit...
                     </td>
                   </tr>
                 ) : dataList.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                    <td colSpan={isAdministrator ? 7 : 6} className="py-12 text-center text-slate-400">
                       Tidak ada catatan audit log.
                     </td>
                   </tr>
                 ) : (
                   dataList.map((a) => (
                     <tr key={a.id} className="hover:bg-slate-50/70 transition">
+                      {isAdministrator && (
+                        <td className="py-3 px-3 text-center">
+                          <input
+                            type="checkbox"
+                            aria-label={`Pilih audit log ${a.entity_type} ${a.action}`}
+                            checked={selectedIds.includes(a.id)}
+                            onChange={() => toggleSelectOne(a.id)}
+                            className="w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                          />
+                        </td>
+                      )}
                       <td className="py-3 px-4 font-mono text-slate-500 text-[11px]">
                         {new Date(a.created_at).toLocaleString("id-ID")}
                       </td>
@@ -402,6 +536,13 @@ export default function RiwayatTransaksiPage() {
           </div>
         </div>
       )}
+      <DeleteTransactionDialog
+        target={deleteTarget}
+        deleting={deleting}
+        error={deleteError}
+        onCancel={closeDeleteDialog}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }
