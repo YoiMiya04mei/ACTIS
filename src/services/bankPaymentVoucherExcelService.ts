@@ -42,7 +42,12 @@ function updateCell(xml: string, cellRef: string, innerContent: string, extraAtt
 }
 
 function setCellText(xml: string, cellRef: string, text: string): string {
-  return updateCell(xml, cellRef, text ? `<is><t>${escapeXml(text)}</t></is>` : '', 't="inlineStr"');
+  return updateCell(
+    xml,
+    cellRef,
+    text ? `<is><t>${escapeXml(text)}</t></is>` : '',
+    text ? 't="inlineStr"' : ''
+  );
 }
 
 function setCellNumber(xml: string, cellRef: string, num: number, formula?: string): string {
@@ -86,6 +91,7 @@ export async function generateBankPaymentVoucherExcelBlob(
   const bankRow1 = 21 + delta;
   const bankRow2 = 22 + delta;
   const bankRow3 = 23 + delta;
+  const sigHeaderRow = 25 + delta;
   const sigRowNames = 30 + delta;
 
   if (delta === 0) {
@@ -222,11 +228,18 @@ export async function generateBankPaymentVoucherExcelBlob(
   s1Xml = setCellText(s1Xml, `E${bankRow2}`, `: ${doc.bankAccount || ''}`);
   s1Xml = setCellText(s1Xml, `E${bankRow3}`, `: ${doc.bankAccountName || doc.payTo || ''}`);
 
+  // Approvals (Header Row: Prepared by, Approved by, Processed, Recorded by, Acknowledged by)
+  s1Xml = setCellText(s1Xml, `C${sigHeaderRow}`, 'Prepared by');
+  s1Xml = setCellText(s1Xml, `E${sigHeaderRow}`, 'Approved by');
+  s1Xml = setCellText(s1Xml, `F${sigHeaderRow}`, 'Processed');
+  s1Xml = setCellText(s1Xml, `G${sigHeaderRow}`, 'Recorded by');
+  s1Xml = setCellText(s1Xml, `H${sigHeaderRow}`, 'Acknowledged by');
+
   // Approvals (Row Names)
   s1Xml = setCellText(s1Xml, `C${sigRowNames}`, doc.preparedByName || doc.payTo || '');
-  s1Xml = setCellText(s1Xml, `E${sigRowNames}`, doc.processedName || 'Elsya');
-  s1Xml = setCellText(s1Xml, `F${sigRowNames}`, doc.recordedByName || 'Sarah');
-  s1Xml = setCellText(s1Xml, `G${sigRowNames}`, doc.approvedByName || '');
+  s1Xml = setCellText(s1Xml, `E${sigRowNames}`, doc.approvedByName || '');
+  s1Xml = setCellText(s1Xml, `F${sigRowNames}`, doc.processedName || 'Elsya');
+  s1Xml = setCellText(s1Xml, `G${sigRowNames}`, doc.recordedByName || 'Sarah');
   s1Xml = setCellText(s1Xml, `H${sigRowNames}`, doc.acknowledgedByName || 'Nandar Munandar');
 
   zip.file('xl/worksheets/sheet1.xml', s1Xml);

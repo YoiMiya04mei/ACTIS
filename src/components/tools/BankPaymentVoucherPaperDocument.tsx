@@ -46,9 +46,9 @@ export const BankPaymentVoucherPaperDocument: React.FC<BankPaymentVoucherPaperDo
           <colgroup>
             <col style={{ width: '3.5%' }} />  {/* C: No */}
             <col style={{ width: '12.5%' }} /> {/* D: Acc No */}
-            <col style={{ width: '20.0%' }} /> {/* E: Desc pt1 / Amount Box / Processed */}
-            <col style={{ width: '30.0%' }} /> {/* F: Desc pt2 / Recorded by */}
-            <col style={{ width: '14.0%' }} /> {/* G: Acc Name / Date / No. Voucher / Approved by */}
+            <col style={{ width: '20.0%' }} /> {/* E: Desc pt1 / Amount Box / Approved by */}
+            <col style={{ width: '30.0%' }} /> {/* F: Desc pt2 / Processed */}
+            <col style={{ width: '14.0%' }} /> {/* G: Acc Name / Date / No. Voucher / Recorded by */}
             <col style={{ width: '20.0%' }} /> {/* H: Amount / Date Val / No. Voucher Val / Acknowledged by */}
           </colgroup>
           <tbody>
@@ -149,11 +149,11 @@ export const BankPaymentVoucherPaperDocument: React.FC<BankPaymentVoucherPaperDo
 
             {/* Row 10: Header Tabel Item */}
             <tr className="h-7 border-t border-b border-black">
-              <th className="font-semibold text-center py-1">No</th>
-              <th className="font-semibold text-center py-1">Acc No</th>
-              <th colSpan={2} className="font-semibold text-center py-1">Description</th>
-              <th className="font-semibold text-center py-1">Acc Name</th>
-              <th className="font-semibold text-center py-1">Amount</th>
+              <th scope="col" className="font-semibold text-center py-1">No</th>
+              <th scope="col" className="font-semibold text-center py-1">Acc No</th>
+              <th scope="col" colSpan={2} className="font-semibold text-center py-1">Description</th>
+              <th scope="col" className="font-semibold text-center py-1">Acc Name</th>
+              <th scope="col" className="font-semibold text-center py-1">Amount</th>
             </tr>
 
             {/* Rows 11 - 18 (atau lebih): Baris Rincian Transaksi */}
@@ -247,19 +247,19 @@ export const BankPaymentVoucherPaperDocument: React.FC<BankPaymentVoucherPaperDo
 
             {/* Row 25: Header Kolom Persetujuan */}
             <tr className="h-7 border-t border-black">
-              <th colSpan={2} className="font-normal text-center border-l border-r border-black py-1">
+              <th scope="col" colSpan={2} className="font-normal text-center border-l border-r border-black py-1">
                 Prepared by
               </th>
-              <th className="font-normal text-center border-r border-black py-1">
-                Processed
-              </th>
-              <th className="font-normal text-center border-r border-black py-1">
-                Recorded by
-              </th>
-              <th className="font-normal text-center border-r border-black py-1">
+              <th scope="col" className="font-normal text-center border-r border-black py-1">
                 Approved by
               </th>
-              <th className="font-normal text-center border-r border-black py-1">
+              <th scope="col" className="font-normal text-center border-r border-black py-1">
+                Processed
+              </th>
+              <th scope="col" className="font-normal text-center border-r border-black py-1">
+                Recorded by
+              </th>
+              <th scope="col" className="font-normal text-center border-r border-black py-1">
                 Acknowledged by
               </th>
             </tr>
@@ -295,20 +295,20 @@ export const BankPaymentVoucherPaperDocument: React.FC<BankPaymentVoucherPaperDo
             </tr>
 
             {/* Row 30: Nama Penandatangan */}
-            <tr className="h-7 border-b border-black font-normal">
-              <td colSpan={2} className="border-l border-r border-black py-1 px-1 text-center align-middle truncate">
+            <tr className="h-7 border-b border-black font-normal text-[10.5pt] leading-tight">
+              <td colSpan={2} className="border-l border-r border-black py-1 px-1 text-center align-middle break-words">
                 {doc.preparedByName || payTo}
               </td>
-              <td className="border-r border-black py-1 px-1 text-center align-middle truncate">
-                {doc.processedName || 'Elsya'}
-              </td>
-              <td className="border-r border-black py-1 px-1 text-center align-middle truncate">
-                {doc.recordedByName || 'Sarah'}
-              </td>
-              <td className="border-r border-black py-1 px-1 text-center align-middle truncate">
+              <td className="border-r border-black py-1 px-1 text-center align-middle break-words">
                 {doc.approvedByName || ''}
               </td>
-              <td className="border-r border-black py-1 px-1 text-center align-middle truncate">
+              <td className="border-r border-black py-1 px-1 text-center align-middle break-words">
+                {doc.processedName || 'Elsya'}
+              </td>
+              <td className="border-r border-black py-1 px-1 text-center align-middle break-words">
+                {doc.recordedByName || 'Sarah'}
+              </td>
+              <td className="border-r border-black py-1 px-1 text-center align-middle break-words">
                 {doc.acknowledgedByName || 'Nandar Munandar'}
               </td>
             </tr>

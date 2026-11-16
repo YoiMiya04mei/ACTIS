@@ -883,11 +883,24 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
               </div>
             </div>
 
-            {/* Other 4 Columns: Processed, Recorded by, Approved by, Acknowledged by */}
+            {/* Other 4 Columns: Approved by, Processed, Recorded by, Acknowledged by */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
               <div>
                 <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                  Processed by:
+                  Approved by:
+                </label>
+                <input
+                  type="text"
+                  value={approvedByName}
+                  onChange={(e) => setApprovedByName(e.target.value)}
+                  placeholder="Nandar Munandar / Fauzi A.P"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
+                  Processed:
                 </label>
                 <input
                   type="text"
@@ -906,20 +919,7 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
                   type="text"
                   value={recordedByName}
                   onChange={(e) => setRecordedByName(e.target.value)}
-                  placeholder="Sarah / Efrida"
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                  Approved by:
-                </label>
-                <input
-                  type="text"
-                  value={approvedByName}
-                  onChange={(e) => setApprovedByName(e.target.value)}
-                  placeholder="Fauzi A.P"
+                  placeholder="Putri Puspita / Sarah / Efrida"
                   className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs"
                 />
               </div>

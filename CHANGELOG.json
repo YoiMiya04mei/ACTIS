@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.1",
+      "date": "2026-11-16T09:08:55+07:00",
+      "title": "Penyesuaian Urutan Kolom Persetujuan Bank Payment Voucher",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Mengubah urutan kolom persetujuan Bank Payment Voucher menjadi Prepared by, Approved by, Processed, Recorded by, dan Acknowledged by pada pratinjau dokumen, formulir input, dan ekspor Excel (.xlsx)"
+        },
+        {
+          "type": "fix",
+          "text": "Mencegah nama penandatangan terpotong elipsis pada dokumen cetak Bank Payment Voucher serta merapikan sel Excel kosong"
+        }
+      ]
+    },
+    {
       "version": "1.2.0",
       "date": "2026-11-15T10:46:00+07:00",
       "title": "Remember Me Simpan Kredensial Password & Log Update Akurat Berbasis Waktu",
