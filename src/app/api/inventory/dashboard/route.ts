@@ -17,10 +17,17 @@ export async function GET(request: NextRequest) {
 
   try {
     const stats = await getInventoryDashboardStats();
-    return NextResponse.json({
-      success: true,
-      data: stats,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: stats,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
   } catch (error: any) {
     console.error("Error in GET /api/inventory/dashboard:", error);
     return NextResponse.json(

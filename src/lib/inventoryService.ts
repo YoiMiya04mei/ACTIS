@@ -1179,12 +1179,16 @@ export async function getInventoryDashboardStats() {
       },
     }),
     prisma.inventoryCategory.findMany({
+      where: {
+        name: { not: "MODEM", mode: "insensitive" },
+      },
       include: {
         items: {
           where: { is_active: true },
           include: { stock: true },
         },
       },
+      orderBy: { name: "asc" },
     }),
   ]);
 
@@ -1255,20 +1259,26 @@ export async function getInventoryDashboardStats() {
     });
   }
 
-  // Category distribution
-  const categoryDistribution = categories.map((c) => {
-    let totalCatStock = 0;
-    c.items.forEach((it) => {
-      if (it.stock) {
-        totalCatStock += Number(it.stock.available_stock);
-      }
+  // Category distribution (exclude legacy MODEM category and empty non-standard categories)
+  const categoryDistribution = categories
+    .filter((c) => {
+      const normalized = c.name.trim().toLowerCase();
+      if (normalized === "modem") return false;
+      return c.name === "Aktif" || c.name === "Pasif" || c.items.length > 0;
+    })
+    .map((c) => {
+      let totalCatStock = 0;
+      c.items.forEach((it) => {
+        if (it.stock) {
+          totalCatStock += Number(it.stock.available_stock);
+        }
+      });
+      return {
+        name: c.name,
+        item_count: c.items.length,
+        total_stock: totalCatStock,
+      };
     });
-    return {
-      name: c.name,
-      item_count: c.items.length,
-      total_stock: totalCatStock,
-    };
-  });
 
   return {
     summary: {

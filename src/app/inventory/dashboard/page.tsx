@@ -56,7 +56,7 @@ export default function InventoryDashboardPage() {
   const fetchStats = async (isManual = false) => {
     if (isManual) setRefreshing(true);
     try {
-      const res = await fetch("/api/inventory/dashboard");
+      const res = await fetch("/api/inventory/dashboard", { cache: "no-store" });
       const json = await res.json();
       if (!res.ok || !json.success) {
         throw new Error(json.error || "Gagal memuat statistik inventory.");
@@ -395,33 +395,36 @@ export default function InventoryDashboardPage() {
           </div>
 
           <div className="space-y-3">
-            {data?.category_distribution?.map((cat, idx) => {
-              const maxCatStock = Math.max(
-                ...(data?.category_distribution?.map((c) => c.total_stock) || [1]),
-                1
+            {(() => {
+              const visibleCategories = (data?.category_distribution || []).filter(
+                (cat) => cat.name.trim().toLowerCase() !== "modem"
               );
-              const pct = Math.min(100, Math.round((cat.total_stock / maxCatStock) * 100));
+              const maxCatStock = Math.max(...visibleCategories.map((c) => c.total_stock), 1);
 
-              return (
-                <div key={idx} className="space-y-1">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-slate-700 dark:text-slate-300 truncate max-w-[170px]">
-                      {cat.name}
-                    </span>
-                    <span className="text-slate-500 dark:text-slate-400 font-bold">
-                      {cat.total_stock.toLocaleString("id-ID")}{" "}
-                      <span className="text-[10px] font-normal">({cat.item_count} SKU)</span>
-                    </span>
+              return visibleCategories.map((cat, idx) => {
+                const pct = Math.min(100, Math.round((cat.total_stock / maxCatStock) * 100));
+
+                return (
+                  <div key={cat.name || idx} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-700 dark:text-slate-300 truncate max-w-[170px]">
+                        {cat.name}
+                      </span>
+                      <span className="text-slate-500 dark:text-slate-400 font-bold">
+                        {cat.total_stock.toLocaleString("id-ID")}{" "}
+                        <span className="text-[10px] font-normal">({cat.item_count} SKU)</span>
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                      <div
+                        style={{ width: `${pct}%` }}
+                        className="bg-blue-600 h-full rounded-full transition-all duration-500"
+                      />
+                    </div>
                   </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                    <div
-                      style={{ width: `${pct}%` }}
-                      className="bg-blue-600 h-full rounded-full transition-all duration-500"
-                    />
-                  </div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </div>
         </div>
       </div>
