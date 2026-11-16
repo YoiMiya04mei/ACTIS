@@ -1,21 +1,14 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
 import {
   Layers,
   Search,
-  Filter,
-  SlidersHorizontal,
   ClipboardCheck,
   RefreshCw,
   AlertTriangle,
   CheckCircle2,
   X,
-  RotateCcw,
-  Cable,
-  ArrowDownLeft,
-  ArrowUpRight,
   Info,
   Barcode,
   Copy,
@@ -42,11 +35,6 @@ export default function StokInventoryPage() {
   const [totalCount, setTotalCount] = useState(0);
 
   // Modals
-  const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
-  const [adjustItem, setAdjustItem] = useState<any>(null);
-  const [targetStock, setTargetStock] = useState("");
-  const [adjustReason, setAdjustReason] = useState("");
-
   const [isOpnameModalOpen, setIsOpnameModalOpen] = useState(false);
   const [opnameOfficer, setOpnameOfficer] = useState("");
   const [opnameNotes, setOpnameNotes] = useState("");
@@ -93,37 +81,6 @@ export default function StokInventoryPage() {
   useEffect(() => {
     fetchStock();
   }, [fetchStock]);
-
-  const handleOpenAdjust = (item: any) => {
-    setAdjustItem(item);
-    setTargetStock(String(item.stock?.available_stock || 0));
-    setAdjustReason("");
-    setIsAdjustModalOpen(true);
-  };
-
-  const handleSaveAdjustment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!adjustItem) return;
-    try {
-      const res = await fetch("/api/inventory/stock/adjust", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          item_id: adjustItem.id,
-          new_available_stock: targetStock,
-          reason: adjustReason,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json.success) throw new Error(json.error);
-
-      setNotification({ type: "success", message: json.message });
-      setIsAdjustModalOpen(false);
-      fetchStock();
-    } catch (err: any) {
-      setNotification({ type: "error", message: err.message });
-    }
-  };
 
   const handleOpenOpname = () => {
     setOpnameOfficer(currentUser?.nama || "Admin Gudang");
@@ -341,32 +298,32 @@ export default function StokInventoryPage() {
 
       {/* Main Stock Balance Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Tabel stok inventory"
+          className="overflow-x-auto"
+        >
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 uppercase font-bold text-[10px] border-b border-slate-200 dark:border-slate-800">
               <tr>
-                <th className="py-3 px-4">Kode & Nama Barang</th>
-                <th className="py-3 px-4">Jenis</th>
-                <th className="py-3 px-4 text-right">Stok Awal</th>
-                <th className="py-3 px-4 text-right text-rose-600">Total Keluar</th>
-                <th className="py-3 px-4 text-right text-amber-600">Digunakan</th>
-                <th className="py-3 px-4 text-right text-blue-600">Kembali</th>
-                <th className="py-3 px-4 text-right text-purple-600">Terpakai</th>
-                <th className="py-3 px-4 text-right">Stok Siap Pakai</th>
-                {isAdmin && <th className="py-3 px-4 text-center">Aksi</th>}
+                <th scope="col" className="py-3 px-4">Nama Barang</th>
+                <th scope="col" className="py-3 px-4">Jenis</th>
+                <th scope="col" className="py-3 px-4 text-right">Stok Saat Ini</th>
+                <th scope="col" className="py-3 px-4 text-right text-purple-600 dark:text-purple-400">Terpakai</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
               {loading ? (
                 <tr>
-                  <td colSpan={isAdmin ? 9 : 8} className="py-12 text-center text-slate-400">
+                  <td colSpan={4} className="py-12 text-center text-slate-400">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
                     Memuat saldo stok...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 9 : 8} className="py-12 text-center text-slate-400">
+                  <td colSpan={4} className="py-12 text-center text-slate-400">
                     Tidak ada data stok yang sesuai filter.
                   </td>
                 </tr>
@@ -381,7 +338,7 @@ export default function StokInventoryPage() {
                       key={item.id}
                       className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition"
                     >
-                      <td className="py-3 px-4">
+                      <th scope="row" className="py-3 px-4 font-normal text-left">
                         <button
                           type="button"
                           onClick={() => handleOpenDetail(item)}
@@ -399,34 +356,19 @@ export default function StokInventoryPage() {
                             {item.category?.name} &bull; Lokasi: {item.storage_location || "-"}
                           </p>
                         </button>
-                      </td>
-                      <td className="py-3 px-4">
+                      </th>
+                      <td className="py-3 px-4 whitespace-nowrap">
                         {item.type === "REUSABLE" ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800">
                             Reusable
                           </span>
                         ) : (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800">
                             Consumable
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-right font-medium text-slate-600">
-                        {Number(s.initial_stock || 0)}
-                      </td>
-                      <td className="py-3 px-4 text-right font-bold text-rose-600">
-                        -{Number(s.total_out || 0)}
-                      </td>
-                      <td className="py-3 px-4 text-right font-bold text-amber-600">
-                        {item.type === "REUSABLE" ? Number(s.total_in_use || 0) : "-"}
-                      </td>
-                      <td className="py-3 px-4 text-right font-bold text-blue-600">
-                        {item.type === "REUSABLE" ? Number(s.total_returned || 0) : "-"}
-                      </td>
-                      <td className="py-3 px-4 text-right font-bold text-purple-600">
-                        {item.type === "CONSUMABLE" ? Number(s.total_consumed || 0) : "-"}
-                      </td>
-                      <td className="py-3 px-4 text-right">
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
                         <span
                           className={`font-black text-sm px-2.5 py-1 rounded-xl ${
                             isLow
@@ -438,17 +380,9 @@ export default function StokInventoryPage() {
                           <span className="text-[10px] font-normal">{item.unit}</span>
                         </span>
                       </td>
-                      {isAdmin && (
-                        <td className="py-3 px-4 text-center">
-                          <button
-                            onClick={() => handleOpenAdjust(item)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-100"
-                            title="Penyesuaian Stok (Adjustment)"
-                          >
-                            <SlidersHorizontal className="w-4 h-4" />
-                          </button>
-                        </td>
-                      )}
+                      <td className="py-3 px-4 text-right font-bold text-purple-600 dark:text-purple-400 whitespace-nowrap">
+                        {item.type === "CONSUMABLE" ? Number(s.total_consumed || 0).toLocaleString("id-ID") : "-"}
+                      </td>
                     </tr>
                   );
                 })
@@ -483,85 +417,6 @@ export default function StokInventoryPage() {
           </div>
         </div>
       </div>
-
-      {/* MODAL: STOCK ADJUSTMENT */}
-      {isAdjustModalOpen && adjustItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md p-6 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center">
-                <SlidersHorizontal className="w-5 h-5 mr-2 text-indigo-600" />
-                Penyesuaian Stok (Adjustment)
-              </h2>
-              <button
-                onClick={() => setIsAdjustModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveAdjustment} className="space-y-4 text-xs">
-              <div>
-                <span className="text-slate-500">Barang:</span>
-                <p className="font-bold text-slate-900 dark:text-slate-100">{adjustItem.name}</p>
-                <p className="font-mono text-slate-500">{adjustItem.code}</p>
-              </div>
-
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl flex items-center justify-between">
-                <span className="text-slate-600 dark:text-slate-400 font-semibold">Stok Saat Ini:</span>
-                <span className="font-black text-sm text-slate-900 dark:text-slate-100">
-                  {adjustItem.stock?.available_stock || 0} {adjustItem.unit}
-                </span>
-              </div>
-
-              <div>
-                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                  Stok Siap Pakai Baru <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  required
-                  value={targetStock}
-                  onChange={(e) => setTargetStock(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                  Alasan Penyesuaian (Audit Trail) <span className="text-rose-500">*</span>
-                </label>
-                <textarea
-                  rows={3}
-                  required
-                  value={adjustReason}
-                  onChange={(e) => setAdjustReason(e.target.value)}
-                  placeholder="Contoh: Koreksi selisih fisik saat audit triwulan / barang bonus vendor"
-                  className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100 dark:border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setIsAdjustModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border font-semibold"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-md shadow-indigo-500/20"
-                >
-                  Simpan Penyesuaian
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* MODAL: STOCK OPNAME */}
       {isOpnameModalOpen && (

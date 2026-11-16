@@ -4,6 +4,32 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.3",
+      "date": "2026-11-16T09:29:34+07:00",
+      "title": "Penyederhanaan Kolom Tabel Menu Stok Inventory",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Menyederhanakan kolom tabel pada halaman Stok Inventory agar hanya menampilkan Nama Barang, Jenis, Stok Saat Ini, dan Terpakai serta menghilangkan kolom sisa"
+        }
+      ]
+    },
+    {
+      "version": "1.2.2",
+      "date": "2026-11-16T09:23:09+07:00",
+      "title": "Penghapusan Field & Kolom Tabel Stok Awal Inventory",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Menghapus field Stok Awal Saat Didaftarkan pada modal Tambah Master Barang Baru serta merapikan layout Lokasi Penyimpanan menjadi penuh dua kolom"
+        },
+        {
+          "type": "improve",
+          "text": "Menghapus kolom Stok Awal dari tabel Stok Inventory & Mutasi serta menyesuaikan colSpan dan aksesibilitas scroll region tabel"
+        }
+      ]
+    },
+    {
       "version": "1.2.1",
       "date": "2026-11-16T09:08:55+07:00",
       "title": "Penyesuaian Urutan Kolom Persetujuan Bank Payment Voucher",

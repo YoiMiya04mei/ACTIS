@@ -1,6 +1,6 @@
 {
   "name": "actis",
-  "version": "1.2.1",
+  "version": "1.2.3",
   "private": true,
   "scripts": {
     "predev": "node scripts/sync-pdfjs-assets.js && node scripts/sync-build-info.js",

@@ -106,7 +106,6 @@ export default function MasterBarangPage() {
     min_stock: "5",
     storage_location: "Gudang Pusat",
     description: "",
-    initial_stock: "0",
     serial_numbers_text: "",
   });
 
@@ -168,7 +167,6 @@ export default function MasterBarangPage() {
       min_stock: "5",
       storage_location: "Gudang Pusat",
       description: "",
-      initial_stock: "0",
       serial_numbers_text: "",
     });
     setIsAddEditModalOpen(true);
@@ -188,7 +186,6 @@ export default function MasterBarangPage() {
       min_stock: String(item.min_stock),
       storage_location: item.storage_location || "Gudang Pusat",
       description: item.description || "",
-      initial_stock: "0",
       serial_numbers_text: "",
     });
     setIsAddEditModalOpen(true);
@@ -767,11 +764,15 @@ export default function MasterBarangPage() {
                   />
                 </div>
 
-                <div>
-                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                <div className="md:col-span-2">
+                  <label
+                    htmlFor="item-storage-location"
+                    className="block font-semibold mb-1 text-slate-700 dark:text-slate-300"
+                  >
                     Lokasi Penyimpanan <span className="text-rose-500">*</span>
                   </label>
                   <select
+                    id="item-storage-location"
                     required
                     value={formData.storage_location}
                     onChange={(e) => setFormData({ ...formData, storage_location: e.target.value })}
@@ -789,21 +790,6 @@ export default function MasterBarangPage() {
                     )}
                   </select>
                 </div>
-
-                {!editingItem && (
-                  <div>
-                    <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                      Stok Awal Saat Didaftarkan
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={formData.initial_stock}
-                      onChange={(e) => setFormData({ ...formData, initial_stock: e.target.value })}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                    />
-                  </div>
-                )}
               </div>
 
               <div>
