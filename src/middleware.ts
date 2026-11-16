@@ -59,6 +59,8 @@ export function middleware(request: NextRequest) {
   // Authentication Guard for Web Page Routes
   const isPublicRoute =
     pathname === "/login" ||
+    pathname === "/request-barang" ||
+    pathname.startsWith("/request-barang/") ||
     pathname.startsWith("/api/") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/icons/") ||

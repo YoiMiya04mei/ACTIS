@@ -35,8 +35,13 @@ export function AppShell({ children }: AppShellProps) {
     };
   }, [isAuthenticated]);
 
+  const isPublicPage =
+    pathname === "/login" ||
+    pathname === "/request-barang" ||
+    pathname.startsWith("/request-barang/");
+
   useEffect(() => {
-    if (!isLoading && !isAuthenticated && pathname !== "/login") {
+    if (!isLoading && !isAuthenticated && !isPublicPage) {
       const reason = typeof window !== "undefined" ? sessionStorage.getItem("actis_logout_reason") : null;
       if (reason === "timeout") {
         router.push("/login?reason=timeout");
@@ -44,11 +49,14 @@ export function AppShell({ children }: AppShellProps) {
         router.push("/login");
       }
     }
-  }, [isLoading, isAuthenticated, pathname, router]);
+  }, [isLoading, isAuthenticated, isPublicPage, pathname, router]);
 
-  // If on login page, render bare without navigation chrome
+  // If on login or standalone public form page, render bare without navigation chrome
   if (pathname === "/login") {
     return <main className="min-h-screen bg-slate-900">{children}</main>;
+  }
+  if (isPublicPage) {
+    return <main className="min-h-screen bg-slate-50 dark:bg-slate-950">{children}</main>;
   }
 
   // If verifying authentication state, show loading indicator

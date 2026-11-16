@@ -16,15 +16,21 @@ import {
   Search,
   Zap,
   Users,
+  ClipboardList,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
 import { fetchActiveMasterItems } from "@/lib/inventoryMasterSync";
 import { computeOutTransactionSummary } from "@/lib/inventoryTransactionSummary";
 import { parseSerialList } from "@/lib/inventoryClientFinish";
+import { buildStockOutNotesFromRequest } from "@/lib/inventoryRequest";
 import { useRealtimeMasterItems } from "@/hooks/useRealtimeMasterItems";
 import { useDeleteInventoryTransaction } from "@/hooks/useDeleteInventoryTransaction";
 import { DeleteTransactionDialog } from "@/components/inventory/DeleteTransactionDialog";
 import { HistoryBulkActionsBar } from "@/components/inventory/HistoryBulkActionsBar";
+import {
+  StockOutRequestsDialog,
+  type InventoryRequestRecord,
+} from "@/components/inventory/StockOutRequestsDialog";
 
 interface ItemUnit {
   id: string;
@@ -83,6 +89,13 @@ export default function BarangKeluarPage() {
   // View Modal
   const [selectedTx, setSelectedTx] = useState<any | null>(null);
 
+  // Public Requests Modal & ACC State
+  const [requestsModalOpen, setRequestsModalOpen] = useState(false);
+  const [inventoryRequests, setInventoryRequests] = useState<InventoryRequestRecord[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(false);
+  const [pendingRequestCount, setPendingRequestCount] = useState(0);
+  const [activeRequest, setActiveRequest] = useState<InventoryRequestRecord | null>(null);
+
   const { availableItems, applyMasterItems, syncMasterItems } = useRealtimeMasterItems<
     ItemOption,
     RowItem
@@ -99,12 +112,33 @@ export default function BarangKeluarPage() {
     },
   });
 
+  const fetchRequests = useCallback(async () => {
+    setRequestsLoading(true);
+    try {
+      const res = await fetch("/api/inventory/requests?limit=150", { cache: "no-store" });
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        setInventoryRequests(json.data);
+        setPendingRequestCount(
+          typeof json.pendingCount === "number"
+            ? json.pendingCount
+            : json.data.filter((r: InventoryRequestRecord) => r.status === "PENDING").length
+        );
+      }
+    } catch (err) {
+      console.error("Gagal memuat daftar request barang:", err);
+    } finally {
+      setRequestsLoading(false);
+    }
+  }, []);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const [freshItems, resTx] = await Promise.all([
         fetchActiveMasterItems<ItemOption>(),
         fetch("/api/inventory/transactions?type=OUT&limit=20", { cache: "no-store" }),
+        fetchRequests(),
       ]);
 
       if (freshItems) applyMasterItems(freshItems);
@@ -119,7 +153,7 @@ export default function BarangKeluarPage() {
       console.error("Gagal memuat data inventaris:", err);
     }
     setLoading(false);
-  }, [applyMasterItems]);
+  }, [applyMasterItems, fetchRequests]);
 
   useEffect(() => {
     fetchData();
@@ -293,6 +327,48 @@ export default function BarangKeluarPage() {
     setRows(updated);
   };
 
+  const handleOpenRequestsModal = () => {
+    setRequestsModalOpen(true);
+    fetchRequests();
+  };
+
+  const handleLoadRequestForAcc = (req: InventoryRequestRecord) => {
+    setActiveRequest(req);
+    setPicName(req.pic_name);
+    setPicPhone(req.pic_phone || "");
+    setNotes(buildStockOutNotesFromRequest(req));
+
+    const missingOrLow: string[] = [];
+    const mappedRows: RowItem[] = (req.items || []).map((ri) => {
+      const catalogMatch = availableItems.find((it) => it.id === ri.item_id);
+      if (!catalogMatch) {
+        missingOrLow.push(ri.item?.name || ri.item_id);
+      }
+      return {
+        item_id: catalogMatch ? ri.item_id : "",
+        quantity: String(Number(ri.quantity) || 1),
+        notes: ri.notes || "",
+        serials: [],
+        isSelectorOpen: catalogMatch?.category?.name?.toLowerCase() === "aktif",
+        searchQuery: "",
+        manualSnInput: "",
+      };
+    });
+
+    if (mappedRows.length > 0) {
+      setRows(mappedRows);
+    }
+
+    setRequestsModalOpen(false);
+    setNotification({
+      type: missingOrLow.length > 0 ? "error" : "success",
+      message:
+        missingOrLow.length > 0
+          ? `Request ${req.request_number} dimuat, namun barang berikut tidak aktif/tidak tersedia: ${missingOrLow.join(", ")}.`
+          : `Request ${req.request_number} (${req.pic_name}) siap di-ACC. Pilih Serial Number (jika kategori Aktif) lalu kirim form Barang Keluar.`,
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!picName.trim()) {
@@ -366,8 +442,11 @@ export default function BarangKeluarPage() {
           pic_name: picName,
           pic_phone: picPhone,
           department,
+          location: activeRequest?.pickup_location || undefined,
+          purpose: activeRequest?.work_type_label || undefined,
           warehouse_officer: officer,
           notes,
+          request_id: activeRequest?.id || undefined,
           items: itemsPayload,
         }),
       });
@@ -377,6 +456,7 @@ export default function BarangKeluarPage() {
 
       setNotification({ type: "success", message: json.message });
       // Reset form
+      setActiveRequest(null);
       setPicName("");
       setPicPhone("");
       setNotes("");
@@ -415,11 +495,26 @@ export default function BarangKeluarPage() {
 
         <div className="flex items-center space-x-2.5">
           <button
+            type="button"
             onClick={fetchData}
             title="Segarkan Data"
-            className="p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 hover:text-rose-600 shadow-sm transition"
+            aria-label="Segarkan Data"
+            className="p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 hover:text-rose-600 shadow-sm transition cursor-pointer"
           >
             <RefreshCw className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleOpenRequestsModal}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-xs font-bold shadow-sm transition cursor-pointer"
+          >
+            <ClipboardList className="w-4 h-4 shrink-0" />
+            <span>Daftar Request</span>
+            {pendingRequestCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-white font-mono text-[10px] leading-none font-extrabold">
+                {pendingRequestCount}
+              </span>
+            )}
           </button>
         </div>
       </div>
@@ -454,6 +549,29 @@ export default function BarangKeluarPage() {
               Formulir Pengeluaran Barang Keluar
             </h2>
           </div>
+
+          {activeRequest && (
+            <div className="p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/30 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="space-y-0.5">
+                <p className="font-bold text-emerald-800 dark:text-emerald-200 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  Memproses ACC Request{" "}
+                  <span className="font-mono">{activeRequest.request_number}</span>
+                </p>
+                <p className="text-emerald-700 dark:text-emerald-300">
+                  Pekerjaan: <strong>{activeRequest.work_type_label}</strong> • Lokasi Ambil:{" "}
+                  <strong>{activeRequest.pickup_location}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveRequest(null)}
+                className="px-3 py-1 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 text-emerald-800 dark:text-emerald-200 font-semibold hover:bg-emerald-100 transition cursor-pointer"
+              >
+                Lepas Tautan Request
+              </button>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4 text-xs">
             {/* Header Form Inputs (Lokasi Penggunaan & Tujuan Penggunaan Removed) */}
@@ -1234,6 +1352,22 @@ export default function BarangKeluarPage() {
         error={deleteError}
         onCancel={closeDeleteDialog}
         onConfirm={confirmDelete}
+      />
+
+      <StockOutRequestsDialog
+        open={requestsModalOpen}
+        requests={inventoryRequests}
+        loading={requestsLoading}
+        isAdmin={isAdmin}
+        onClose={() => setRequestsModalOpen(false)}
+        onRefresh={fetchRequests}
+        onAcceptRequest={handleLoadRequestForAcc}
+        onRejectSuccess={(reqNo) => {
+          setNotification({
+            type: "success",
+            message: `Request ${reqNo} berhasil ditolak.`,
+          });
+        }}
       />
     </div>
   );

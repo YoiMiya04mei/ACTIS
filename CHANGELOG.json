@@ -4,6 +4,29 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.13",
+      "date": "2026-11-16T17:00:07+07:00",
+      "title": "Form Request Barang Publik Tanpa Login & ACC di Barang Keluar",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Menambahkan halaman publik /request-barang tanpa perlu login dengan input Nama PIC Penerima, Tanggal Request, pilihan Jenis Pekerjaan (Pemasangan, Perbaikan, Backbone, Lainnya), pilihan Lokasi Pengambilan (Gudang Pusat, Gudang Bandung, Gudang Gekbrong), serta daftar barang yang diminta."
+        },
+        {
+          "type": "feat",
+          "text": "Menambahkan tombol Daftar Request di samping tombol refresh pada halaman Barang Keluar lengkap dengan badge jumlah antrean menunggu ACC serta modal antrean request untuk memuat permintaan ke formulir pengeluaran (ACC) atau menolak permintaan."
+        },
+        {
+          "type": "improve",
+          "text": "Menautkan persetujuan (ACC) request barang secara atomik ke transaksi Barang Keluar termasuk pembaruan status request, audit trail, serta pencatatan petugas penyetuju."
+        },
+        {
+          "type": "security",
+          "text": "Menambahkan validasi ketat input publik, anti-spam honeypot, pembatasan rate limit IP, dan isolasi endpoint publik agar hanya mengekspos katalog barang aktif tanpa data pengguna maupun serial number."
+        }
+      ]
+    },
+    {
       "version": "1.2.12",
       "date": "2026-11-16T16:30:24+07:00",
       "title": "Hapus Fitur Tarik dari Surat Permit Keluar di Menu Barang Keluar",

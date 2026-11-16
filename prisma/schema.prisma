@@ -565,6 +565,7 @@ model InventoryItem {
   movements           InventoryMovement[]
   return_details      InventoryReturnDetail[]
   client_usage_items  InventoryClientUsageItem[]
+  request_items       InventoryRequestItem[]
 
   @@index([category_id])
   @@index([type])
@@ -629,8 +630,9 @@ model InventoryTransaction {
 
   details       InventoryTransactionDetail[]
   returns       InventoryReturn[]
-  movements     InventoryMovement[]
-  client_usages InventoryClientUsage[]
+  movements         InventoryMovement[]
+  client_usages     InventoryClientUsage[]
+  approved_requests InventoryRequest[]
 
   @@index([type, transaction_date])
   @@index([status])
@@ -785,6 +787,52 @@ model InventorySetting {
   updated_at  DateTime @default(now()) @updatedAt
 
   @@map("inventory_settings")
+}
+
+model InventoryRequest {
+  id                 String                @id @default(uuid())
+  request_number     String                @unique // e.g. REQ-20261116-0001
+  pic_name           String
+  pic_phone          String?
+  request_date       DateTime              @default(now())
+  work_types         String                @db.Text // JSON array string e.g. ["Pemasangan","Backbone"]
+  work_type_other    String?
+  pickup_location    String                // "Gudang Pusat", "Gudang Bandung", "Gudang Gekbrong"
+  notes              String?               @db.Text
+  status             String                @default("PENDING") // "PENDING" | "APPROVED" | "REJECTED"
+  out_transaction_id String?
+  out_transaction    InventoryTransaction? @relation(fields: [out_transaction_id], references: [id], onDelete: SetNull)
+  approved_by        String?
+  approved_by_name   String?
+  approved_at        DateTime?
+  rejected_by        String?
+  rejected_by_name   String?
+  rejected_at        DateTime?
+  rejected_reason    String?               @db.Text
+  created_at         DateTime              @default(now())
+  updated_at         DateTime              @default(now()) @updatedAt
+
+  items InventoryRequestItem[]
+
+  @@index([status, created_at])
+  @@index([request_date])
+  @@index([pickup_location])
+  @@map("inventory_requests")
+}
+
+model InventoryRequestItem {
+  id         String           @id @default(uuid())
+  request_id String
+  request    InventoryRequest @relation(fields: [request_id], references: [id], onDelete: Cascade)
+  item_id    String
+  item       InventoryItem    @relation(fields: [item_id], references: [id], onDelete: Restrict)
+  quantity   Decimal          @db.Decimal(12, 2)
+  unit       String
+  notes      String?
+
+  @@index([request_id])
+  @@index([item_id])
+  @@map("inventory_request_items")
 }
 
 // ============================================================================

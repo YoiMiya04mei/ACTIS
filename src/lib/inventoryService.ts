@@ -11,6 +11,11 @@ import {
   computeStockOutDeleteReversal,
   type ExistingItemUnitState,
 } from "./inventoryTransactionDelete";
+import {
+  formatWorkTypeLabel,
+  parseWorkTypes,
+  validatePublicInventoryRequestInput,
+} from "./inventoryRequest";
 
 // Format date as YYYYMMDD
 export function getDateString(d = new Date()): string {
@@ -62,6 +67,37 @@ export async function generateReturnNumber(
   });
 
   const nextSeq = String(count + 1).padStart(4, "0");
+  return `${prefix}${nextSeq}`;
+}
+
+/**
+ * Generate sequential public request number e.g. REQ-20261116-0001
+ */
+export async function generateRequestNumber(
+  tx?: Prisma.TransactionClient
+): Promise<string> {
+  const client = tx || prisma;
+  const dateStr = getDateString();
+  const prefix = `REQ-${dateStr}-`;
+
+  const latest = await client.inventoryRequest.findFirst({
+    where: {
+      request_number: {
+        startsWith: prefix,
+      },
+    },
+    orderBy: {
+      request_number: "desc",
+    },
+    select: {
+      request_number: true,
+    },
+  });
+
+  const lastSeq = latest?.request_number
+    ? Number.parseInt(latest.request_number.slice(prefix.length), 10) || 0
+    : 0;
+  const nextSeq = String(lastSeq + 1).padStart(4, "0");
   return `${prefix}${nextSeq}`;
 }
 
@@ -363,6 +399,7 @@ export interface StockOutPayload {
   notes?: string;
   permit_id?: string;
   permit_number?: string;
+  request_id?: string;
   items: StockOutItemInput[];
   created_by?: string;
   user_name?: string;
@@ -385,6 +422,24 @@ export async function processStockOut(payload: StockOutPayload) {
   }
 
   return await prisma.$transaction(async (tx) => {
+    let linkedRequestNumber: string | null = null;
+    const reqId = payload.request_id?.trim() || "";
+    if (reqId) {
+      const existingReq = await tx.inventoryRequest.findUnique({
+        where: { id: reqId },
+        select: { id: true, request_number: true, status: true },
+      });
+      if (!existingReq) {
+        throw new Error("Data request barang tidak ditemukan.");
+      }
+      if (existingReq.status !== "PENDING") {
+        throw new Error(
+          `Request ${existingReq.request_number} tidak dapat di-ACC karena statusnya sudah '${existingReq.status}'.`
+        );
+      }
+      linkedRequestNumber = existingReq.request_number;
+    }
+
     const txNumber = await generateTransactionNumber("OUT", tx);
     const txDate = payload.transaction_date ? new Date(payload.transaction_date) : new Date();
 
@@ -568,9 +623,49 @@ export async function processStockOut(payload: StockOutPayload) {
         user_id: payload.created_by,
         user_name: payload.user_name || payload.warehouse_officer || "Admin Gudang",
         data_after: JSON.stringify(transaction),
-        reason: `Pencatatan Barang Keluar ${txNumber}`,
+        reason: linkedRequestNumber
+          ? `Pencatatan Barang Keluar ${txNumber} (ACC Request ${linkedRequestNumber})`
+          : `Pencatatan Barang Keluar ${txNumber}`,
       },
     });
+
+    if (reqId) {
+      const approverName =
+        payload.user_name || payload.warehouse_officer || "Admin Gudang";
+      const claimResult = await tx.inventoryRequest.updateMany({
+        where: { id: reqId, status: "PENDING" },
+        data: {
+          status: "APPROVED",
+          out_transaction_id: transaction.id,
+          approved_by: payload.created_by || null,
+          approved_by_name: approverName,
+          approved_at: new Date(),
+        },
+      });
+
+      if (claimResult.count !== 1) {
+        throw new Error(
+          `Request ${linkedRequestNumber || reqId} sudah diproses sebelumnya oleh petugas lain.`
+        );
+      }
+
+      await tx.inventoryAuditLog.create({
+        data: {
+          entity_type: "REQUEST",
+          entity_id: reqId,
+          action: "APPROVE",
+          user_id: payload.created_by || null,
+          user_name: approverName,
+          data_after: JSON.stringify({
+            request_number: linkedRequestNumber,
+            status: "APPROVED",
+            out_transaction_id: transaction.id,
+            transaction_number: txNumber,
+          }),
+          reason: `ACC Request Barang ${linkedRequestNumber || reqId} menjadi ${txNumber}`,
+        },
+      });
+    }
 
     return transaction;
   });
@@ -1810,4 +1905,280 @@ export async function deleteBulkInventoryTransactions(payload: BulkDeleteTransac
     },
     { maxWait: 10000, timeout: 60000 }
   );
+}
+
+// ============================================================================
+// PUBLIC INVENTORY REQUESTS (NO LOGIN SUBMISSION + WAREHOUSE/ADMIN ACC)
+// ============================================================================
+
+export async function getPublicInventoryCatalog() {
+  const items = await prisma.inventoryItem.findMany({
+    where: { is_active: true },
+    orderBy: [{ name: "asc" }],
+    select: {
+      id: true,
+      code: true,
+      name: true,
+      unit: true,
+      type: true,
+      category: {
+        select: {
+          name: true,
+        },
+      },
+      stock: {
+        select: {
+          available_stock: true,
+        },
+      },
+    },
+  });
+
+  return items.map((item) => ({
+    id: item.id,
+    code: item.code,
+    name: item.name,
+    unit: item.unit,
+    type: item.type,
+    category_name: item.category?.name || null,
+    available_stock: item.stock ? Number(item.stock.available_stock) : 0,
+  }));
+}
+
+export async function createPublicInventoryRequest(
+  rawPayload: unknown,
+  ipAddress?: string | null
+) {
+  const validated = validatePublicInventoryRequestInput(rawPayload);
+  if (!validated.ok) {
+    const err = new Error(validated.error) as Error & {
+      statusCode?: number;
+      field?: string;
+    };
+    err.statusCode = 400;
+    err.field = validated.field;
+    throw err;
+  }
+
+  const data = validated.data;
+
+  return await prisma.$transaction(async (tx) => {
+    const itemIds = data.items.map((row) => row.item_id);
+    const catalogItems = await tx.inventoryItem.findMany({
+      where: { id: { in: itemIds }, is_active: true },
+      select: { id: true, name: true, code: true, unit: true },
+    });
+
+    const itemMap = new Map(catalogItems.map((it) => [it.id, it]));
+    for (const row of data.items) {
+      if (!itemMap.has(row.item_id)) {
+        const missingErr = new Error(
+          "Salah satu barang yang dipilih tidak ditemukan atau sedang nonaktif."
+        ) as Error & { statusCode?: number };
+        missingErr.statusCode = 400;
+        throw missingErr;
+      }
+    }
+
+    const requestNumber = await generateRequestNumber(tx);
+
+    const created = await tx.inventoryRequest.create({
+      data: {
+        request_number: requestNumber,
+        pic_name: data.pic_name,
+        pic_phone: data.pic_phone,
+        request_date: data.request_date,
+        work_types: JSON.stringify(data.work_types),
+        work_type_other: data.work_type_other,
+        pickup_location: data.pickup_location,
+        notes: data.notes,
+        status: "PENDING",
+        items: {
+          create: data.items.map((row) => {
+            const master = itemMap.get(row.item_id)!;
+            return {
+              item_id: master.id,
+              quantity: new Prisma.Decimal(row.quantity),
+              unit: master.unit,
+              notes: row.notes,
+            };
+          }),
+        },
+      },
+      include: {
+        items: {
+          include: {
+            item: {
+              select: { id: true, code: true, name: true, unit: true, type: true },
+            },
+          },
+        },
+      },
+    });
+
+    await tx.inventoryAuditLog.create({
+      data: {
+        entity_type: "REQUEST",
+        entity_id: created.id,
+        action: "CREATE",
+        user_id: null,
+        user_name: `${data.pic_name} (Form Publik)`,
+        data_after: JSON.stringify({
+          request_number: created.request_number,
+          pic_name: created.pic_name,
+          pickup_location: created.pickup_location,
+          work_types: data.work_types,
+          work_type_other: data.work_type_other,
+          items_count: created.items.length,
+        }),
+        reason: `Pengajuan Form Request Tanpa Login (${formatWorkTypeLabel(
+          data.work_types,
+          data.work_type_other
+        )})`,
+        ip_address: ipAddress || null,
+      },
+    });
+
+    return {
+      ...created,
+      work_types_parsed: parseWorkTypes(created.work_types),
+      work_type_label: formatWorkTypeLabel(created.work_types, created.work_type_other),
+    };
+  });
+}
+
+export async function listInventoryRequests(filters?: {
+  status?: string;
+  search?: string;
+  limit?: number;
+}) {
+  const statusFilter = filters?.status?.trim().toUpperCase();
+  const search = filters?.search?.trim();
+  const take = Math.min(Math.max(filters?.limit || 100, 1), 250);
+
+  const where: Prisma.InventoryRequestWhereInput = {};
+  if (statusFilter && ["PENDING", "APPROVED", "REJECTED"].includes(statusFilter)) {
+    where.status = statusFilter;
+  }
+  if (search) {
+    where.OR = [
+      { request_number: { contains: search, mode: "insensitive" } },
+      { pic_name: { contains: search, mode: "insensitive" } },
+      { pickup_location: { contains: search, mode: "insensitive" } },
+      { work_types: { contains: search, mode: "insensitive" } },
+      { work_type_other: { contains: search, mode: "insensitive" } },
+    ];
+  }
+
+  const [requests, pendingCount] = await Promise.all([
+    prisma.inventoryRequest.findMany({
+      where,
+      take,
+      orderBy: [{ created_at: "desc" }],
+      include: {
+        items: {
+          include: {
+            item: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                unit: true,
+                type: true,
+                category: { select: { name: true } },
+                stock: { select: { available_stock: true } },
+              },
+            },
+          },
+        },
+        out_transaction: {
+          select: {
+            id: true,
+            transaction_number: true,
+            status: true,
+            transaction_date: true,
+          },
+        },
+      },
+    }),
+    prisma.inventoryRequest.count({ where: { status: "PENDING" } }),
+  ]);
+
+  return {
+    pendingCount,
+    requests: requests.map((req) => ({
+      ...req,
+      work_types_parsed: parseWorkTypes(req.work_types),
+      work_type_label: formatWorkTypeLabel(req.work_types, req.work_type_other),
+    })),
+  };
+}
+
+export async function rejectInventoryRequest(payload: {
+  request_id: string;
+  reason?: string | null;
+  rejected_by?: string | null;
+  user_name?: string | null;
+}) {
+  const reqId = payload.request_id?.trim();
+  if (!reqId) {
+    throw new Error("ID request tidak valid.");
+  }
+
+  const reason = payload.reason?.trim() || "Ditolak oleh petugas gudang";
+  const actorName = payload.user_name?.trim() || "Admin Gudang";
+
+  return await prisma.$transaction(async (tx) => {
+    const existing = await tx.inventoryRequest.findUnique({
+      where: { id: reqId },
+      select: { id: true, request_number: true, status: true },
+    });
+    if (!existing) {
+      const notFound = new Error("Data request barang tidak ditemukan.") as Error & {
+        statusCode?: number;
+      };
+      notFound.statusCode = 404;
+      throw notFound;
+    }
+    if (existing.status !== "PENDING") {
+      throw new Error(
+        `Request ${existing.request_number} tidak dapat ditolak karena sudah berstatus '${existing.status}'.`
+      );
+    }
+
+    const res = await tx.inventoryRequest.updateMany({
+      where: { id: reqId, status: "PENDING" },
+      data: {
+        status: "REJECTED",
+        rejected_by: payload.rejected_by || null,
+        rejected_by_name: actorName,
+        rejected_at: new Date(),
+        rejected_reason: reason,
+      },
+    });
+
+    if (res.count !== 1) {
+      throw new Error(`Request ${existing.request_number} sudah diproses oleh petugas lain.`);
+    }
+
+    const updated = await tx.inventoryRequest.findUnique({ where: { id: reqId } });
+
+    await tx.inventoryAuditLog.create({
+      data: {
+        entity_type: "REQUEST",
+        entity_id: reqId,
+        action: "REJECT",
+        user_id: payload.rejected_by || null,
+        user_name: actorName,
+        data_after: JSON.stringify({
+          request_number: existing.request_number,
+          status: "REJECTED",
+          rejected_reason: reason,
+        }),
+        reason: `Penolakan Request ${existing.request_number}: ${reason}`,
+      },
+    });
+
+    return updated;
+  });
 }

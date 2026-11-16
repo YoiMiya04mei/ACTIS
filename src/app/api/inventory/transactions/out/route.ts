@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
       notes: body.notes,
       permit_id: body.permit_id,
       permit_number: body.permit_number,
+      request_id: body.request_id,
       items: body.items,
       created_by: auth.user.id,
       user_name: auth.user.nama,
