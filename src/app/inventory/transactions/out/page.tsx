@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   X,
-  FileText,
   User,
   Clock,
   Boxes,
@@ -19,7 +18,6 @@ import {
   Users,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
-import { permitBarangStorage } from "@/services/permitBarangStorage";
 import { fetchActiveMasterItems } from "@/lib/inventoryMasterSync";
 import { computeOutTransactionSummary } from "@/lib/inventoryTransactionSummary";
 import { parseSerialList } from "@/lib/inventoryClientFinish";
@@ -77,16 +75,10 @@ export default function BarangKeluarPage() {
   const [officer, setOfficer] = useState(currentUser?.nama || "Admin Gudang");
   const [txDate, setTxDate] = useState(new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
-  const [permitRefId, setPermitRefId] = useState<string | null>(null);
-  const [permitRefNumber, setPermitRefNumber] = useState<string | null>(null);
 
   const [rows, setRows] = useState<RowItem[]>([
     { item_id: "", quantity: "1", notes: "", serials: [], isSelectorOpen: false, searchQuery: "", manualSnInput: "" },
   ]);
-
-  // Permit Picker Modal
-  const [isPermitModalOpen, setIsPermitModalOpen] = useState(false);
-  const [permitDocs, setPermitDocs] = useState<any[]>([]);
 
   // View Modal
   const [selectedTx, setSelectedTx] = useState<any | null>(null);
@@ -176,70 +168,6 @@ export default function BarangKeluarPage() {
       setOfficer(currentUser.nama);
     }
   }, [currentUser]);
-
-  const handleOpenPermitPicker = async () => {
-    try {
-      const docs = await permitBarangStorage.getAllPermitBarang();
-      setPermitDocs(docs);
-      setIsPermitModalOpen(true);
-    } catch {
-      alert("Gagal memuat arsip Surat Permit Barang.");
-    }
-  };
-
-  const handleSelectPermitDoc = (doc: any) => {
-    setPicName(doc.applicantName || "");
-    setPicPhone(doc.applicantPhone || "");
-    setPermitRefId(doc.id);
-    setPermitRefNumber(doc.letterNumber || doc.id);
-    setNotes(`Berdasarkan Surat Permit No. ${doc.letterNumber || doc.id}`);
-
-    // Map devices to inventory items
-    if (doc.devices && doc.devices.length > 0) {
-      const newRows: RowItem[] = [];
-      doc.devices.forEach((dev: any) => {
-        const cleanName = dev.name.toLowerCase();
-        const matched = availableItems.find(
-          (it) => it.name.toLowerCase().includes(cleanName) || cleanName.includes(it.name.toLowerCase())
-        );
-
-        const qtyMatch = dev.quantity ? String(dev.quantity).match(/\d+/) : null;
-        const qtyStr = qtyMatch ? qtyMatch[0] : "1";
-        const qtyNum = Number(qtyStr) || 1;
-
-        const isAktif = matched?.category?.name?.toLowerCase() === "aktif";
-        let autoSerials: string[] = [];
-
-        if (isAktif) {
-          if (dev.serialNumber) {
-            autoSerials = [dev.serialNumber.trim()];
-          } else if (matched?.units && matched.units.length > 0) {
-            autoSerials = matched.units.slice(0, qtyNum).map((u) => u.serial_number);
-          }
-        }
-
-        newRows.push({
-          item_id: matched ? matched.id : "",
-          quantity: qtyStr,
-          notes: dev.notes || (dev.serialNumber ? `SN: ${dev.serialNumber}` : ""),
-          serials: isAktif ? autoSerials : [],
-          isSelectorOpen: false,
-          searchQuery: "",
-          manualSnInput: "",
-        });
-      });
-
-      if (newRows.length > 0) {
-        setRows(newRows);
-      }
-    }
-
-    setIsPermitModalOpen(false);
-    setNotification({
-      type: "success",
-      message: `Data Surat Permit '${doc.letterNumber || doc.id}' berhasil dimuat ke formulir barang keluar.`,
-    });
-  };
 
   const handleAddRow = () => {
     setRows([
@@ -440,8 +368,6 @@ export default function BarangKeluarPage() {
           department,
           warehouse_officer: officer,
           notes,
-          permit_id: permitRefId,
-          permit_number: permitRefNumber,
           items: itemsPayload,
         }),
       });
@@ -454,8 +380,6 @@ export default function BarangKeluarPage() {
       setPicName("");
       setPicPhone("");
       setNotes("");
-      setPermitRefId(null);
-      setPermitRefNumber(null);
       setRows([
         { item_id: "", quantity: "1", notes: "", serials: [], isSelectorOpen: false, searchQuery: "", manualSnInput: "" },
       ]);
@@ -485,7 +409,7 @@ export default function BarangKeluarPage() {
             Barang Keluar (Stock Out)
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
-            Pencatatan serah terima barang kepada PIC/teknisi, validasi stok otomatis, pemilihan Serial Number aktif dari inventory, dan integrasi Surat Permit.
+            Pencatatan serah terima barang kepada PIC/teknisi, validasi stok otomatis, dan pemilihan Serial Number aktif dari inventory.
           </p>
         </div>
 
@@ -497,16 +421,6 @@ export default function BarangKeluarPage() {
           >
             <RefreshCw className="w-4 h-4" />
           </button>
-
-          {isAdmin && (
-            <button
-              onClick={handleOpenPermitPicker}
-              className="inline-flex items-center px-3.5 py-2.5 rounded-xl border border-purple-300 dark:border-purple-800/70 bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 hover:bg-purple-100 text-xs font-bold shadow-xs transition"
-            >
-              <FileText className="w-4 h-4 mr-1.5" />
-              Tarik dari Surat Permit Keluar
-            </button>
-          )}
         </div>
       </div>
 
@@ -539,11 +453,6 @@ export default function BarangKeluarPage() {
               <ArrowUpRight className="w-5 h-5 mr-2 text-rose-600" />
               Formulir Pengeluaran Barang Keluar
             </h2>
-            {permitRefNumber && (
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">
-                Terkait Permit: {permitRefNumber}
-              </span>
-            )}
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4 text-xs">
@@ -1162,75 +1071,6 @@ export default function BarangKeluarPage() {
           </table>
         </div>
       </div>
-
-      {/* MODAL: PERMIT BARANG PICKER */}
-      {isPermitModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-y-auto p-6 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center">
-                <FileText className="w-5 h-5 mr-2 text-purple-600" />
-                Pilih Dokumen Surat Permit Keluar Barang
-              </h2>
-              <button onClick={() => setIsPermitModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-500">
-              Pilih surat permit resmi yang telah diterbitkan untuk mengisi data PIC dan daftar perangkat secara otomatis:
-            </p>
-
-            <div className="divide-y divide-slate-100 dark:divide-slate-800 border rounded-xl overflow-hidden max-h-72 overflow-y-auto">
-              {permitDocs.length === 0 ? (
-                <p className="p-4 text-xs text-slate-400 text-center">Belum ada arsip surat permit.</p>
-              ) : (
-                permitDocs.map((doc) => (
-                  <div
-                    key={doc.id}
-                    onClick={() => handleSelectPermitDoc(doc)}
-                    className="p-3 hover:bg-purple-50/60 dark:hover:bg-purple-950/30 cursor-pointer flex items-center justify-between transition"
-                  >
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <span className="font-mono font-bold text-purple-600 text-xs">
-                          {doc.letterNumber || doc.id}
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          {doc.createdDate}
-                        </span>
-                      </div>
-                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 mt-0.5">
-                        PIC: {doc.applicantName}
-                      </p>
-                      <p className="text-[11px] text-slate-500">
-                        {doc.devices?.length || 0} Perangkat ({doc.devices?.map((d: any) => d.name).join(", ")})
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="px-3 py-1 rounded-lg bg-purple-600 text-white text-[11px] font-bold hover:bg-purple-700"
-                    >
-                      Pilih &rarr;
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setIsPermitModalOpen(false)}
-                className="px-4 py-2 rounded-xl border text-xs font-semibold"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* View Detail Modal (Lokasi & Tujuan Removed) */}
       {selectedTx && (

@@ -4,6 +4,17 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.12",
+      "date": "2026-11-16T16:30:24+07:00",
+      "title": "Hapus Fitur Tarik dari Surat Permit Keluar di Menu Barang Keluar",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Menghapus tombol Tarik dari Surat Permit Keluar, modal pemilihan arsip Surat Permit Barang, serta badge referensi permit pada halaman Barang Keluar (Stock Out)"
+        }
+      ]
+    },
+    {
       "version": "1.2.11",
       "date": "2026-11-16T15:11:37+07:00",
       "title": "Penyesuaian Default Tabel Pengesahan Payment Voucher & Batasan Edit Khusus Administrator",
