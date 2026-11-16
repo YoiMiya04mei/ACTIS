@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/security";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { computeOutTransactionSummary } from "@/lib/inventoryTransactionSummary";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
@@ -70,6 +71,12 @@ export async function GET(request: NextRequest) {
                   code: true,
                   unit: true,
                   type: true,
+                  stock: {
+                    select: {
+                      total_in: true,
+                      available_stock: true,
+                    },
+                  },
                 },
               },
             },
@@ -80,6 +87,13 @@ export async function GET(request: NextRequest) {
               return_number: true,
               return_date: true,
               pic_name: true,
+              details: {
+                select: {
+                  quantity: true,
+                  condition: true,
+                  item_id: true,
+                },
+              },
             },
           },
         },
@@ -89,16 +103,65 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    return NextResponse.json({
-      success: true,
-      data: transactions,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+    const outTxNumbers = transactions
+      .filter((t) => t.type === "OUT")
+      .map((t) => t.transaction_number);
+
+    const linkedLoans =
+      outTxNumbers.length > 0
+        ? await prisma.inventoryTransaction.findMany({
+            where: {
+              type: "LOAN",
+              permit_number: { in: outTxNumbers },
+            },
+            select: {
+              id: true,
+              permit_number: true,
+              details: {
+                select: {
+                  quantity: true,
+                },
+              },
+            },
+          })
+        : [];
+
+    const loansByOutNumber = new Map<string, typeof linkedLoans>();
+    for (const loan of linkedLoans) {
+      if (!loan.permit_number) continue;
+      const list = loansByOutNumber.get(loan.permit_number) || [];
+      list.push(loan);
+      loansByOutNumber.set(loan.permit_number, list);
+    }
+
+    const enrichedTransactions = transactions.map((tx) => {
+      if (tx.type !== "OUT") return tx;
+      return {
+        ...tx,
+        summary: computeOutTransactionSummary(
+          tx,
+          loansByOutNumber.get(tx.transaction_number) || []
+        ),
+      };
     });
+
+    return NextResponse.json(
+      {
+        success: true,
+        data: enrichedTransactions,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
   } catch (error: any) {
     console.error("Error in GET /api/inventory/transactions:", error);
     return NextResponse.json(

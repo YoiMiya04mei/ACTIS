@@ -25,6 +25,7 @@ import {
   Barcode,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
+import { notifyMasterInventoryChanged } from "@/lib/inventoryMasterSync";
 
 interface Item {
   id: string;
@@ -130,7 +131,9 @@ export default function MasterBarangPage() {
         limit: "15",
       });
 
-      const res = await fetch(`/api/inventory/items?${params.toString()}`);
+      const res = await fetch(`/api/inventory/items?${params.toString()}`, {
+        cache: "no-store",
+      });
       const json = await res.json();
       if (json.success) {
         setItems(json.data);
@@ -239,6 +242,7 @@ export default function MasterBarangPage() {
         message: editingItem ? "Barang berhasil diperbarui." : "Barang baru berhasil ditambahkan.",
       });
       setIsAddEditModalOpen(false);
+      notifyMasterInventoryChanged(editingItem ? "update" : "create");
       fetchItems();
     } catch (err: any) {
       setNotification({ type: "error", message: err.message });
@@ -259,6 +263,7 @@ export default function MasterBarangPage() {
       if (!res.ok || !json.success) throw new Error(json.error);
 
       setNotification({ type: "success", message: json.message });
+      notifyMasterInventoryChanged("delete");
       fetchItems();
     } catch (err: any) {
       setNotification({ type: "error", message: err.message });
@@ -1027,6 +1032,7 @@ export default function MasterBarangPage() {
 
                   setNotification({ type: "success", message: json.message });
                   setIsImportModalOpen(false);
+                  notifyMasterInventoryChanged("import");
                   fetchItems();
                 } catch (err: any) {
                   alert("Error impor: " + err.message);

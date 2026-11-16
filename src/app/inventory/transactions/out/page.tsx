@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   ArrowUpRight,
   PlusCircle,
@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   X,
-  Eye,
   FileText,
   User,
   Clock,
@@ -20,6 +19,9 @@ import {
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
 import { permitBarangStorage } from "@/services/permitBarangStorage";
+import { fetchActiveMasterItems } from "@/lib/inventoryMasterSync";
+import { computeOutTransactionSummary } from "@/lib/inventoryTransactionSummary";
+import { useRealtimeMasterItems } from "@/hooks/useRealtimeMasterItems";
 
 interface ItemUnit {
   id: string;
@@ -57,7 +59,6 @@ export default function BarangKeluarPage() {
   const { currentUser } = useCurrentUser();
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "warehouse_admin";
 
-  const [availableItems, setAvailableItems] = useState<ItemOption[]>([]);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -84,28 +85,42 @@ export default function BarangKeluarPage() {
   // View Modal
   const [selectedTx, setSelectedTx] = useState<any | null>(null);
 
-  const fetchData = async () => {
+  const { availableItems, applyMasterItems, syncMasterItems } = useRealtimeMasterItems<
+    ItemOption,
+    RowItem
+  >({
+    rows,
+    setRows,
+    resetRow: (r) => ({ ...r, item_id: "", serials: [], manualSnInput: "", searchQuery: "" }),
+    onStaleSelectionRemoved: () => {
+      setNotification({
+        type: "error",
+        message:
+          "Barang yang sebelumnya dipilih sudah dihapus atau dinonaktifkan di Master Barang dan otomatis dilepas dari pilihan.",
+      });
+    },
+  });
+
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [resItems, resTx] = await Promise.all([
-        fetch("/api/inventory/items?limit=100"),
-        fetch("/api/inventory/transactions?type=OUT&limit=20"),
+      const [freshItems, resTx] = await Promise.all([
+        fetchActiveMasterItems<ItemOption>(),
+        fetch("/api/inventory/transactions?type=OUT&limit=20", { cache: "no-store" }),
       ]);
 
-      const jsonItems = await resItems.json();
+      if (freshItems) applyMasterItems(freshItems);
       const jsonTx = await resTx.json();
-
-      if (jsonItems.success) setAvailableItems(jsonItems.data);
       if (jsonTx.success) setRecentTransactions(jsonTx.data);
     } catch (err) {
       console.error("Gagal memuat data inventaris:", err);
     }
     setLoading(false);
-  };
+  }, [applyMasterItems]);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   useEffect(() => {
     if (currentUser?.nama && !officer) {
@@ -609,11 +624,18 @@ export default function BarangKeluarPage() {
                         <td className="py-2.5 px-3 align-top">
                           <select
                             required
+                            aria-label={`Pilih barang keluar baris ${idx + 1}`}
                             value={row.item_id}
+                            onFocus={() => void syncMasterItems(false)}
+                            onPointerDown={() => void syncMasterItems(false)}
                             onChange={(e) => handleItemSelect(idx, e.target.value)}
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-medium"
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-medium [&:user-invalid]:border-rose-500"
                           >
-                            <option value="">-- Pilih Barang --</option>
+                            <option value="">
+                              {availableItems.length === 0
+                                ? "-- Tidak ada barang aktif di Master --"
+                                : "-- Pilih Barang --"}
+                            </option>
                             {availableItems.map((it) => {
                               const st = it.stock ? Number(it.stock.available_stock) : 0;
                               return (
@@ -916,72 +938,113 @@ export default function BarangKeluarPage() {
         </div>
       )}
 
-      {/* Recent Out Transactions Table (Lokasi Penggunaan Column Removed) */}
+      {/* Recent Out Transactions Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm space-y-3 p-5">
         <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center">
           <ArrowUpRight className="w-4 h-4 mr-2 text-rose-600" />
           Riwayat Transaksi Barang Keluar
         </h2>
 
-        <div className="overflow-x-auto">
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Tabel riwayat transaksi barang keluar"
+          className="overflow-x-auto"
+        >
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800/60 font-bold text-[10px] text-slate-600 dark:text-slate-300 uppercase border-b border-slate-200/80 dark:border-slate-800">
               <tr>
-                <th className="py-2.5 px-3">No. Transaksi</th>
-                <th className="py-2.5 px-3">Tanggal</th>
-                <th className="py-2.5 px-3">Nama PIC</th>
-                <th className="py-2.5 px-3">Departemen</th>
-                <th className="py-2.5 px-3">Status</th>
-                <th className="py-2.5 px-3 text-center">Aksi</th>
+                <th scope="col" className="py-2.5 px-3">No. Transaksi</th>
+                <th scope="col" className="py-2.5 px-3">Nama PIC</th>
+                <th scope="col" className="py-2.5 px-3">Departemen</th>
+                <th scope="col" className="py-2.5 px-3 text-right">Barang Masuk</th>
+                <th scope="col" className="py-2.5 px-3 text-right">Barang Keluar</th>
+                <th scope="col" className="py-2.5 px-3 text-right">Barang Terpakai</th>
+                <th scope="col" className="py-2.5 px-3 text-right">Barang Kembali</th>
+                <th scope="col" className="py-2.5 px-3">Tanggal</th>
+                <th scope="col" className="py-2.5 px-3">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {recentTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400">
+                  <td colSpan={9} className="py-8 text-center text-slate-400">
                     Belum ada riwayat transaksi barang keluar.
                   </td>
                 </tr>
               ) : (
-                recentTransactions.map((tx) => (
-                  <tr key={tx.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition">
-                    <td className="py-2.5 px-3 font-mono font-bold text-rose-600 dark:text-rose-400">
-                      {tx.transaction_number}
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
-                      {new Date(tx.transaction_date).toLocaleDateString("id-ID")}
-                    </td>
-                    <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200">
-                      {tx.pic_name}
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
-                      {tx.department || "-"}
-                    </td>
-                    <td className="py-2.5 px-3">
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${tx.status === "SUDAH_KEMBALI"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : tx.status === "SEBAGIAN_KEMBALI"
-                              ? "bg-blue-100 text-blue-700"
-                              : tx.status === "TERPAKAI"
-                                ? "bg-purple-100 text-purple-700"
-                                : "bg-amber-100 text-amber-700"
+                recentTransactions.map((tx) => {
+                  const s = tx.summary || computeOutTransactionSummary(tx);
+                  const unitText = s.unit ? ` ${s.unit}` : "";
+
+                  return (
+                    <tr
+                      key={tx.id}
+                      className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition"
+                    >
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTx(tx)}
+                          title={
+                            s.items_tooltip
+                              ? `${s.items_tooltip} — Klik untuk melihat detail transaksi`
+                              : "Klik untuk melihat detail transaksi"
+                          }
+                          className="font-mono font-bold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer text-left"
+                        >
+                          {tx.transaction_number}
+                        </button>
+                      </td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200">
+                        {tx.pic_name}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
+                        {tx.department || "-"}
+                      </td>
+                      <td
+                        className="py-2.5 px-3 text-right font-semibold text-emerald-600 dark:text-emerald-400 whitespace-nowrap"
+                        title={s.items_tooltip || undefined}
+                      >
+                        {Number(s.barang_masuk || 0).toLocaleString("id-ID")}
+                        {unitText}
+                      </td>
+                      <td
+                        className="py-2.5 px-3 text-right font-bold text-rose-600 dark:text-rose-400 whitespace-nowrap"
+                        title={s.items_tooltip || undefined}
+                      >
+                        {Number(s.barang_keluar || 0).toLocaleString("id-ID")}
+                        {unitText}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-bold text-purple-600 dark:text-purple-400 whitespace-nowrap">
+                        {Number(s.barang_terpakai || 0).toLocaleString("id-ID")}
+                        {unitText}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-bold text-blue-600 dark:text-blue-400 whitespace-nowrap">
+                        {Number(s.barang_kembali || 0).toLocaleString("id-ID")}
+                        {unitText}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        {new Date(tx.transaction_date).toLocaleDateString("id-ID")}
+                      </td>
+                      <td className="py-2.5 px-3 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            tx.status === "SUDAH_KEMBALI"
+                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                              : tx.status === "SEBAGIAN_KEMBALI"
+                                ? "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
+                                : tx.status === "TERPAKAI"
+                                  ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300"
+                                  : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
                           }`}
-                      >
-                        {tx.status}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <button
-                        onClick={() => setSelectedTx(tx)}
-                        className="p-1 rounded text-slate-500 hover:text-blue-600"
-                        title="Lihat Detail Transaksi"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                        >
+                          {tx.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

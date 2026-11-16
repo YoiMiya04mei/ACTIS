@@ -4,13 +4,32 @@
   "branch": "main",
   "releases": [
     {
-      "version": "1.2.3",
-      "date": "2026-11-16T09:29:34+07:00",
-      "title": "Penyederhanaan Kolom Tabel Menu Stok Inventory",
+      "version": "1.2.4",
+      "date": "2026-11-16T09:56:36+07:00",
+      "title": "Pembaruan Kolom Tabel Riwayat Transaksi Barang Keluar",
       "changes": [
         {
           "type": "improve",
-          "text": "Menyederhanakan kolom tabel pada halaman Stok Inventory agar hanya menampilkan Nama Barang, Jenis, Stok Saat Ini, dan Terpakai serta menghilangkan kolom sisa"
+          "text": "Menyesuaikan tabel Riwayat Transaksi Barang Keluar agar hanya menampilkan kolom No. Transaksi, Nama PIC, Departemen, Barang Masuk, Barang Keluar, Barang Terpakai, Barang Kembali, Tanggal, dan Status"
+        },
+        {
+          "type": "feat",
+          "text": "Menambahkan kalkulasi terintegrasi barang masuk, keluar, terpakai, dan kembali pada endpoint GET /api/inventory/transactions untuk transaksi OUT"
+        }
+      ]
+    },
+    {
+      "version": "1.2.3",
+      "date": "2026-11-16T09:48:19+07:00",
+      "title": "Sinkronisasi Realtime Pilihan Barang Masuk & Keluar dengan Master Barang",
+      "changes": [
+        {
+          "type": "fix",
+          "text": "Menyaring API dan pilihan barang di Barang Masuk serta Barang Keluar agar hanya menampilkan item Master Barang yang aktif (is_active=true) serta menolak transaksi pada barang yang sudah dihapus/dinonaktifkan"
+        },
+        {
+          "type": "feat",
+          "text": "Sinkronisasi realtime otomatis saat ada penambahan, edit, impor, atau penghapusan di Master Barang lintas tab, fokus jendela/dropdown, serta pembersihan pilihan baris yang sudah terhapus"
         }
       ]
     },

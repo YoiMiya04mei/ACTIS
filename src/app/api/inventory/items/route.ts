@@ -15,8 +15,11 @@ export async function GET(request: NextRequest) {
   const type = searchParams.get("type") || "";
   const lowStock = searchParams.get("low_stock") === "true";
   const statusParam = searchParams.get("is_active");
-  const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-  const limit = Math.max(1, Math.min(100, parseInt(searchParams.get("limit") || "20", 10)));
+  const fetchAll = searchParams.get("all") === "true";
+  const page = fetchAll ? 1 : Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+  const limit = fetchAll
+    ? 2000
+    : Math.max(1, Math.min(100, parseInt(searchParams.get("limit") || "20", 10)));
   const skip = (page - 1) * limit;
 
   try {
@@ -83,16 +86,23 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({
-      success: true,
-      data: results,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
+    return NextResponse.json(
+      {
+        success: true,
+        data: results,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: fetchAll ? 1 : Math.ceil(total / limit),
+        },
       },
-    });
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
   } catch (error: any) {
     console.error("Error in GET /api/inventory/items:", error);
     return NextResponse.json(

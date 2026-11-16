@@ -170,8 +170,12 @@ export async function processStockIn(payload: StockInPayload) {
         include: { stock: true, category: true },
       });
 
-      if (!item) {
-        throw new Error(`Barang dengan ID ${itemInput.item_id} tidak ditemukan.`);
+      if (!item || !item.is_active) {
+        throw new Error(
+          !item
+            ? `Barang dengan ID ${itemInput.item_id} tidak ditemukan di Master Barang.`
+            : `Barang '${item.name}' (${item.code}) sudah dihapus atau dinonaktifkan di Master Barang.`
+        );
       }
 
       const isAktif = item.category?.name?.toLowerCase() === "aktif";
@@ -407,8 +411,12 @@ export async function processStockOut(payload: StockOutPayload) {
         include: { stock: true, category: true },
       });
 
-      if (!item) {
-        throw new Error(`Barang dengan ID ${itemInput.item_id} tidak ditemukan.`);
+      if (!item || !item.is_active) {
+        throw new Error(
+          !item
+            ? `Barang dengan ID ${itemInput.item_id} tidak ditemukan di Master Barang.`
+            : `Barang '${item.name}' (${item.code}) sudah dihapus atau dinonaktifkan di Master Barang.`
+        );
       }
 
       const stock = item.stock;

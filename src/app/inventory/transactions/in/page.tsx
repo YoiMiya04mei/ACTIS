@@ -1,21 +1,18 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   ArrowDownLeft,
-  PlusCircle,
   Trash2,
   RefreshCw,
   CheckCircle2,
   AlertTriangle,
   X,
-  Eye,
-  Calendar,
   User,
-  Boxes,
-  ShieldCheck,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
+import { fetchActiveMasterItems } from "@/lib/inventoryMasterSync";
+import { useRealtimeMasterItems } from "@/hooks/useRealtimeMasterItems";
 
 interface ItemOption {
   id: string;
@@ -34,7 +31,6 @@ export default function BarangMasukPage() {
   const { currentUser } = useCurrentUser();
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "warehouse_admin";
 
-  const [availableItems, setAvailableItems] = useState<ItemOption[]>([]);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -50,26 +46,40 @@ export default function BarangMasukPage() {
   // View Modal
   const [selectedTx, setSelectedTx] = useState<any | null>(null);
 
-  const fetchData = async () => {
+  const { availableItems, applyMasterItems, syncMasterItems } = useRealtimeMasterItems<
+    ItemOption,
+    { item_id: string; quantity: string; notes: string; serials: string }
+  >({
+    rows,
+    setRows,
+    resetRow: (r) => ({ ...r, item_id: "", serials: "" }),
+    onStaleSelectionRemoved: () => {
+      setNotification({
+        type: "error",
+        message:
+          "Barang yang sebelumnya dipilih sudah dihapus atau dinonaktifkan di Master Barang dan otomatis dilepas dari pilihan.",
+      });
+    },
+  });
+
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [resItems, resTx] = await Promise.all([
-        fetch("/api/inventory/items?limit=100"),
-        fetch("/api/inventory/transactions?type=IN&limit=20"),
+      const [freshItems, resTx] = await Promise.all([
+        fetchActiveMasterItems<ItemOption>(),
+        fetch("/api/inventory/transactions?type=IN&limit=20", { cache: "no-store" }),
       ]);
 
-      const jsonItems = await resItems.json();
+      if (freshItems) applyMasterItems(freshItems);
       const jsonTx = await resTx.json();
-
-      if (jsonItems.success) setAvailableItems(jsonItems.data);
       if (jsonTx.success) setRecentTransactions(jsonTx.data);
     } catch {}
     setLoading(false);
-  };
+  }, [applyMasterItems]);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   const handleAddRow = () => {
     setRows([...rows, { item_id: "", quantity: "1", notes: "", serials: "" }]);
@@ -322,7 +332,10 @@ export default function BarangMasukPage() {
                         <td className="py-2 px-3 align-top">
                           <select
                             required
+                            aria-label={`Pilih barang baris ${idx + 1}`}
                             value={row.item_id}
+                            onFocus={() => void syncMasterItems(false)}
+                            onPointerDown={() => void syncMasterItems(false)}
                             onChange={(e) => {
                               const newId = e.target.value;
                               const selected = availableItems.find((it) => it.id === newId);
@@ -336,9 +349,13 @@ export default function BarangMasukPage() {
                               };
                               setRows(updated);
                             }}
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-medium"
+                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-medium [&:user-invalid]:border-rose-500"
                           >
-                            <option value="">-- Pilih Barang --</option>
+                            <option value="">
+                              {availableItems.length === 0
+                                ? "-- Tidak ada barang aktif di Master --"
+                                : "-- Pilih Barang --"}
+                            </option>
                             {availableItems.map((it) => (
                               <option key={it.id} value={it.id}>
                                 [{it.code}] {it.name} ({it.unit}) {it.category?.name ? `• [${it.category.name}]` : ""}
@@ -517,22 +534,30 @@ export default function BarangMasukPage() {
 
       {/* Recent In Transactions Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm space-y-3 p-5">
-        <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center">
+        <h2
+          id="recent-in-transactions-heading"
+          className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center"
+        >
           <ArrowDownLeft className="w-4 h-4 mr-2 text-emerald-600" />
           Riwayat Transaksi Barang Masuk
         </h2>
 
-        <div className="overflow-x-auto">
+        <div
+          tabIndex={0}
+          role="region"
+          aria-labelledby="recent-in-transactions-heading"
+          className="overflow-x-auto"
+        >
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-50 dark:bg-slate-800/60 font-bold text-[10px] text-slate-600 dark:text-slate-300 uppercase border-b border-slate-200/80 dark:border-slate-800">
               <tr>
-                <th className="py-2.5 px-3">No. Transaksi</th>
-                <th className="py-2.5 px-3">Tanggal</th>
-                <th className="py-2.5 px-3">Petugas Gudang</th>
-                <th className="py-2.5 px-3">Jumlah Item</th>
-                <th className="py-2.5 px-3">Kuantitas</th>
-                <th className="py-2.5 px-3">Catatan</th>
-                <th className="py-2.5 px-3 text-center">Aksi</th>
+                <th scope="col" className="py-2.5 px-3">No. Transaksi</th>
+                <th scope="col" className="py-2.5 px-3">Nama Barang</th>
+                <th scope="col" className="py-2.5 px-3">Petugas Gudang</th>
+                <th scope="col" className="py-2.5 px-3">Jumlah Item</th>
+                <th scope="col" className="py-2.5 px-3">Kuantitas</th>
+                <th scope="col" className="py-2.5 px-3">Tanggal</th>
+                <th scope="col" className="py-2.5 px-3">Catatan</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -552,35 +577,59 @@ export default function BarangMasukPage() {
                     new Set(tx.details?.map((d: any) => d.unit || d.item?.unit).filter(Boolean))
                   );
                   const unitLabel = units.length === 1 ? units[0] : (units.length > 1 ? "unit" : "");
+                  const detailNotes = Array.from(
+                    new Set(
+                      (tx.details || [])
+                        .map((d: any) => (typeof d.notes === "string" ? d.notes.trim() : ""))
+                        .filter(Boolean)
+                    )
+                  );
+                  const txNote = typeof tx.notes === "string" ? tx.notes.trim() : "";
+                  const displayNotes = txNote
+                    ? detailNotes.length > 0 && !detailNotes.every((n) => n === txNote)
+                      ? `${txNote} (${detailNotes.join(", ")})`
+                      : txNote
+                    : detailNotes.join(", ") || "-";
 
                   return (
                     <tr key={tx.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition">
-                      <td className="py-2.5 px-3 font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                        {tx.transaction_number}
-                      </td>
-                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
-                        {new Date(tx.transaction_date).toLocaleDateString("id-ID")}
-                      </td>
+                      <th scope="row" className="py-2.5 px-3 font-normal text-left whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTx(tx)}
+                          title="Klik untuk melihat detail transaksi & Serial Number"
+                          className="font-mono font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer text-left"
+                        >
+                          {tx.transaction_number}
+                        </button>
+                      </th>
                       <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200">
+                        {tx.details && tx.details.length > 0 ? (
+                          <div className="space-y-0.5">
+                            {tx.details.map((d: any) => (
+                              <div key={d.id} className="leading-snug">
+                                {d.item?.name || "-"}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
                         {tx.warehouse_officer}
                       </td>
-                      <td className="py-2.5 px-3 font-bold text-slate-700 dark:text-slate-300">
+                      <td className="py-2.5 px-3 font-bold text-slate-700 dark:text-slate-300 whitespace-nowrap">
                         {tx.details?.length || 0} barang
                       </td>
                       <td className="py-2.5 px-3 font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                         +{totalQty} {unitLabel}
                       </td>
-                      <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400">
-                        {tx.notes || "-"}
+                      <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
+                        {new Date(tx.transaction_date).toLocaleDateString("id-ID")}
                       </td>
-                      <td className="py-2.5 px-3 text-center">
-                        <button
-                          onClick={() => setSelectedTx(tx)}
-                          title="Lihat Detail Transaksi"
-                          className="p-1 rounded text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
+                      <td className="py-2.5 px-3 text-slate-500 dark:text-slate-400">
+                        {displayNotes}
                       </td>
                     </tr>
                   );
