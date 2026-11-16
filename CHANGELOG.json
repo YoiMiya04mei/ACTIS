@@ -4,6 +4,17 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.16",
+      "date": "2026-11-16T17:32:20+07:00",
+      "title": "Sederhanakan Pilihan Barang pada Form Request Publik",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Menghilangkan label satuan unit pada opsi dropdown daftar barang di halaman /request-barang agar hanya menampilkan nama dan kode barang."
+        }
+      ]
+    },
+    {
       "version": "1.2.15",
       "date": "2026-11-16T17:20:11+07:00",
       "title": "Hilangkan Info Stok pada Form Request Barang Publik",

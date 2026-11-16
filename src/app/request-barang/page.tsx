@@ -784,7 +784,7 @@ export default function PublicRequestBarangPage() {
                             </option>
                             {rowOptions.map((it) => (
                               <option key={it.id} value={it.id}>
-                                {it.name} ({it.code}) — {it.unit}
+                                {it.name} ({it.code})
                               </option>
                             ))}
                           </select>
