@@ -171,7 +171,6 @@ export default function PopSitesListPage() {
   const [selectedSite, setSelectedSite] = useState<PopSiteItem | null>(null);
   const [actionType, setActionType] = useState<"Upgrade" | "Downgrade" | "Isolir" | "Unisolir" | "Terminate" | "Unterminated" | null>(null);
   const [newLayanan, setNewLayanan] = useState("");
-  const [newVlan, setNewVlan] = useState("");
   const [actionAlasan, setActionAlasan] = useState("");
   const [actionCatatan, setActionCatatan] = useState("");
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
@@ -513,7 +512,6 @@ export default function PopSitesListPage() {
     } else {
       setNewLayanan(currentLayanan);
     }
-    setNewVlan(site.vlan !== undefined && site.vlan !== null ? String(site.vlan) : "");
     setActionAlasan("");
     setActionCatatan("");
     setActionSuccessMessage(null);
@@ -549,7 +547,6 @@ export default function PopSitesListPage() {
       const payload = {
         action_type: actionType,
         layanan_dedicated: newLayanan,
-        vlan: parseInt(newVlan, 10),
         alasan: actionAlasan.trim(),
         catatan: actionCatatan.trim(),
         user_id: currentUser.id,
@@ -1330,18 +1327,6 @@ export default function PopSitesListPage() {
                             </p>
                           </>
                         )}
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1">
-                          VLAN ID Target
-                        </label>
-                        <input
-                          type="number"
-                          value={newVlan}
-                          onChange={(e) => setNewVlan(e.target.value)}
-                          className="w-full px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-mono font-bold text-blue-700 dark:text-blue-400 outline-none"
-                        />
                       </div>
                     </div>
                   )}

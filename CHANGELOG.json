@@ -4,6 +4,17 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.6",
+      "date": "2026-11-16T11:01:35+07:00",
+      "title": "Penghapusan Kolom VLAN ID Target pada Pengajuan Upgrade & Downgrade POP Site",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Menghilangkan field VLAN ID Target pada modal pengajuan tiket Upgrade dan Downgrade di halaman List POP Site maupun Detail POP Site serta mempertahankan VLAN eksisting secara otomatis pada endpoint aksi POP Site"
+        }
+      ]
+    },
+    {
       "version": "1.2.5",
       "date": "2026-11-16T10:15:59+07:00",
       "title": "Penghapusan Menu & Aturan Barang Dipinjamkan",

@@ -238,7 +238,6 @@ export default function PopSiteDetailPage({
   // Action Modal State
   const [actionType, setActionType] = useState<"Upgrade" | "Downgrade" | "Isolir" | "Unisolir" | "Terminate" | "Unterminated" | null>(null);
   const [newLayanan, setNewLayanan] = useState("");
-  const [newVlan, setNewVlan] = useState("");
   const [actionAlasan, setActionAlasan] = useState("");
   const [actionCatatan, setActionCatatan] = useState("");
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
@@ -259,7 +258,6 @@ export default function PopSiteDetailPage({
       setSite(data.data);
       if (data.data) {
         setNewLayanan(data.data.layanan_dedicated || data.data.kapasitas_layanan || "");
-        setNewVlan(data.data.vlan !== undefined && data.data.vlan !== null ? String(data.data.vlan) : "");
       }
     } catch (err: any) {
       setError(err.message || "Gagal menghubungi server");
@@ -401,7 +399,6 @@ export default function PopSiteDetailPage({
     } else {
       setNewLayanan(currentLayanan);
     }
-    setNewVlan(site.vlan !== undefined && site.vlan !== null ? String(site.vlan) : "");
     setActionAlasan("");
     setActionCatatan("");
     setActionSuccessMessage(null);
@@ -437,7 +434,6 @@ export default function PopSiteDetailPage({
       const payload = {
         action_type: actionType,
         layanan_dedicated: newLayanan,
-        vlan: parseInt(newVlan, 10),
         alasan: actionAlasan.trim(),
         catatan: actionCatatan.trim(),
         user_id: currentUser.id,
@@ -1625,26 +1621,6 @@ export default function PopSiteDetailPage({
                             </p>
                           </>
                         )}
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">
-                          VLAN ID Target
-                        </label>
-                        <input
-                          type="number"
-                          min={1}
-                          max={4094}
-                          value={newVlan}
-                          onChange={(e) => setNewVlan(e.target.value)}
-                          className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-xs font-mono font-bold text-blue-700 outline-none"
-                        />
-                        <VlanAvailabilityHint
-                          server={site.server || ""}
-                          vlan={newVlan}
-                          excludeSiteId={site.id}
-                          onUseSuggestion={(v) => setNewVlan(String(v))}
-                        />
                       </div>
                     </div>
                   )}

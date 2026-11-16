@@ -72,7 +72,11 @@ export async function POST(
         );
       }
     }
-    const targetVlan = vlan !== undefined ? parseInt(String(vlan), 10) : site.vlan;
+    const parsedVlan =
+      vlan !== undefined && vlan !== null && vlan !== ""
+        ? parseInt(String(vlan), 10)
+        : NaN;
+    const targetVlan = Number.isFinite(parsedVlan) ? parsedVlan : site.vlan;
 
     const fullNotes = `[LIFECYCLE ${action_type.toUpperCase()}] ${alasan ? `Alasan: ${alasan}. ` : ""}${catatan ? `Catatan: ${catatan}` : ""}`.trim();
 
