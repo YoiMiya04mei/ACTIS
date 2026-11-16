@@ -26,9 +26,9 @@ export async function GET(request: NextRequest) {
     if (status) {
       whereClause.status = status;
     } else {
-      // Default: show items currently deployed outside warehouse
+      // Default: show items currently deployed outside warehouse or awaiting return confirmation
       whereClause.status = {
-        in: ["SEDANG_DIGUNAKAN", "SEBAGIAN_KEMBALI"],
+        in: ["SEDANG_DIGUNAKAN", "SEBAGIAN_KEMBALI", "MENUNGGU_PENGEMBALIAN"],
       };
     }
 
@@ -88,6 +88,34 @@ export async function GET(request: NextRequest) {
               return_number: true,
               return_date: true,
               pic_name: true,
+              details: {
+                select: {
+                  id: true,
+                  transaction_detail_id: true,
+                  item_id: true,
+                  quantity: true,
+                  condition: true,
+                  serial_numbers: true,
+                },
+              },
+            },
+          },
+          client_usages: {
+            orderBy: { created_at: "asc" },
+            include: {
+              items: {
+                include: {
+                  item: {
+                    select: {
+                      id: true,
+                      name: true,
+                      code: true,
+                      unit: true,
+                      type: true,
+                    },
+                  },
+                },
+              },
             },
           },
         },

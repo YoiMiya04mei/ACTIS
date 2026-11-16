@@ -37,6 +37,24 @@ export async function GET(
             transaction: true,
           },
         },
+        client_usage_items: {
+          orderBy: { client_usage: { created_at: "desc" } },
+          take: 100,
+          include: {
+            client_usage: {
+              include: {
+                out_transaction: {
+                  select: {
+                    id: true,
+                    transaction_number: true,
+                    pic_name: true,
+                    transaction_date: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
 

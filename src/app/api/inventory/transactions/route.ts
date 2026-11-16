@@ -89,9 +89,30 @@ export async function GET(request: NextRequest) {
               pic_name: true,
               details: {
                 select: {
+                  id: true,
+                  transaction_detail_id: true,
                   quantity: true,
                   condition: true,
                   item_id: true,
+                  serial_numbers: true,
+                },
+              },
+            },
+          },
+          client_usages: {
+            orderBy: { created_at: "asc" },
+            include: {
+              items: {
+                include: {
+                  item: {
+                    select: {
+                      id: true,
+                      name: true,
+                      code: true,
+                      unit: true,
+                      type: true,
+                    },
+                  },
                 },
               },
             },

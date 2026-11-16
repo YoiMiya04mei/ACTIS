@@ -1,6 +1,8 @@
 export interface OutTransactionDetailInput {
+  id?: string;
   item_id?: string;
   quantity: unknown;
+  qty_used?: unknown;
   qty_returned?: unknown;
   status?: string | null;
   unit?: string | null;
@@ -29,10 +31,19 @@ export interface LinkedLoanInput {
   }>;
 }
 
+export interface OutTransactionClientUsageInput {
+  items?: Array<{
+    transaction_detail_id?: string;
+    item_id?: string;
+    quantity: unknown;
+  }>;
+}
+
 export interface OutTransactionInput {
   transaction_number?: string;
   details?: OutTransactionDetailInput[];
   returns?: OutTransactionReturnInput[];
+  client_usages?: OutTransactionClientUsageInput[];
 }
 
 export interface OutTransactionSummary {
@@ -65,7 +76,10 @@ export function computeOutTransactionSummary(
   let barangMasuk = 0;
   let barangKeluar = 0;
   let consumableOut = 0;
+  let reusableUsedQty = 0;
   let detailQtyReturned = 0;
+
+  const consumableDetailIds = new Set<string>();
 
   for (const d of details) {
     const qty = Number(d.quantity || 0);
@@ -84,10 +98,24 @@ export function computeOutTransactionSummary(
 
     if (d.item?.type === "CONSUMABLE" || d.status === "CONSUMED") {
       consumableOut += qty;
+      if (d.id) consumableDetailIds.add(d.id);
+    } else {
+      reusableUsedQty += Number(d.qty_used || 0);
     }
 
     if (d.item?.name) {
       tooltipParts.push(`${d.item.name} (${qty} ${unit || "Unit"})`);
+    }
+  }
+
+  // Fallback for client_usages on reusable items when qty_used isn't populated on detail
+  let clientUsageReusableQty = 0;
+  for (const usage of Array.isArray(tx.client_usages) ? tx.client_usages : []) {
+    for (const ui of usage.items || []) {
+      if (ui.transaction_detail_id && consumableDetailIds.has(ui.transaction_detail_id)) {
+        continue;
+      }
+      clientUsageReusableQty += Number(ui.quantity || 0);
     }
   }
 
@@ -106,13 +134,18 @@ export function computeOutTransactionSummary(
   }
 
   const effectiveReturned =
-    returns.length === 0 && linkedLoans.length === 0 && consumableOut === 0 && detailQtyReturned > 0
+    returns.length === 0 &&
+    linkedLoans.length === 0 &&
+    reusableUsedQty === 0 &&
+    clientUsageReusableQty === 0 &&
+    consumableOut === 0 &&
+    detailQtyReturned > 0
       ? detailQtyReturned
       : returnsQty;
 
   const inferredLoanQty = Math.max(0, detailQtyReturned - effectiveReturned);
-  const reusableLoaned = Math.max(loanQty, inferredLoanQty);
-  const barangTerpakai = consumableOut + reusableLoaned;
+  const reusableTerpakai = Math.max(reusableUsedQty, clientUsageReusableQty, loanQty, inferredLoanQty);
+  const barangTerpakai = consumableOut + reusableTerpakai;
 
   return {
     barang_masuk: barangMasuk,

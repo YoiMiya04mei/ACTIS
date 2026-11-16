@@ -16,11 +16,13 @@ import {
   Check,
   Search,
   Zap,
+  Users,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
 import { permitBarangStorage } from "@/services/permitBarangStorage";
 import { fetchActiveMasterItems } from "@/lib/inventoryMasterSync";
 import { computeOutTransactionSummary } from "@/lib/inventoryTransactionSummary";
+import { parseSerialList } from "@/lib/inventoryClientFinish";
 import { useRealtimeMasterItems } from "@/hooks/useRealtimeMasterItems";
 
 interface ItemUnit {
@@ -111,7 +113,12 @@ export default function BarangKeluarPage() {
 
       if (freshItems) applyMasterItems(freshItems);
       const jsonTx = await resTx.json();
-      if (jsonTx.success) setRecentTransactions(jsonTx.data);
+      if (jsonTx.success) {
+        setRecentTransactions(jsonTx.data);
+        setSelectedTx((prev: any) =>
+          prev ? jsonTx.data.find((t: any) => t.id === prev.id) || prev : null
+        );
+      }
     } catch (err) {
       console.error("Gagal memuat data inventaris:", err);
     }
@@ -120,6 +127,20 @@ export default function BarangKeluarPage() {
 
   useEffect(() => {
     fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === "visible") {
+        fetchData();
+      }
+    };
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+    return () => {
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+    };
   }, [fetchData]);
 
   useEffect(() => {
@@ -1032,11 +1053,13 @@ export default function BarangKeluarPage() {
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                             tx.status === "SUDAH_KEMBALI"
                               ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-                              : tx.status === "SEBAGIAN_KEMBALI"
-                                ? "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
-                                : tx.status === "TERPAKAI"
-                                  ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300"
-                                  : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+                              : tx.status === "MENUNGGU_PENGEMBALIAN"
+                                ? "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300"
+                                : tx.status === "SEBAGIAN_KEMBALI"
+                                  ? "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
+                                  : tx.status === "TERPAKAI"
+                                    ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300"
+                                    : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
                           }`}
                         >
                           {tx.status}
@@ -1123,13 +1146,30 @@ export default function BarangKeluarPage() {
       {/* View Detail Modal (Lokasi & Tujuan Removed) */}
       {selectedTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between pb-3 border-b">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl max-h-[88vh] overflow-y-auto p-6 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div>
-                <span className="font-mono text-xs font-bold text-rose-600 dark:text-rose-400">
-                  {selectedTx.transaction_number}
-                </span>
-                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold text-rose-600 dark:text-rose-400">
+                    {selectedTx.transaction_number}
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      selectedTx.status === "SUDAH_KEMBALI"
+                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                        : selectedTx.status === "MENUNGGU_PENGEMBALIAN"
+                          ? "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300"
+                          : selectedTx.status === "SEBAGIAN_KEMBALI"
+                            ? "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
+                            : selectedTx.status === "TERPAKAI"
+                              ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300"
+                              : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+                    }`}
+                  >
+                    {selectedTx.status}
+                  </span>
+                </div>
+                <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">
                   Detail Transaksi Barang Keluar
                 </h2>
               </div>
@@ -1138,10 +1178,13 @@ export default function BarangKeluarPage() {
               </button>
             </div>
 
-            <div className="space-y-2 text-xs">
-              <p><span className="font-semibold text-slate-500">PIC:</span> {selectedTx.pic_name} ({selectedTx.pic_phone || "-"})</p>
-              <p><span className="font-semibold text-slate-500">Departemen:</span> {selectedTx.department || "-"}</p>
-              <p><span className="font-semibold text-slate-500">Petugas Gudang:</span> {selectedTx.warehouse_officer}</p>
+            <div className="space-y-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                <p><span className="font-semibold text-slate-500">PIC:</span> {selectedTx.pic_name} ({selectedTx.pic_phone || "-"})</p>
+                <p><span className="font-semibold text-slate-500">Departemen:</span> {selectedTx.department || "-"}</p>
+                <p><span className="font-semibold text-slate-500">Petugas Gudang:</span> {selectedTx.warehouse_officer}</p>
+                <p><span className="font-semibold text-slate-500">Tanggal:</span> {new Date(selectedTx.transaction_date).toLocaleDateString("id-ID")}</p>
+              </div>
               {selectedTx.notes && (
                 <p><span className="font-semibold text-slate-500">Keterangan:</span> {selectedTx.notes}</p>
               )}
@@ -1150,20 +1193,16 @@ export default function BarangKeluarPage() {
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-50 dark:bg-slate-800 font-bold text-[10px] text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800">
                     <tr>
-                      <th className="py-2 px-3">Barang & Serial Number</th>
+                      <th className="py-2 px-3">Barang &amp; Serial Number</th>
                       <th className="py-2 px-3 text-right">Keluar</th>
-                      <th className="py-2 px-3 text-right">Kembali</th>
-                      <th className="py-2 px-3 text-right">Sisa</th>
+                      <th className="py-2 px-3 text-right text-purple-600">Terpakai</th>
+                      <th className="py-2 px-3 text-right text-blue-600">Kembali</th>
+                      <th className="py-2 px-3 text-right text-amber-600">Sisa</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {selectedTx.details?.map((d: any) => {
-                      let parsedSns: string[] = [];
-                      if (d.unit_serial_numbers) {
-                        try {
-                          parsedSns = JSON.parse(d.unit_serial_numbers);
-                        } catch { }
-                      }
+                      const parsedSns = parseSerialList(d.unit_serial_numbers);
 
                       return (
                         <tr key={d.id}>
@@ -1186,6 +1225,9 @@ export default function BarangKeluarPage() {
                           <td className="py-2.5 px-3 text-right font-bold text-rose-600 align-top">
                             {Number(d.quantity)} {d.unit}
                           </td>
+                          <td className="py-2.5 px-3 text-right font-bold text-purple-600 align-top">
+                            {Number(d.qty_used || 0)} {d.unit}
+                          </td>
                           <td className="py-2.5 px-3 text-right font-bold text-blue-600 align-top">
                             {Number(d.qty_returned || 0)} {d.unit}
                           </td>
@@ -1198,6 +1240,51 @@ export default function BarangKeluarPage() {
                   </tbody>
                 </table>
               </div>
+
+              {selectedTx.client_usages && selectedTx.client_usages.length > 0 && (
+                <div className="pt-2 space-y-2">
+                  <h3 className="text-[11px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5" />
+                    Rincian Pemakaian oleh Client ({selectedTx.client_usages.length})
+                  </h3>
+                  <div className="space-y-2">
+                    {selectedTx.client_usages.map((cu: any, idx: number) => (
+                      <div
+                        key={cu.id}
+                        className="p-3 rounded-xl border border-purple-200/80 dark:border-purple-800/60 bg-purple-50/40 dark:bg-purple-950/20 space-y-1.5"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-bold text-slate-900 dark:text-slate-100">
+                            {idx + 1}. {cu.client_name}
+                          </span>
+                          {cu.client_phone && (
+                            <span className="font-mono text-[11px] text-slate-600 dark:text-slate-300">
+                              HP: {cu.client_phone}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                          Alamat: {cu.client_address}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          {(cu.items || []).map((ci: any) => {
+                            const ciSns = parseSerialList(ci.serial_numbers);
+                            return (
+                              <span
+                                key={ci.id}
+                                className="px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-800 text-[10px] font-semibold text-purple-700 dark:text-purple-300"
+                              >
+                                {ci.item?.name}: {Number(ci.quantity)} {ci.unit}
+                                {ciSns.length > 0 ? ` (SN: ${ciSns.join(", ")})` : ""}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-slate-800">

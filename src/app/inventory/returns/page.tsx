@@ -13,8 +13,10 @@ import {
   User,
   ShieldAlert,
   ArrowRight,
+  Users,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
+import { computeRemainingSerialsForDetail } from "@/lib/inventoryClientFinish";
 
 function PengembalianBarangContent() {
   const { currentUser } = useCurrentUser();
@@ -40,10 +42,13 @@ function PengembalianBarangContent() {
       item_code: string;
       unit: string;
       qty_out: number;
+      qty_used: number;
       qty_remaining: number;
       return_qty: string;
       condition: "BAIK" | "RUSAK_RINGAN" | "RUSAK_BERAT" | "HILANG";
       notes: string;
+      available_serials: string[];
+      selected_serials: string[];
     }>
   >([]);
 
@@ -54,8 +59,8 @@ function PengembalianBarangContent() {
     setLoading(true);
     try {
       const [resOut, resRet] = await Promise.all([
-        fetch("/api/inventory/in-use?limit=50"),
-        fetch("/api/inventory/returns?limit=20"),
+        fetch("/api/inventory/in-use?limit=50", { cache: "no-store" }),
+        fetch("/api/inventory/returns?limit=20", { cache: "no-store" }),
       ]);
 
       const jsonOut = await resOut.json();
@@ -83,17 +88,27 @@ function PengembalianBarangContent() {
       setPicName(tx.pic_name || "");
       const details = (tx.details || [])
         .filter((d: any) => d.item?.type === "REUSABLE" && Number(d.qty_remaining) > 0)
-        .map((d: any) => ({
-          transaction_detail_id: d.id,
-          item_name: d.item?.name,
-          item_code: d.item?.code,
-          unit: d.unit,
-          qty_out: Number(d.quantity),
-          qty_remaining: Number(d.qty_remaining),
-          return_qty: String(d.qty_remaining), // default to full return
-          condition: "BAIK" as const,
-          notes: "",
-        }));
+        .map((d: any) => {
+          const availSns = computeRemainingSerialsForDetail(
+            d,
+            tx.client_usages || [],
+            tx.returns || []
+          );
+          return {
+            transaction_detail_id: d.id,
+            item_name: d.item?.name,
+            item_code: d.item?.code,
+            unit: d.unit,
+            qty_out: Number(d.quantity),
+            qty_used: Number(d.qty_used || 0),
+            qty_remaining: Number(d.qty_remaining),
+            return_qty: String(d.qty_remaining), // default to full remaining return
+            condition: "BAIK" as const,
+            notes: "",
+            available_serials: availSns,
+            selected_serials: availSns,
+          };
+        });
 
       setReturnDetails(details);
     }
@@ -101,7 +116,25 @@ function PengembalianBarangContent() {
 
   const handleReturnDetailChange = (index: number, field: string, value: any) => {
     const updated = [...returnDetails];
-    updated[index] = { ...updated[index], [field]: value };
+    const current = { ...updated[index], [field]: value };
+    if (field === "return_qty" && current.available_serials.length > 0) {
+      const targetQty = Math.max(0, Math.min(Number(value) || 0, current.available_serials.length));
+      current.selected_serials = current.available_serials.slice(0, targetQty);
+    }
+    updated[index] = current;
+    setReturnDetails(updated);
+  };
+
+  const handleToggleReturnSn = (index: number, sn: string) => {
+    const updated = [...returnDetails];
+    const current = { ...updated[index] };
+    const exists = current.selected_serials.includes(sn);
+    const nextSns = exists
+      ? current.selected_serials.filter((s) => s !== sn)
+      : [...current.selected_serials, sn];
+    current.selected_serials = nextSns;
+    current.return_qty = String(nextSns.length);
+    updated[index] = current;
     setReturnDetails(updated);
   };
 
@@ -127,6 +160,13 @@ function PengembalianBarangContent() {
         });
         return;
       }
+      if (d.available_serials.length > 0 && d.selected_serials.length !== Number(d.return_qty)) {
+        setNotification({
+          type: "error",
+          message: `Jumlah Serial Number terpilih (${d.selected_serials.length}) harus sama dengan jumlah dikembalikan (${d.return_qty}) untuk '${d.item_name}'.`,
+        });
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -141,6 +181,7 @@ function PengembalianBarangContent() {
           transaction_detail_id: d.transaction_detail_id,
           quantity: Number(d.return_qty),
           condition: d.condition,
+          serial_numbers: d.available_serials.length > 0 ? d.selected_serials : undefined,
           notes: d.notes || null,
         })),
       };
@@ -218,6 +259,93 @@ function PengembalianBarangContent() {
         </div>
       )}
 
+      {/* Highlighted Queue from "Selesai" Finish Workflow */}
+      {(() => {
+        const pendingReturnTxs = activeOutTxs.filter(
+          (tx) => tx.status === "MENUNGGU_PENGEMBALIAN"
+        );
+        if (pendingReturnTxs.length === 0) return null;
+        return (
+          <div className="bg-orange-50/70 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800/70 rounded-2xl p-5 shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-extrabold text-orange-900 dark:text-orange-200 flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-orange-600 shrink-0" />
+                  Antrean Sisa Penggunaan Menunggu Pengembalian ke Stok ({pendingReturnTxs.length})
+                </h2>
+                <p className="text-xs text-orange-700 dark:text-orange-300 mt-0.5">
+                  Sisa barang dari pekerjaan yang sudah ditandai <strong>Selesai</strong> perlu dikonfirmasi masuk ke menu ini sebelum menambah <strong>Stok Siap Pakai</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {pendingReturnTxs.map((tx) => {
+                const pendingItems = (tx.details || []).filter(
+                  (d: any) => d.item?.type === "REUSABLE" && Number(d.qty_remaining) > 0
+                );
+                const isSelected = selectedTxId === tx.id;
+                return (
+                  <div
+                    key={tx.id}
+                    className={`p-3.5 rounded-xl border bg-white dark:bg-slate-900 flex flex-col justify-between gap-3 transition ${
+                      isSelected
+                        ? "border-blue-500 ring-2 ring-blue-500/20"
+                        : "border-orange-200/80 dark:border-orange-800/60"
+                    }`}
+                  >
+                    <div className="space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono font-bold text-orange-700 dark:text-orange-300">
+                          {tx.transaction_number}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-700 dark:bg-orange-950/70 dark:text-orange-300">
+                          MENUNGGU_PENGEMBALIAN
+                        </span>
+                      </div>
+                      <p className="text-slate-700 dark:text-slate-300 font-semibold flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-slate-400" />
+                        PIC: {tx.pic_name}
+                        {tx.client_usages && tx.client_usages.length > 0 && (
+                          <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
+                            <Users className="w-3 h-3" />
+                            {tx.client_usages.length} Client Terpakai
+                          </span>
+                        )}
+                      </p>
+                      <div className="flex flex-wrap gap-1 pt-0.5">
+                        {pendingItems.map((d: any) => (
+                          <span
+                            key={d.id}
+                            className="px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800/60 text-[10px] font-semibold"
+                          >
+                            {d.item?.name}: Sisa {Number(d.qty_remaining)} {d.unit}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTxId(tx.id)}
+                        className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                          isSelected
+                            ? "bg-blue-600 text-white"
+                            : "bg-orange-600 hover:bg-orange-700 text-white"
+                        }`}
+                      >
+                        {isSelected ? "Sedang Dipilih" : "Proses Pengembalian"}
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Return Form */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-5">
         <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center">
@@ -238,11 +366,18 @@ function PengembalianBarangContent() {
                 className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-bold"
               >
                 <option value="">-- Pilih Transaksi Keluar yang Masih Aktif --</option>
-                {activeOutTxs.map((tx) => (
-                  <option key={tx.id} value={tx.id}>
-                    [{tx.transaction_number}] PIC: {tx.pic_name} ({tx.location || "Lokasi -"}) - Status: {tx.status}
-                  </option>
-                ))}
+                {[...activeOutTxs]
+                  .sort((a, b) => {
+                    const aWait = a.status === "MENUNGGU_PENGEMBALIAN" ? 0 : 1;
+                    const bWait = b.status === "MENUNGGU_PENGEMBALIAN" ? 0 : 1;
+                    return aWait - bWait;
+                  })
+                  .map((tx) => (
+                    <option key={tx.id} value={tx.id}>
+                      [{tx.transaction_number}] PIC: {tx.pic_name} ({tx.location || "Lokasi -"}) - Status:{" "}
+                      {tx.status === "MENUNGGU_PENGEMBALIAN" ? "Menunggu Konfirmasi Kembali" : tx.status}
+                    </option>
+                  ))}
               </select>
             </div>
 
@@ -289,9 +424,44 @@ function PengembalianBarangContent() {
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {returnDetails.map((detail, idx) => (
                     <tr key={detail.transaction_detail_id}>
-                      <td className="py-2 px-3">
+                      <td className="py-2 px-3 align-top">
                         <span className="font-mono text-blue-600 font-bold">{detail.item_code}</span>
                         <p className="font-semibold text-slate-800 dark:text-slate-200">{detail.item_name}</p>
+                        {detail.qty_used > 0 && (
+                          <p className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold mt-0.5">
+                            Terpakai Client: {detail.qty_used} {detail.unit}
+                          </p>
+                        )}
+                        {detail.available_serials.length > 0 && (
+                          <div className="mt-1.5 space-y-1">
+                            <span className="block text-[10px] font-semibold text-slate-500">
+                              SN Sisa Kembali ({detail.selected_serials.length}/{detail.available_serials.length}):
+                            </span>
+                            <div className="flex flex-wrap gap-1">
+                              {detail.available_serials.map((sn) => {
+                                const checked = detail.selected_serials.includes(sn);
+                                return (
+                                  <label
+                                    key={sn}
+                                    className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-mono text-[10px] cursor-pointer transition ${
+                                      checked
+                                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-300 dark:border-blue-700 font-bold"
+                                        : "bg-slate-50 dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-700"
+                                    }`}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={checked}
+                                      onChange={() => handleToggleReturnSn(idx, sn)}
+                                      className="w-3 h-3 rounded border-slate-300 text-blue-600"
+                                    />
+                                    <span>{sn}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </td>
                       <td className="py-2 px-3 text-right font-medium text-slate-500">
                         {detail.qty_out} {detail.unit}

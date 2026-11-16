@@ -14,8 +14,10 @@ import {
   Copy,
   Check,
   ExternalLink,
+  Users,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
+import { parseSerialList } from "@/lib/inventoryClientFinish";
 
 export default function StokInventoryPage() {
   const { currentUser } = useCurrentUser();
@@ -45,7 +47,7 @@ export default function StokInventoryPage() {
   const [detailItem, setDetailItem] = useState<any>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [snSearch, setSnSearch] = useState("");
-  const [snStatusFilter, setSnStatusFilter] = useState<"AVAILABLE" | "IN_USE" | "ALL">("AVAILABLE");
+  const [snStatusFilter, setSnStatusFilter] = useState<"AVAILABLE" | "IN_USE" | "CONSUMED" | "ALL">("AVAILABLE");
   const [copiedSn, setCopiedSn] = useState<string | null>(null);
 
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -63,7 +65,7 @@ export default function StokInventoryPage() {
         limit: "20",
       });
 
-      const res = await fetch(`/api/inventory/stock?${params.toString()}`);
+      const res = await fetch(`/api/inventory/stock?${params.toString()}`, { cache: "no-store" });
       const json = await res.json();
       if (json.success) {
         setItems(json.data);
@@ -131,7 +133,7 @@ export default function StokInventoryPage() {
     setCopiedSn(null);
 
     try {
-      const res = await fetch(`/api/inventory/items/${item.id}`);
+      const res = await fetch(`/api/inventory/items/${item.id}`, { cache: "no-store" });
       const json = await res.json();
       if (json.success && json.data) {
         setDetailItem(json.data);
@@ -239,7 +241,7 @@ export default function StokInventoryPage() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] pl-6">
           <p>
-            <span className="font-bold">Barang Reusable:</span> Stok Tersedia = Total Masuk &minus; Total Sedang Digunakan (di luar gudang) &minus; Rusak/Hilang.
+            <span className="font-bold">Barang Reusable:</span> Stok Tersedia = Total Masuk &minus; Total Sedang Digunakan (di luar gudang) &minus; Total Terpakai (Client) &minus; Rusak/Hilang.
           </p>
           <p>
             <span className="font-bold">Barang Consumable:</span> Stok Tersedia = Total Masuk &minus; Total Terpakai (Dikeluarkan Permanen).
@@ -381,7 +383,14 @@ export default function StokInventoryPage() {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-purple-600 dark:text-purple-400 whitespace-nowrap">
-                        {item.type === "CONSUMABLE" ? Number(s.total_consumed || 0).toLocaleString("id-ID") : "-"}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDetail(item)}
+                          className="inline-flex items-center gap-1 font-bold hover:underline cursor-pointer"
+                          title="Lihat detail pemakaian client & riwayat barang terpakai"
+                        >
+                          {Number(s.total_consumed || 0).toLocaleString("id-ID")}
+                        </button>
                       </td>
                     </tr>
                   );
@@ -578,7 +587,7 @@ export default function StokInventoryPage() {
             {/* Scrollable Body */}
             <div className="p-4 sm:p-6 overflow-y-auto space-y-6 text-xs">
               {/* Quick Stock Balances */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 sm:gap-3">
                 <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/50">
                   <span className="text-[11px] font-medium text-emerald-800 dark:text-emerald-300">Stok Siap Pakai</span>
                   <p className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
@@ -592,6 +601,13 @@ export default function StokInventoryPage() {
                     {detailItem.type === "REUSABLE"
                       ? Number(detailItem.stock?.total_in_use || 0).toLocaleString("id-ID")
                       : "-"}{" "}
+                    <span className="text-xs font-semibold">{detailItem.unit}</span>
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200/80 dark:border-purple-800/50">
+                  <span className="text-[11px] font-medium text-purple-800 dark:text-purple-300">Terpakai (Client)</span>
+                  <p className="text-xl font-black text-purple-600 dark:text-purple-400 mt-0.5">
+                    {Number(detailItem.stock?.total_consumed || 0).toLocaleString("id-ID")}{" "}
                     <span className="text-xs font-semibold">{detailItem.unit}</span>
                   </p>
                 </div>
@@ -691,10 +707,12 @@ export default function StokInventoryPage() {
                 const units: any[] = detailItem.units || [];
                 const availableUnits = units.filter((u) => u.status === "AVAILABLE");
                 const inUseUnits = units.filter((u) => u.status === "IN_USE");
+                const consumedUnits = units.filter((u) => u.status === "CONSUMED");
 
                 const filteredUnits = units.filter((u) => {
                   if (snStatusFilter === "AVAILABLE" && u.status !== "AVAILABLE") return false;
                   if (snStatusFilter === "IN_USE" && u.status !== "IN_USE") return false;
+                  if (snStatusFilter === "CONSUMED" && u.status !== "CONSUMED") return false;
                   if (snSearch.trim()) {
                     const q = snSearch.toLowerCase();
                     const sn = (u.serial_number || "").toLowerCase();
@@ -769,6 +787,17 @@ export default function StokInventoryPage() {
                           }`}
                         >
                           Sedang Digunakan ({inUseUnits.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSnStatusFilter("CONSUMED")}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                            snStatusFilter === "CONSUMED"
+                              ? "bg-white dark:bg-slate-900 text-purple-600 dark:text-purple-400 shadow-xs"
+                              : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                          }`}
+                        >
+                          Terpakai Client ({consumedUnits.length})
                         </button>
                         <button
                           type="button"
@@ -849,15 +878,19 @@ export default function StokInventoryPage() {
                                       u.status === "AVAILABLE"
                                         ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
                                         : u.status === "IN_USE"
-                                        ? "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
-                                        : "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300"
+                                          ? "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+                                          : u.status === "CONSUMED"
+                                            ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300"
+                                            : "bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300"
                                     }`}
                                   >
                                     {u.status === "AVAILABLE"
                                       ? "Tersedia"
                                       : u.status === "IN_USE"
-                                      ? "Digunakan"
-                                      : u.status}
+                                        ? "Digunakan"
+                                        : u.status === "CONSUMED"
+                                          ? "Terpakai Client"
+                                          : u.status}
                                   </span>
                                 </td>
                                 <td className="py-2 px-3">
@@ -893,6 +926,92 @@ export default function StokInventoryPage() {
                   </div>
                 );
               })()}
+
+              {/* Detail Barang Terpakai oleh Client */}
+              <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Users className="w-4 h-4 text-purple-600" />
+                    <h3 className="font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider text-[11px]">
+                      Detail Barang Terpakai oleh Client ({detailItem.client_usage_items?.length || 0})
+                    </h3>
+                  </div>
+                </div>
+
+                {!detailItem.client_usage_items || detailItem.client_usage_items.length === 0 ? (
+                  <div className="p-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-slate-400">
+                    Belum ada catatan pemakaian oleh client untuk barang ini.
+                  </div>
+                ) : (
+                  <div className="border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden max-h-64 overflow-y-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-purple-50/70 dark:bg-purple-950/30 text-slate-600 dark:text-slate-300 uppercase font-bold text-[10px] border-b border-slate-200 dark:border-slate-800 sticky top-0 z-10">
+                        <tr>
+                          <th className="py-2 px-3">Nama Client &amp; Kontak</th>
+                          <th className="py-2 px-3">Alamat</th>
+                          <th className="py-2 px-3 text-right">Qty</th>
+                          <th className="py-2 px-3">Serial Number</th>
+                          <th className="py-2 px-3">Sumber / Teknisi</th>
+                          <th className="py-2 px-3">Tanggal</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {detailItem.client_usage_items.map((ui: any) => {
+                          const cu = ui.client_usage;
+                          const uiSns = parseSerialList(ui.serial_numbers);
+                          return (
+                            <tr key={ui.id} className="hover:bg-purple-50/30 dark:hover:bg-purple-950/20">
+                              <td className="py-2 px-3 align-top">
+                                <p className="font-bold text-slate-800 dark:text-slate-200">
+                                  {cu?.client_name || "-"}
+                                </p>
+                                {cu?.client_phone && (
+                                  <p className="text-[10px] text-slate-500 font-mono">{cu.client_phone}</p>
+                                )}
+                              </td>
+                              <td className="py-2 px-3 align-top text-slate-600 dark:text-slate-400 max-w-xs">
+                                {cu?.client_address || "-"}
+                              </td>
+                              <td className="py-2 px-3 align-top text-right font-bold text-purple-600 dark:text-purple-400 whitespace-nowrap">
+                                {Number(ui.quantity)} {ui.unit}
+                              </td>
+                              <td className="py-2 px-3 align-top">
+                                {uiSns.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {uiSns.map((sn) => (
+                                      <span
+                                        key={sn}
+                                        className="px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-mono text-[10px] border border-purple-200 dark:border-purple-800"
+                                      >
+                                        {sn}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 italic">-</span>
+                                )}
+                              </td>
+                              <td className="py-2 px-3 align-top">
+                                <p className="font-mono text-[10px] font-bold text-rose-600 dark:text-rose-400">
+                                  {cu?.out_transaction?.transaction_number || "-"}
+                                </p>
+                                <p className="text-[10px] text-slate-500">
+                                  PIC: {cu?.technician_pic || cu?.out_transaction?.pic_name || "-"}
+                                </p>
+                              </td>
+                              <td className="py-2 px-3 align-top text-[10px] text-slate-500 whitespace-nowrap">
+                                {cu?.completion_date
+                                  ? new Date(cu.completion_date).toLocaleDateString("id-ID")
+                                  : "-"}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Footer */}

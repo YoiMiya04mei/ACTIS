@@ -4,6 +4,25 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.7",
+      "date": "2026-11-16T11:52:59+07:00",
+      "title": "Workflow Selesai Multi-Client & Sinkronisasi Stok Terpakai serta Pengembalian",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Mengganti tombol Kembalikan dengan tombol Selesai beserta popup input multi-client (Nama Client, Alamat, No HP, dan multi-barang keluar lengkap dengan pemilihan Serial Number)"
+        },
+        {
+          "type": "feat",
+          "text": "Barang terpakai oleh client langsung masuk ke kolom Terpakai dan Detail Client di Stok Inventory sementara sisa barang masuk ke antrean Pengembalian Barang (MENUNGGU_PENGEMBALIAN) sebelum restock ke stok tersedia"
+        },
+        {
+          "type": "improve",
+          "text": "Menyinkronkan status transaksi Barang Keluar dan rincian pemakaian client secara otomatis mengikuti pembaruan menu Barang Sedang Digunakan dan Pengembalian Barang"
+        }
+      ]
+    },
+    {
       "version": "1.2.6",
       "date": "2026-11-16T11:01:35+07:00",
       "title": "Penghapusan Kolom VLAN ID Target pada Pengajuan Upgrade & Downgrade POP Site",

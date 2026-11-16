@@ -1,5 +1,10 @@
 import { prisma } from "./prisma";
 import { Prisma } from "@prisma/client";
+import {
+  FinishClientPayload,
+  computeRemainingSerialsForDetail,
+  validateFinishClientAllocations,
+} from "./inventoryClientFinish";
 
 // Format date as YYYYMMDD
 export function getDateString(d = new Date()): string {
@@ -717,6 +722,29 @@ export async function processReturn(payload: ReturnPayload) {
         },
       });
 
+      // Include existing client_usages & returns when resolving serials automatically
+      let serialsToUpdate = (returnInput.serial_numbers || [])
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      if (serialsToUpdate.length === 0 && updatedRemaining.isZero() && txDetail.unit_serial_numbers) {
+        const [existingUsages, existingReturns] = await Promise.all([
+          tx.inventoryClientUsage.findMany({
+            where: { out_transaction_id: outTx.id },
+            include: { items: true },
+          }),
+          tx.inventoryReturn.findMany({
+            where: { out_transaction_id: outTx.id },
+            include: { details: true },
+          }),
+        ]);
+        serialsToUpdate = computeRemainingSerialsForDetail(
+          txDetail,
+          existingUsages,
+          existingReturns
+        );
+      }
+
       // Create Return Detail Record
       await tx.inventoryReturnDetail.create({
         data: {
@@ -725,8 +753,8 @@ export async function processReturn(payload: ReturnPayload) {
           item_id: item.id,
           quantity: returnQty,
           condition: returnInput.condition,
-          serial_numbers: returnInput.serial_numbers?.length
-            ? JSON.stringify(returnInput.serial_numbers)
+          serial_numbers: serialsToUpdate.length
+            ? JSON.stringify(serialsToUpdate)
             : null,
           action_taken: returnInput.action_taken || (isGoodCondition ? "Masuk stok siap pakai" : "Karantina / Penanganan khusus"),
           notes: returnInput.notes || null,
@@ -734,11 +762,8 @@ export async function processReturn(payload: ReturnPayload) {
       });
 
       // Update serial units if tracked
-      if (returnInput.serial_numbers?.length) {
-        for (const sn of returnInput.serial_numbers) {
-          const trimmedSn = sn.trim();
-          if (!trimmedSn) continue;
-
+      if (serialsToUpdate.length > 0) {
+        for (const trimmedSn of serialsToUpdate) {
           await tx.inventoryItemUnit.updateMany({
             where: { serial_number: trimmedSn },
             data: {
@@ -786,7 +811,9 @@ export async function processReturn(payload: ReturnPayload) {
       ? "SUDAH_KEMBALI"
       : hasAnyReturned
         ? "SEBAGIAN_KEMBALI"
-        : "SEDANG_DIGUNAKAN";
+        : outTx.status === "MENUNGGU_PENGEMBALIAN"
+          ? "MENUNGGU_PENGEMBALIAN"
+          : "SEDANG_DIGUNAKAN";
 
     await tx.inventoryTransaction.update({
       where: { id: outTx.id },
@@ -1255,4 +1282,229 @@ export async function getInventoryDashboardStats() {
     monthly_chart: monthsData,
     category_distribution: categoryDistribution,
   };
+}
+
+export interface FinishInUsePayload {
+  transaction_id: string;
+  completion_date?: Date | string;
+  notes?: string;
+  user_name?: string;
+  created_by?: string;
+  clients: FinishClientPayload[];
+}
+
+/**
+ * Menyelesaikan penggunaan barang di lapangan:
+ * - Mencatat penggunaan per Client (bisa >1 client, masing-masing bisa memakai >1 item dari transaksi keluar).
+ * - Barang terpakai client langsung menambah `total_consumed` di Stok Inventory & mengurangi `total_in_use`,
+ *   disertai rincian client (`InventoryClientUsage`).
+ * - Sisa barang yang belum dipakai TIDAK langsung menambah `available_stock`, melainkan tetap berada
+ *   di `qty_remaining` berstatus `MENUNGGU_PENGEMBALIAN` agar diproses di menu Pengembalian Barang terlebih dahulu.
+ * - Jika seluruh barang habis terpakai client (sisa = 0), status transaksi langsung berubah menjadi `SUDAH_KEMBALI`.
+ */
+export async function processFinishInUse(payload: FinishInUsePayload) {
+  if (!payload.transaction_id) {
+    throw new Error("ID transaksi wajib disertakan.");
+  }
+
+  return await prisma.$transaction(async (tx) => {
+    const outTx = await tx.inventoryTransaction.findUnique({
+      where: { id: payload.transaction_id },
+      include: {
+        details: {
+          include: {
+            item: {
+              include: { stock: true, category: true },
+            },
+          },
+        },
+        client_usages: {
+          include: { items: true },
+        },
+        returns: {
+          include: { details: true },
+        },
+      },
+    });
+
+    if (!outTx || outTx.type !== "OUT") {
+      throw new Error("Transaksi barang keluar tidak ditemukan.");
+    }
+
+    if (outTx.status === "SUDAH_KEMBALI" || outTx.status === "MENUNGGU_PENGEMBALIAN") {
+      throw new Error(
+        outTx.status === "MENUNGGU_PENGEMBALIAN"
+          ? "Transaksi ini sudah diselesaikan dan sisa barang sedang menunggu konfirmasi di menu Pengembalian Barang."
+          : "Transaksi ini sudah berstatus SUDAH_KEMBALI."
+      );
+    }
+
+    const clients = Array.isArray(payload.clients) ? payload.clients : [];
+    const {
+      allocatedByDetail,
+      usedSerialsByDetail,
+      totalUsedUnits,
+      totalPendingReturnUnits,
+    } = validateFinishClientAllocations(
+      outTx.details,
+      clients,
+      outTx.client_usages,
+      outTx.returns
+    );
+
+    const completionDate = payload.completion_date
+      ? new Date(payload.completion_date)
+      : new Date();
+
+    const activeClientRecords: string[] = [];
+
+    for (const client of clients) {
+      const validItems = (client.items || []).filter((i) => Number(i.quantity || 0) > 0);
+      if (validItems.length === 0) continue;
+
+      const createdUsage = await tx.inventoryClientUsage.create({
+        data: {
+          out_transaction_id: outTx.id,
+          client_name: client.client_name.trim(),
+          client_address: client.client_address.trim(),
+          client_phone: client.client_phone?.trim() || null,
+          technician_pic: outTx.pic_name || null,
+          completion_date: completionDate,
+          notes: client.notes?.trim() || payload.notes?.trim() || null,
+          created_by: payload.created_by || null,
+        },
+      });
+
+      activeClientRecords.push(client.client_name.trim());
+
+      for (const itemInput of validItems) {
+        const detail = outTx.details.find((d) => d.id === itemInput.transaction_detail_id)!;
+        const cleanSns = (itemInput.serial_numbers || []).map((s) => s.trim()).filter(Boolean);
+
+        await tx.inventoryClientUsageItem.create({
+          data: {
+            client_usage_id: createdUsage.id,
+            transaction_detail_id: detail.id,
+            item_id: detail.item_id,
+            quantity: new Prisma.Decimal(itemInput.quantity),
+            unit: detail.unit,
+            serial_numbers: cleanSns.length ? JSON.stringify(cleanSns) : null,
+          },
+        });
+      }
+    }
+
+    const clientSummaryLabel =
+      activeClientRecords.length > 0 ? activeClientRecords.join(", ") : "Tanpa Pemakaian Client";
+
+    for (const detail of outTx.details) {
+      const allocated = allocatedByDetail.get(detail.id) || 0;
+      const isConsumable = detail.item.type === "CONSUMABLE" || detail.status === "CONSUMED";
+
+      if (isConsumable) {
+        if (allocated > 0) {
+          await tx.inventoryTransactionDetail.update({
+            where: { id: detail.id },
+            data: {
+              qty_used: new Prisma.Decimal(detail.qty_used).add(allocated),
+            },
+          });
+        }
+        continue;
+      }
+
+      const usedDec = new Prisma.Decimal(allocated);
+      const currentRemaining = new Prisma.Decimal(detail.qty_remaining);
+      const nextRemaining = Prisma.Decimal.max(0, currentRemaining.minus(usedDec));
+      const nextDetailStatus = nextRemaining.isZero()
+        ? usedDec.greaterThan(0) || Number(detail.qty_used) > 0
+          ? "USED"
+          : "COMPLETED"
+        : "PENDING_RETURN";
+
+      await tx.inventoryTransactionDetail.update({
+        where: { id: detail.id },
+        data: {
+          qty_used: new Prisma.Decimal(detail.qty_used).add(usedDec),
+          qty_remaining: nextRemaining,
+          status: nextDetailStatus,
+        },
+      });
+
+      if (usedDec.greaterThan(0) && detail.item.stock) {
+        await tx.inventoryStock.update({
+          where: { id: detail.item.stock.id },
+          data: {
+            total_consumed: new Prisma.Decimal(detail.item.stock.total_consumed).add(usedDec),
+            total_in_use: Prisma.Decimal.max(
+              0,
+              new Prisma.Decimal(detail.item.stock.total_in_use).minus(usedDec)
+            ),
+          },
+        });
+
+        await tx.inventoryMovement.create({
+          data: {
+            item_id: detail.item_id,
+            movement_type: "CONSUMED",
+            quantity: usedDec,
+            balance_before: detail.item.stock.available_stock,
+            balance_after: detail.item.stock.available_stock,
+            reference_type: "TRANSACTION",
+            reference_id: outTx.id,
+            transaction_id: outTx.id,
+            performed_by: payload.user_name || outTx.pic_name || "Admin Gudang",
+            notes: `Barang terpakai client (${clientSummaryLabel}) dari ${outTx.transaction_number}`,
+          },
+        });
+
+        const assignedSerials = usedSerialsByDetail.get(detail.id) || [];
+        for (const entry of assignedSerials) {
+          await tx.inventoryItemUnit.updateMany({
+            where: { serial_number: entry.sn },
+            data: {
+              status: "CONSUMED",
+              current_pic: `Client: ${entry.clientName}`,
+              current_location: entry.clientAddress,
+            },
+          });
+        }
+      }
+    }
+
+    const nextTxStatus = totalPendingReturnUnits > 0 ? "MENUNGGU_PENGEMBALIAN" : "SUDAH_KEMBALI";
+
+    await tx.inventoryTransaction.update({
+      where: { id: outTx.id },
+      data: {
+        status: nextTxStatus,
+      },
+    });
+
+    await tx.inventoryAuditLog.create({
+      data: {
+        entity_type: "TRANSACTION",
+        entity_id: outTx.id,
+        action: "FINISH_IN_USE",
+        user_id: payload.created_by,
+        user_name: payload.user_name || outTx.pic_name || "Admin Gudang",
+        data_after: JSON.stringify({
+          status: nextTxStatus,
+          clients: activeClientRecords,
+          used_units: totalUsedUnits,
+          pending_return_units: totalPendingReturnUnits,
+        }),
+        reason: `Penyelesaian ${outTx.transaction_number}: ${totalUsedUnits} unit terpakai (${clientSummaryLabel}), ${totalPendingReturnUnits} unit sisa ${totalPendingReturnUnits > 0 ? "masuk antrean Pengembalian Barang" : "selesai"}.`,
+      },
+    });
+
+    return {
+      transaction_id: outTx.id,
+      transaction_number: outTx.transaction_number,
+      status: nextTxStatus,
+      used_count: totalUsedUnits,
+      pending_return_count: totalPendingReturnUnits,
+      client_count: activeClientRecords.length,
+    };
+  });
 }
