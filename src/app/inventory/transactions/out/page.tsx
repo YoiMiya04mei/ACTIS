@@ -24,6 +24,8 @@ import { fetchActiveMasterItems } from "@/lib/inventoryMasterSync";
 import { computeOutTransactionSummary } from "@/lib/inventoryTransactionSummary";
 import { parseSerialList } from "@/lib/inventoryClientFinish";
 import { useRealtimeMasterItems } from "@/hooks/useRealtimeMasterItems";
+import { useDeleteInventoryTransaction } from "@/hooks/useDeleteInventoryTransaction";
+import { DeleteTransactionDialog } from "@/components/inventory/DeleteTransactionDialog";
 
 interface ItemUnit {
   id: string;
@@ -60,6 +62,7 @@ interface RowItem {
 export default function BarangKeluarPage() {
   const { currentUser } = useCurrentUser();
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "warehouse_admin";
+  const isAdministrator = currentUser?.role === "admin";
 
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,6 +131,22 @@ export default function BarangKeluarPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const {
+    txToDelete,
+    deletingTx,
+    deleteError,
+    openDeleteDialog,
+    closeDeleteDialog,
+    confirmDelete,
+  } = useDeleteInventoryTransaction({
+    isAdministrator,
+    onSuccess: (deletedId, message) => {
+      if (selectedTx?.id === deletedId) setSelectedTx(null);
+      setNotification({ type: "success", message });
+      fetchData();
+    },
+  });
 
   useEffect(() => {
     const handleVisibilityOrFocus = () => {
@@ -984,12 +1003,17 @@ export default function BarangKeluarPage() {
                 <th scope="col" className="py-2.5 px-3 text-right">Barang Kembali</th>
                 <th scope="col" className="py-2.5 px-3">Tanggal</th>
                 <th scope="col" className="py-2.5 px-3">Status</th>
+                {isAdministrator && (
+                  <th scope="col" className="py-2.5 px-3 text-center">
+                    Aksi
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {recentTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-slate-400">
+                  <td colSpan={isAdministrator ? 10 : 9} className="py-8 text-center text-slate-400">
                     Belum ada riwayat transaksi barang keluar.
                   </td>
                 </tr>
@@ -1065,6 +1089,27 @@ export default function BarangKeluarPage() {
                           {tx.status}
                         </span>
                       </td>
+                      {isAdministrator && (
+                        <td className="py-2.5 px-3 text-center whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openDeleteDialog({
+                                id: tx.id,
+                                transaction_number: tx.transaction_number,
+                                type: "OUT",
+                                pic_name: tx.pic_name,
+                                warehouse_officer: tx.warehouse_officer,
+                              })
+                            }
+                            title={`Hapus transaksi ${tx.transaction_number}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/50 dark:text-rose-300 dark:hover:bg-rose-950/80 border border-rose-200/80 dark:border-rose-800 font-bold text-[11px] transition cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            Hapus
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })
@@ -1298,6 +1343,14 @@ export default function BarangKeluarPage() {
           </div>
         </div>
       )}
+
+      <DeleteTransactionDialog
+        transaction={txToDelete}
+        deleting={deletingTx}
+        error={deleteError}
+        onCancel={closeDeleteDialog}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }

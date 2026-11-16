@@ -3,8 +3,14 @@ import { Prisma } from "@prisma/client";
 import {
   FinishClientPayload,
   computeRemainingSerialsForDetail,
+  parseSerialList,
   validateFinishClientAllocations,
 } from "./inventoryClientFinish";
+import {
+  computeStockInDeleteReversal,
+  computeStockOutDeleteReversal,
+  type ExistingItemUnitState,
+} from "./inventoryTransactionDelete";
 
 // Format date as YYYYMMDD
 export function getDateString(d = new Date()): string {
@@ -1505,6 +1511,198 @@ export async function processFinishInUse(payload: FinishInUsePayload) {
       used_count: totalUsedUnits,
       pending_return_count: totalPendingReturnUnits,
       client_count: activeClientRecords.length,
+    };
+  });
+}
+
+export interface DeleteTransactionPayload {
+  transaction_id: string;
+  deleted_by?: string;
+  user_name?: string;
+}
+
+/**
+ * Deletes an IN or OUT transaction atomically (Administrator-only via API guard),
+ * reversing InventoryStock balances, InventoryItemUnit states, linked returns/client usages,
+ * and recording an audit trail snapshot before removal.
+ */
+export async function deleteInventoryTransaction(payload: DeleteTransactionPayload) {
+  if (!payload.transaction_id) {
+    throw new Error("ID transaksi wajib disertakan.");
+  }
+
+  return await prisma.$transaction(async (tx) => {
+    const existingTx = await tx.inventoryTransaction.findUnique({
+      where: { id: payload.transaction_id },
+      include: {
+        details: {
+          include: {
+            item: {
+              include: { stock: true },
+            },
+          },
+        },
+        returns: {
+          include: {
+            details: true,
+          },
+        },
+        client_usages: {
+          include: {
+            items: true,
+          },
+        },
+      },
+    });
+
+    if (!existingTx) {
+      const notFoundErr = new Error("Transaksi tidak ditemukan.") as Error & { statusCode?: number };
+      notFoundErr.statusCode = 404;
+      throw notFoundErr;
+    }
+
+    if (existingTx.type !== "IN" && existingTx.type !== "OUT") {
+      throw new Error("Hanya riwayat transaksi Barang Masuk (IN) dan Barang Keluar (OUT) yang dapat dihapus.");
+    }
+
+    if (existingTx.type === "IN") {
+      const allSns = existingTx.details.flatMap((d) => parseSerialList(d.unit_serial_numbers));
+      const unitRows =
+        allSns.length > 0
+          ? await tx.inventoryItemUnit.findMany({
+              where: { serial_number: { in: allSns } },
+              select: { serial_number: true, item_id: true, status: true },
+            })
+          : [];
+      const unitMap = new Map<string, ExistingItemUnitState>(
+        unitRows.map((u) => [u.serial_number, u])
+      );
+
+      const plan = computeStockInDeleteReversal(existingTx.details, unitMap);
+
+      for (const [itemId, dec] of plan.stockDecrementsByItem.entries()) {
+        const detailStock = existingTx.details.find((d) => d.item_id === itemId)?.item?.stock;
+        if (!detailStock) continue;
+        await tx.inventoryStock.update({
+          where: { id: dec.stockId },
+          data: {
+            total_in: Prisma.Decimal.max(
+              0,
+              new Prisma.Decimal(detailStock.total_in).minus(dec.decrementTotalIn)
+            ),
+            available_stock: Prisma.Decimal.max(
+              0,
+              new Prisma.Decimal(detailStock.available_stock).minus(dec.decrementAvailable)
+            ),
+          },
+        });
+      }
+
+      for (const snEntry of plan.serialsToDelete) {
+        await tx.inventoryItemUnit.deleteMany({
+          where: {
+            item_id: snEntry.itemId,
+            serial_number: snEntry.serialNumber,
+            status: "AVAILABLE",
+          },
+        });
+      }
+    } else {
+      const plan = computeStockOutDeleteReversal(existingTx.details, existingTx.returns);
+
+      for (const [itemId, adj] of plan.stockUpdatesByItem.entries()) {
+        const detailStock = existingTx.details.find((d) => d.item_id === itemId)?.item?.stock;
+        if (!detailStock) continue;
+        await tx.inventoryStock.update({
+          where: { id: adj.stockId },
+          data: {
+            available_stock: new Prisma.Decimal(detailStock.available_stock).add(adj.addAvailable),
+            total_out: Prisma.Decimal.max(
+              0,
+              new Prisma.Decimal(detailStock.total_out).minus(adj.subTotalOut)
+            ),
+            total_in_use: Prisma.Decimal.max(
+              0,
+              new Prisma.Decimal(detailStock.total_in_use).minus(adj.subTotalInUse)
+            ),
+            total_returned: Prisma.Decimal.max(
+              0,
+              new Prisma.Decimal(detailStock.total_returned).minus(adj.subTotalReturned)
+            ),
+            total_consumed: Prisma.Decimal.max(
+              0,
+              new Prisma.Decimal(detailStock.total_consumed).minus(adj.subTotalConsumed)
+            ),
+            total_damaged: Prisma.Decimal.max(
+              0,
+              new Prisma.Decimal(detailStock.total_damaged).minus(adj.subTotalDamaged)
+            ),
+            total_lost: Prisma.Decimal.max(
+              0,
+              new Prisma.Decimal(detailStock.total_lost).minus(adj.subTotalLost)
+            ),
+          },
+        });
+      }
+
+      for (const snEntry of plan.serialsToRestoreAvailable) {
+        await tx.inventoryItemUnit.updateMany({
+          where: {
+            item_id: snEntry.itemId,
+            serial_number: snEntry.serialNumber,
+          },
+          data: {
+            status: "AVAILABLE",
+            condition: "BAIK",
+            current_pic: null,
+            current_location: snEntry.storageLocation,
+          },
+        });
+      }
+
+      const returnIds = existingTx.returns.map((r) => r.id);
+      if (returnIds.length > 0) {
+        await tx.inventoryMovement.deleteMany({
+          where: {
+            reference_type: "RETURN",
+            reference_id: { in: returnIds },
+          },
+        });
+        await tx.inventoryReturnDetail.deleteMany({
+          where: { return_id: { in: returnIds } },
+        });
+        await tx.inventoryReturn.deleteMany({
+          where: { id: { in: returnIds } },
+        });
+      }
+    }
+
+    await tx.inventoryMovement.deleteMany({
+      where: {
+        OR: [{ transaction_id: existingTx.id }, { reference_id: existingTx.id }],
+      },
+    });
+
+    await tx.inventoryTransaction.delete({
+      where: { id: existingTx.id },
+    });
+
+    await tx.inventoryAuditLog.create({
+      data: {
+        entity_type: "TRANSACTION",
+        entity_id: existingTx.id,
+        action: "DELETE",
+        user_id: payload.deleted_by || null,
+        user_name: payload.user_name || "Administrator",
+        data_before: JSON.stringify(existingTx),
+        reason: `Penghapusan riwayat transaksi ${existingTx.type} (${existingTx.transaction_number}) oleh Administrator`,
+      },
+    });
+
+    return {
+      id: existingTx.id,
+      transaction_number: existingTx.transaction_number,
+      type: existingTx.type,
     };
   });
 }

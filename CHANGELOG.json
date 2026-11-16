@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.8",
+      "date": "2026-11-16T13:26:04+07:00",
+      "title": "Penghapusan Riwayat Transaksi Barang Masuk & Keluar Khusus Administrator",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Menambahkan endpoint DELETE /api/inventory/transactions/[id] dengan proteksi ketat khusus role Administrator (role === 'admin') beserta pembalikan otomatis saldo stok, Serial Number, pemakaian client, dan data pengembalian"
+        },
+        {
+          "type": "feat",
+          "text": "Menambahkan tombol Hapus dan modal konfirmasi native dialog pada tabel Riwayat Transaksi Barang Masuk serta Riwayat Transaksi Barang Keluar yang hanya tampil untuk akun Administrator"
+        }
+      ]
+    },
+    {
       "version": "1.2.7",
       "date": "2026-11-16T11:52:59+07:00",
       "title": "Workflow Selesai Multi-Client & Sinkronisasi Stok Terpakai serta Pengembalian",

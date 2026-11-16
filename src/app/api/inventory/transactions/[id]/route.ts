@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/security";
 import { prisma } from "@/lib/prisma";
+import { deleteInventoryTransaction } from "@/lib/inventoryService";
+import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 
 export async function GET(
   request: NextRequest,
@@ -35,6 +37,15 @@ export async function GET(
             },
           },
         },
+        client_usages: {
+          include: {
+            items: {
+              include: {
+                item: true,
+              },
+            },
+          },
+        },
         movements: {
           orderBy: { created_at: "desc" },
         },
@@ -61,23 +72,53 @@ export async function GET(
 }
 
 /**
- * Strict Security & Integrity Rule:
- * Audit log and transactions are APPEND-ONLY.
- * Direct deletion is strictly blocked.
+ * Deletes an IN or OUT transaction and reverses stock/SN/return state.
+ * Strictly restricted to accounts with the Administrator role (`role === "admin"`).
  */
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireAuth(request);
+  const auth = await requireAuth(request, { requireAdmin: true });
   if (!auth.ok) return auth.response;
 
-  return NextResponse.json(
-    {
-      success: false,
-      error: "Akses ditolak: Histori transaksi bersifat permanen (append-only) dan tidak dapat dihapus demi integritas audit.",
-    },
-    { status: 403 }
-  );
+  const { id } = await params;
+
+  try {
+    const result = await deleteInventoryTransaction({
+      transaction_id: id,
+      deleted_by: auth.user.id,
+      user_name: auth.user.nama,
+    });
+
+    const clientIp =
+      request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "127.0.0.1";
+    const userAgent = parseUserAgent(request.headers.get("user-agent"));
+
+    recordActivity({
+      nama_lengkap: auth.user.nama,
+      email: auth.user.email,
+      ip_address: clientIp,
+      tipe: "DELETE_DATA",
+      aktifitas: `Menghapus riwayat transaksi ${result.type} (${result.transaction_number})`,
+      detail: `ID: ${result.id}`,
+      user_agent: userAgent,
+    }).catch(() => {});
+
+    return NextResponse.json({
+      success: true,
+      data: result,
+      message: `Transaksi ${result.transaction_number} berhasil dihapus dan stok telah disinkronkan.`,
+    });
+  } catch (error: any) {
+    const status = error?.statusCode === 404 ? 404 : 400;
+    return NextResponse.json(
+      {
+        success: false,
+        error: error?.message || "Gagal menghapus transaksi.",
+      },
+      { status }
+    );
+  }
 }
 
