@@ -23,12 +23,12 @@ export interface BankPaymentVoucherDocument {
   bankAccountName: string; // e.g. "PERMADI PRATAMA"
 
   // Approvals & Signatures
-  preparedByName: string; // e.g. "Permadi Pratama"
+  preparedByName: string; // e.g. "" or preparer's name
   preparedBySignature?: string; // Data URL of signature image/canvas
-  processedName?: string; // e.g. "Elsya"
-  recordedByName?: string; // e.g. "Sarah"
-  approvedByName?: string; // e.g. "Fauzi A.P"
-  acknowledgedByName?: string; // e.g. "Nandar Munandar"
+  approvedByName?: string; // Default: "Nandar Munandar"
+  processedName?: string; // Default: "Elsya"
+  recordedByName?: string; // Default: "Putri Puspita"
+  acknowledgedByName?: string; // Default: "Nandar Munandar"
 
   // Company Details
   companyName?: string; // e.g. "PT. Jembatan Data Pangrango"
@@ -60,4 +60,11 @@ export interface BankPaymentVoucherDraft {
   acknowledgedByName?: string;
   savedAt: string;
 }
+
+export const DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS = {
+  approvedByName: 'Nandar Munandar',
+  processedName: 'Elsya',
+  recordedByName: 'Putri Puspita',
+  acknowledgedByName: 'Nandar Munandar',
+} as const;
 

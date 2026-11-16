@@ -1,5 +1,8 @@
 import React from 'react';
-import type { BankPaymentVoucherDocument } from '@/types/bankPaymentVoucher';
+import {
+  DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS,
+  type BankPaymentVoucherDocument,
+} from '@/types/bankPaymentVoucher';
 import { formatCurrencyNumber } from '@/utils/bankPaymentVoucherUtils';
 import { formatIndonesianDateOnly } from '@/utils/dateFormatter';
 import { terbilangRupiah } from '@/utils/terbilang';
@@ -246,7 +249,7 @@ export const BankPaymentVoucherPaperDocument: React.FC<BankPaymentVoucherPaperDo
             </tr>
 
             {/* Row 25: Header Kolom Persetujuan */}
-            <tr className="h-7 border-t border-black">
+            <tr className="h-7 border-t border-b border-black">
               <th scope="col" colSpan={2} className="font-normal text-center border-l border-r border-black py-1">
                 Prepared by
               </th>
@@ -295,21 +298,21 @@ export const BankPaymentVoucherPaperDocument: React.FC<BankPaymentVoucherPaperDo
             </tr>
 
             {/* Row 30: Nama Penandatangan */}
-            <tr className="h-7 border-b border-black font-normal text-[10.5pt] leading-tight">
+            <tr className="h-7 border-t border-b border-black font-normal text-[10.5pt] leading-tight">
               <td colSpan={2} className="border-l border-r border-black py-1 px-1 text-center align-middle break-words">
-                {doc.preparedByName || payTo}
+                {doc.preparedByName || ''}
               </td>
               <td className="border-r border-black py-1 px-1 text-center align-middle break-words">
-                {doc.approvedByName || ''}
+                {doc.approvedByName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.approvedByName}
               </td>
               <td className="border-r border-black py-1 px-1 text-center align-middle break-words">
-                {doc.processedName || 'Elsya'}
+                {doc.processedName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.processedName}
               </td>
               <td className="border-r border-black py-1 px-1 text-center align-middle break-words">
-                {doc.recordedByName || 'Sarah'}
+                {doc.recordedByName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.recordedByName}
               </td>
               <td className="border-r border-black py-1 px-1 text-center align-middle break-words">
-                {doc.acknowledgedByName || 'Nandar Munandar'}
+                {doc.acknowledgedByName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.acknowledgedByName}
               </td>
             </tr>
           </tbody>

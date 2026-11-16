@@ -17,11 +17,14 @@ import {
   PenTool,
   Upload,
   Eraser,
+  Lock,
 } from 'lucide-react';
-import type {
-  BankPaymentVoucherDocument,
-  BankPaymentVoucherItem,
+import {
+  DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS,
+  type BankPaymentVoucherDocument,
+  type BankPaymentVoucherItem,
 } from '@/types/bankPaymentVoucher';
+import { useCurrentUser } from '@/context/UserContext';
 import type { UserAccount } from '@/types/auth';
 import type { ToastMessage } from '@/components/tools/Toast';
 import { BankPaymentVoucherPaperDocument } from '@/components/tools/BankPaymentVoucherPaperDocument';
@@ -51,6 +54,11 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
   onSaved,
   currentUser,
 }) => {
+  const { currentUser: authUser } = useCurrentUser();
+  const isAdministrator = authUser
+    ? authUser.role === 'admin'
+    : currentUser?.position === 'admin';
+
   // Form State
   const [editingId, setEditingId] = useState<string | null>(initialEditData?.id || null);
   const [payTo, setPayTo] = useState<string>(
@@ -88,22 +96,22 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
 
   // Signatures / Approvals
   const [preparedByName, setPreparedByName] = useState<string>(
-    initialEditData?.preparedByName || currentUser?.name || 'Permadi Pratama'
+    initialEditData?.preparedByName || ''
   );
   const [preparedBySignature, setPreparedBySignature] = useState<string>(
     initialEditData?.preparedBySignature || ''
   );
+  const [approvedByName, setApprovedByName] = useState<string>(
+    initialEditData?.approvedByName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.approvedByName
+  );
   const [processedName, setProcessedName] = useState<string>(
-    initialEditData?.processedName || 'Elsya'
+    initialEditData?.processedName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.processedName
   );
   const [recordedByName, setRecordedByName] = useState<string>(
-    initialEditData?.recordedByName || 'Sarah'
-  );
-  const [approvedByName, setApprovedByName] = useState<string>(
-    initialEditData?.approvedByName || ''
+    initialEditData?.recordedByName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.recordedByName
   );
   const [acknowledgedByName, setAcknowledgedByName] = useState<string>(
-    initialEditData?.acknowledgedByName || 'Nandar Munandar'
+    initialEditData?.acknowledgedByName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.acknowledgedByName
   );
 
   // Company Details
@@ -158,10 +166,18 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
       setBankAccountName(initialEditData.bankAccountName || '');
       setPreparedByName(initialEditData.preparedByName || '');
       setPreparedBySignature(initialEditData.preparedBySignature || '');
-      setProcessedName(initialEditData.processedName || '');
-      setRecordedByName(initialEditData.recordedByName || '');
-      setApprovedByName(initialEditData.approvedByName || '');
-      setAcknowledgedByName(initialEditData.acknowledgedByName || '');
+      setApprovedByName(
+        initialEditData.approvedByName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.approvedByName
+      );
+      setProcessedName(
+        initialEditData.processedName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.processedName
+      );
+      setRecordedByName(
+        initialEditData.recordedByName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.recordedByName
+      );
+      setAcknowledgedByName(
+        initialEditData.acknowledgedByName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.acknowledgedByName
+      );
       if (initialEditData.companyName) setCompanyName(initialEditData.companyName);
       if (initialEditData.companyAddress) setCompanyAddress(initialEditData.companyAddress);
       if (initialEditData.companyCountry) setCompanyCountry(initialEditData.companyCountry);
@@ -170,6 +186,20 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
 
   // Current Document Model for Preview
   const currentDoc: BankPaymentVoucherDocument = useMemo(() => {
+    const resolvedApprovedBy = isAdministrator
+      ? approvedByName
+      : initialEditData?.approvedByName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.approvedByName;
+    const resolvedProcessed = isAdministrator
+      ? processedName
+      : initialEditData?.processedName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.processedName;
+    const resolvedRecordedBy = isAdministrator
+      ? recordedByName
+      : initialEditData?.recordedByName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.recordedByName;
+    const resolvedAcknowledgedBy = isAdministrator
+      ? acknowledgedByName
+      : initialEditData?.acknowledgedByName ||
+        DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.acknowledgedByName;
+
     return {
       id: editingId || `BPV-${Date.now()}`,
       voucherNumber,
@@ -185,17 +215,17 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
       bankAccountName,
       preparedByName,
       preparedBySignature,
-      processedName,
-      recordedByName,
-      approvedByName,
-      acknowledgedByName,
+      approvedByName: resolvedApprovedBy,
+      processedName: resolvedProcessed,
+      recordedByName: resolvedRecordedBy,
+      acknowledgedByName: resolvedAcknowledgedBy,
       companyName,
       companyAddress,
       companyCountry,
       createdAt: initialEditData?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      createdByName: initialEditData?.createdByName || currentUser?.name || 'Permadi Pratama',
-      createdByRole: initialEditData?.createdByRole || currentUser?.role || 'admin',
+      createdByName: initialEditData?.createdByName || authUser?.nama || currentUser?.name || 'Permadi Pratama',
+      createdByRole: initialEditData?.createdByRole || authUser?.role || currentUser?.position || 'user',
     };
   }, [
     editingId,
@@ -221,6 +251,8 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
     companyCountry,
     initialEditData,
     currentUser,
+    authUser,
+    isAdministrator,
   ]);
 
   // Item List Handlers
@@ -401,11 +433,23 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
     setBankName(SAMPLE_BANK_PAYMENT_VOUCHER.bankName);
     setBankAccount(SAMPLE_BANK_PAYMENT_VOUCHER.bankAccount);
     setBankAccountName(SAMPLE_BANK_PAYMENT_VOUCHER.bankAccountName);
-    setPreparedByName(SAMPLE_BANK_PAYMENT_VOUCHER.preparedByName);
-    setProcessedName(SAMPLE_BANK_PAYMENT_VOUCHER.processedName || 'Elsya');
-    setRecordedByName(SAMPLE_BANK_PAYMENT_VOUCHER.recordedByName || 'Sarah');
-    setApprovedByName(SAMPLE_BANK_PAYMENT_VOUCHER.approvedByName || '');
-    setAcknowledgedByName(SAMPLE_BANK_PAYMENT_VOUCHER.acknowledgedByName || 'Nandar Munandar');
+    setPreparedByName(SAMPLE_BANK_PAYMENT_VOUCHER.preparedByName || '');
+    setApprovedByName(
+      SAMPLE_BANK_PAYMENT_VOUCHER.approvedByName ||
+        DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.approvedByName
+    );
+    setProcessedName(
+      SAMPLE_BANK_PAYMENT_VOUCHER.processedName ||
+        DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.processedName
+    );
+    setRecordedByName(
+      SAMPLE_BANK_PAYMENT_VOUCHER.recordedByName ||
+        DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.recordedByName
+    );
+    setAcknowledgedByName(
+      SAMPLE_BANK_PAYMENT_VOUCHER.acknowledgedByName ||
+        DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.acknowledgedByName
+    );
     addToast('info', 'Data Contoh Dimuat', 'Data contoh Bank Payment Voucher berhasil dimuat.');
   };
 
@@ -424,7 +468,14 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
       },
     ]);
     setBankAccount('');
+    setPreparedByName('');
     setPreparedBySignature('');
+    if (!isAdministrator) {
+      setApprovedByName(DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.approvedByName);
+      setProcessedName(DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.processedName);
+      setRecordedByName(DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.recordedByName);
+      setAcknowledgedByName(DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.acknowledgedByName);
+    }
     addToast('info', 'Form Dikosongkan', 'Formulir telah dikosongkan.');
   };
 
@@ -884,57 +935,79 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
             </div>
 
             {/* Other 4 Columns: Approved by, Processed, Recorded by, Acknowledged by */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                  Approved by:
-                </label>
-                <input
-                  type="text"
-                  value={approvedByName}
-                  onChange={(e) => setApprovedByName(e.target.value)}
-                  placeholder="Nandar Munandar / Fauzi A.P"
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs"
-                />
+            <div className="pt-1 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] font-bold text-slate-700">
+                  Pejabat Persetujuan &amp; Pengesahan
+                </span>
+                {!isAdministrator ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                    <Lock className="w-3 h-3" />
+                    Default — Hanya Administrator dapat mengedit
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Mode Administrator (Dapat Diedit)
+                  </span>
+                )}
               </div>
 
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                  Processed:
-                </label>
-                <input
-                  type="text"
-                  value={processedName}
-                  onChange={(e) => setProcessedName(e.target.value)}
-                  placeholder="Elsya"
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                  Recorded by:
-                </label>
-                <input
-                  type="text"
-                  value={recordedByName}
-                  onChange={(e) => setRecordedByName(e.target.value)}
-                  placeholder="Putri Puspita / Sarah / Efrida"
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-                  Acknowledged by:
-                </label>
-                <input
-                  type="text"
-                  value={acknowledgedByName}
-                  onChange={(e) => setAcknowledgedByName(e.target.value)}
-                  placeholder="Nandar Munandar / Rio Prayoga"
-                  className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {[
+                  {
+                    id: 'bpv-approved-by',
+                    label: 'Approved by:',
+                    value: approvedByName,
+                    setter: setApprovedByName,
+                    placeholder: DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.approvedByName,
+                  },
+                  {
+                    id: 'bpv-processed-by',
+                    label: 'Processed:',
+                    value: processedName,
+                    setter: setProcessedName,
+                    placeholder: DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.processedName,
+                  },
+                  {
+                    id: 'bpv-recorded-by',
+                    label: 'Recorded by:',
+                    value: recordedByName,
+                    setter: setRecordedByName,
+                    placeholder: DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.recordedByName,
+                  },
+                  {
+                    id: 'bpv-acknowledged-by',
+                    label: 'Acknowledged by:',
+                    value: acknowledgedByName,
+                    setter: setAcknowledgedByName,
+                    placeholder: DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.acknowledgedByName,
+                  },
+                ].map((field) => (
+                  <div key={field.id}>
+                    <label
+                      htmlFor={field.id}
+                      className="block text-[11px] font-semibold text-slate-700 mb-0.5"
+                    >
+                      {field.label}
+                    </label>
+                    <input
+                      id={field.id}
+                      type="text"
+                      value={field.value}
+                      readOnly={!isAdministrator}
+                      disabled={!isAdministrator}
+                      onChange={(e) => {
+                        if (isAdministrator) field.setter(e.target.value);
+                      }}
+                      placeholder={field.placeholder}
+                      className={`w-full px-2.5 py-1.5 rounded-lg border text-xs ${
+                        isAdministrator
+                          ? 'border-slate-300 bg-white text-slate-900'
+                          : 'border-slate-200 bg-slate-100 text-slate-600 cursor-not-allowed'
+                      }`}
+                    />
+                  </div>
+                ))}
               </div>
             </div>
           </div>

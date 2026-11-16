@@ -1,6 +1,7 @@
-import type {
-  BankPaymentVoucherDocument,
-  BankPaymentVoucherDraft,
+import {
+  DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS,
+  type BankPaymentVoucherDocument,
+  type BankPaymentVoucherDraft,
 } from '../types/bankPaymentVoucher';
 import { indexedDbStorage } from './indexedDbStorage';
 
@@ -32,11 +33,11 @@ export const SAMPLE_BANK_PAYMENT_VOUCHER: BankPaymentVoucherDocument = {
   bankName: 'BCA',
   bankAccount: '0382576762',
   bankAccountName: 'PERMADI PRATAMA',
-  preparedByName: 'Permadi Pratama',
-  processedName: 'Elsya',
-  recordedByName: 'Sarah',
-  approvedByName: '',
-  acknowledgedByName: 'Nandar Munandar',
+  preparedByName: '',
+  approvedByName: DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.approvedByName,
+  processedName: DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.processedName,
+  recordedByName: DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.recordedByName,
+  acknowledgedByName: DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.acknowledgedByName,
   companyName: 'PT. Jembatan Data Pangrango',
   companyAddress: 'Jl. Pabuaran No.51, Nyomplong, Kec. Warudoyong, Kota Sukabumi',
   companyCountry: 'Jawa Barat - Indonesia',

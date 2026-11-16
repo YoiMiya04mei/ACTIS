@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.11",
+      "date": "2026-11-16T15:11:37+07:00",
+      "title": "Penyesuaian Default Tabel Pengesahan Payment Voucher & Batasan Edit Khusus Administrator",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Menyamakan default susunan serta nilai pejabat pengesahan Bank Payment Voucher (Prepared by kosong, Approved by Nandar Munandar, Processed Elsya, Recorded by Putri Puspita, Acknowledged by Nandar Munandar) beserta garis kotak tabel persis seperti format referensi"
+        },
+        {
+          "type": "security",
+          "text": "Membatasi perubahan field pejabat persetujuan Bank Payment Voucher (Approved by, Processed, Recorded by, Acknowledged by) hanya untuk akun dengan role Administrator"
+        }
+      ]
+    },
+    {
       "version": "1.2.10",
       "date": "2026-11-16T14:04:22+07:00",
       "title": "Hapus Kategori MODEM dari Stok per Kategori di Dashboard Inventory",

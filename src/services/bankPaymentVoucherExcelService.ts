@@ -1,6 +1,9 @@
 import JSZip from 'jszip';
 import { BANK_PAYMENT_VOUCHER_TEMPLATE_BASE64 } from '../assets/bankPaymentVoucherTemplateBase64';
-import type { BankPaymentVoucherDocument } from '../types/bankPaymentVoucher';
+import {
+  DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS,
+  type BankPaymentVoucherDocument,
+} from '../types/bankPaymentVoucher';
 import { formatIndonesianDateOnly } from '../utils/dateFormatter';
 import { generateBankPaymentVoucherFileName } from '../utils/bankPaymentVoucherUtils';
 import { terbilangRupiah } from '../utils/terbilang';
@@ -236,11 +239,27 @@ export async function generateBankPaymentVoucherExcelBlob(
   s1Xml = setCellText(s1Xml, `H${sigHeaderRow}`, 'Acknowledged by');
 
   // Approvals (Row Names)
-  s1Xml = setCellText(s1Xml, `C${sigRowNames}`, doc.preparedByName || doc.payTo || '');
-  s1Xml = setCellText(s1Xml, `E${sigRowNames}`, doc.approvedByName || '');
-  s1Xml = setCellText(s1Xml, `F${sigRowNames}`, doc.processedName || 'Elsya');
-  s1Xml = setCellText(s1Xml, `G${sigRowNames}`, doc.recordedByName || 'Sarah');
-  s1Xml = setCellText(s1Xml, `H${sigRowNames}`, doc.acknowledgedByName || 'Nandar Munandar');
+  s1Xml = setCellText(s1Xml, `C${sigRowNames}`, doc.preparedByName || '');
+  s1Xml = setCellText(
+    s1Xml,
+    `E${sigRowNames}`,
+    doc.approvedByName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.approvedByName
+  );
+  s1Xml = setCellText(
+    s1Xml,
+    `F${sigRowNames}`,
+    doc.processedName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.processedName
+  );
+  s1Xml = setCellText(
+    s1Xml,
+    `G${sigRowNames}`,
+    doc.recordedByName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.recordedByName
+  );
+  s1Xml = setCellText(
+    s1Xml,
+    `H${sigRowNames}`,
+    doc.acknowledgedByName || DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS.acknowledgedByName
+  );
 
   zip.file('xl/worksheets/sheet1.xml', s1Xml);
 
