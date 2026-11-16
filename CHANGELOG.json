@@ -4,6 +4,36 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.15",
+      "date": "2026-11-16T17:20:11+07:00",
+      "title": "Hilangkan Info Stok pada Form Request Barang Publik",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Menghapus tampilan jumlah stok pada daftar pilihan barang dan mengganti label Muat Ulang Stok menjadi Muat Ulang Barang di halaman /request-barang."
+        },
+        {
+          "type": "security",
+          "text": "Menghentikan eksposur field available_stock dari endpoint publik GET /api/public/inventory-requests."
+        }
+      ]
+    },
+    {
+      "version": "1.2.14",
+      "date": "2026-11-16T17:16:52+07:00",
+      "title": "Batasi Jenis Pekerjaan Form Request Menjadi Pilihan Tunggal",
+      "changes": [
+        {
+          "type": "fix",
+          "text": "Mengubah input Jenis Pekerjaan pada form /request-barang dari checkbox multi-pilih menjadi radio button tunggal agar hanya dapat dipilih satu jenis pekerjaan."
+        },
+        {
+          "type": "improve",
+          "text": "Menambahkan validasi ketat pada server agar pengajuan dengan lebih dari satu Jenis Pekerjaan otomatis ditolak."
+        }
+      ]
+    },
+    {
       "version": "1.2.13",
       "date": "2026-11-16T17:00:07+07:00",
       "title": "Form Request Barang Publik Tanpa Login & ACC di Barang Keluar",

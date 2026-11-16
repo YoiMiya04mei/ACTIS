@@ -215,12 +215,19 @@ export function validatePublicInventoryRequestInput(payload: unknown): Validatio
     };
   }
 
-  const workTypes = parseWorkTypes(input.work_types);
+  const workTypes = parseWorkTypes(input.work_types ?? input.work_type);
   if (workTypes.length === 0) {
     return {
       ok: false,
       field: "work_types",
-      error: "Pilih minimal satu Jenis Pekerjaan (Pemasangan, Perbaikan, Backbone, atau Lainnya).",
+      error: "Pilih 1 Jenis Pekerjaan (Pemasangan, Perbaikan, Backbone, atau Lainnya).",
+    };
+  }
+  if (workTypes.length > 1) {
+    return {
+      ok: false,
+      field: "work_types",
+      error: "Jenis Pekerjaan tidak boleh lebih dari satu. Pilih tepat 1 jenis pekerjaan.",
     };
   }
 

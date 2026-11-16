@@ -1926,11 +1926,6 @@ export async function getPublicInventoryCatalog() {
           name: true,
         },
       },
-      stock: {
-        select: {
-          available_stock: true,
-        },
-      },
     },
   });
 
@@ -1941,7 +1936,6 @@ export async function getPublicInventoryCatalog() {
     unit: item.unit,
     type: item.type,
     category_name: item.category?.name || null,
-    available_stock: item.stock ? Number(item.stock.available_stock) : 0,
   }));
 }
 

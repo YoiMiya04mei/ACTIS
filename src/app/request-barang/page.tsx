@@ -26,7 +26,6 @@ interface PublicCatalogItem {
   unit: string;
   type: string;
   category_name: string | null;
-  available_stock: number;
 }
 
 interface RequestRow {
@@ -82,7 +81,7 @@ export default function PublicRequestBarangPage() {
   const [picName, setPicName] = useState("");
   const [picPhone, setPicPhone] = useState("");
   const [requestDate, setRequestDate] = useState(getTodayDateString);
-  const [selectedWorkTypes, setSelectedWorkTypes] = useState<WorkTypeOption[]>(["Pemasangan"]);
+  const [selectedWorkType, setSelectedWorkType] = useState<WorkTypeOption | "">("");
   const [workTypeOther, setWorkTypeOther] = useState("");
   const [pickupLocation, setPickupLocation] = useState<PickupLocationOption | "">("");
   const [notes, setNotes] = useState("");
@@ -129,11 +128,12 @@ export default function PublicRequestBarangPage() {
     );
   }, [catalog, itemSearch]);
 
-  const toggleWorkType = (option: WorkTypeOption) => {
+  const handleSelectWorkType = (option: WorkTypeOption) => {
     setFieldErrors((prev) => ({ ...prev, work_types: "" }));
-    setSelectedWorkTypes((prev) =>
-      prev.includes(option) ? prev.filter((item) => item !== option) : [...prev, option]
-    );
+    setSelectedWorkType(option);
+    if (option !== "Lainnya") {
+      setWorkTypeOther("");
+    }
   };
 
   const handleAddRow = () => {
@@ -163,7 +163,7 @@ export default function PublicRequestBarangPage() {
     setPicName("");
     setPicPhone("");
     setRequestDate(getTodayDateString());
-    setSelectedWorkTypes(["Pemasangan"]);
+    setSelectedWorkType("");
     setWorkTypeOther("");
     setPickupLocation("");
     setNotes("");
@@ -184,8 +184,8 @@ export default function PublicRequestBarangPage() {
     if (!requestDate) {
       nextErrors.request_date = "Tanggal Request wajib diisi.";
     }
-    if (selectedWorkTypes.length === 0) {
-      nextErrors.work_types = "Pilih minimal satu Jenis Pekerjaan.";
+    if (!selectedWorkType) {
+      nextErrors.work_types = "Pilih 1 Jenis Pekerjaan.";
     }
     if (!pickupLocation) {
       nextErrors.pickup_location = "Lokasi Pengambilan wajib dipilih.";
@@ -218,8 +218,8 @@ export default function PublicRequestBarangPage() {
           pic_name: picName.trim(),
           pic_phone: picPhone.trim() || null,
           request_date: requestDate,
-          work_types: selectedWorkTypes,
-          work_type_other: selectedWorkTypes.includes("Lainnya") ? workTypeOther.trim() : null,
+          work_types: selectedWorkType ? [selectedWorkType] : [],
+          work_type_other: selectedWorkType === "Lainnya" ? workTypeOther.trim() : null,
           pickup_location: pickupLocation,
           notes: notes.trim() || null,
           company_website: companyWebsite,
@@ -569,7 +569,7 @@ export default function PublicRequestBarangPage() {
                     </legend>
                     <div className="grid grid-cols-2 gap-3">
                       {WORK_TYPE_OPTIONS.map((option) => {
-                        const checked = selectedWorkTypes.includes(option);
+                        const checked = selectedWorkType === option;
                         const inputId = `work-type-${option.toLowerCase()}`;
                         return (
                           <div
@@ -581,12 +581,13 @@ export default function PublicRequestBarangPage() {
                             }`}
                           >
                             <input
-                              type="checkbox"
+                              type="radio"
                               id={inputId}
-                              name="work_types"
+                              name="work_type"
                               value={option}
                               checked={checked}
-                              onChange={() => toggleWorkType(option)}
+                              required
+                              onChange={() => handleSelectWorkType(option)}
                               className="w-5 h-5 accent-blue-600 cursor-pointer shrink-0"
                             />
                             <label
@@ -600,7 +601,7 @@ export default function PublicRequestBarangPage() {
                       })}
                     </div>
 
-                    {selectedWorkTypes.includes("Lainnya") && (
+                    {selectedWorkType === "Lainnya" && (
                       <div className="pt-1 flex flex-col gap-1">
                         <label
                           htmlFor="work_type_other"
@@ -701,7 +702,7 @@ export default function PublicRequestBarangPage() {
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition cursor-pointer"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${loadingCatalog ? "animate-spin" : ""}`} />
-                    Muat Ulang Stok
+                    Muat Ulang Barang
                   </button>
                   <button
                     type="button"
@@ -783,7 +784,7 @@ export default function PublicRequestBarangPage() {
                             </option>
                             {rowOptions.map((it) => (
                               <option key={it.id} value={it.id}>
-                                {it.name} ({it.code}) — Stok: {it.available_stock} {it.unit}
+                                {it.name} ({it.code}) — {it.unit}
                               </option>
                             ))}
                           </select>
