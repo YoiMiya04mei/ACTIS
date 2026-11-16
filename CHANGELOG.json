@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.5",
+      "date": "2026-11-16T10:15:59+07:00",
+      "title": "Penghapusan Menu & Aturan Barang Dipinjamkan",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Menghapus menu sidebar dan halaman Barang Dipinjamkan (/inventory/loaned) beserta API terkait (/api/inventory/loaned dan /api/inventory/in-use/complete)"
+        },
+        {
+          "type": "improve",
+          "text": "Menghapus tombol & modal Selesai (alokasi dipinjamkan ke pelanggan) dari halaman Barang Sedang Digunakan serta fungsi processCompleteAndLoan dan processReturnLoaned"
+        }
+      ]
+    },
+    {
       "version": "1.2.4",
       "date": "2026-11-16T09:56:36+07:00",
       "title": "Pembaruan Kolom Tabel Riwayat Transaksi Barang Keluar",
