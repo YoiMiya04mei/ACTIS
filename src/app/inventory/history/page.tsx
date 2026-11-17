@@ -22,6 +22,7 @@ import { useCurrentUser } from "@/context/UserContext";
 import { useDeleteInventoryTransaction } from "@/hooks/useDeleteInventoryTransaction";
 import { DeleteTransactionDialog } from "@/components/inventory/DeleteTransactionDialog";
 import { HistoryBulkActionsBar } from "@/components/inventory/HistoryBulkActionsBar";
+import { PageSizeSelector, PaginationNavigator } from "@/components/Pagination";
 
 export default function RiwayatTransaksiPage() {
   const { currentUser } = useCurrentUser();
@@ -37,6 +38,7 @@ export default function RiwayatTransaksiPage() {
   const [search, setSearch] = useState("");
   const [movementType, setMovementType] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
@@ -52,20 +54,24 @@ export default function RiwayatTransaksiPage() {
         search,
         movement_type: movementType,
         page: String(page),
-        limit: "25",
+        limit: String(pageSize),
       });
 
       const res = await fetch(`/api/inventory/history?${params.toString()}`, { cache: "no-store" });
       const json = await res.json();
       if (json.success) {
+        const nextTotalPages = json.pagination.totalPages || 1;
         setDataList(json.data);
-        setTotalPages(json.pagination.totalPages || 1);
+        setTotalPages(nextTotalPages);
         setTotalCount(json.pagination.total || 0);
+        if (nextTotalPages > 0 && page > nextTotalPages) {
+          setPage(nextTotalPages);
+        }
       }
     } catch {}
     setLoading(false);
     setRefreshing(false);
-  }, [activeTab, search, movementType, page]);
+  }, [activeTab, search, movementType, page, pageSize]);
 
   useEffect(() => {
     fetchHistory();
@@ -181,27 +187,18 @@ export default function RiwayatTransaksiPage() {
       </div>
 
       {/* Filter Toolbar */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
-        <div className="relative w-full sm:max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-          <input
-            type="text"
-            placeholder={
-              activeTab === "movements"
-                ? "Cari nama barang, kode, petugas, catatan..."
-                : "Cari user, alasan perubahan, entity..."
-            }
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <PageSizeSelector
+            value={pageSize}
+            onChange={(newSize) => {
+              setPageSize(newSize);
               setPage(1);
             }}
-            className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+            options={[10, 30, 50, 100]}
           />
-        </div>
 
-        {activeTab === "movements" && (
-          <div>
+          {activeTab === "movements" && (
             <select
               value={movementType}
               onChange={(e) => {
@@ -218,8 +215,26 @@ export default function RiwayatTransaksiPage() {
               <option value="CONSUMED">CONSUMED (Terpakai Client)</option>
               <option value="ADJUSTMENT">ADJUSTMENT (Penyesuaian)</option>
             </select>
-          </div>
-        )}
+          )}
+        </div>
+
+        <div className="relative w-full sm:max-w-sm">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-2.5" />
+          <input
+            type="text"
+            placeholder={
+              activeTab === "movements"
+                ? "Cari nama barang, kode, petugas, catatan..."
+                : "Cari user, alasan perubahan, entity..."
+            }
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+          />
+        </div>
       </div>
 
       {/* Table: Movements */}
@@ -342,25 +357,15 @@ export default function RiwayatTransaksiPage() {
             </table>
           </div>
 
-          <div className="p-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
-            <span>Menampilkan {dataList.length} dari {totalCount} rekaman</span>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40"
-              >
-                Sebelumnya
-              </button>
-              <span className="font-bold">{page} / {totalPages}</span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40"
-              >
-                Selanjutnya
-              </button>
-            </div>
+          <div className="p-3 bg-slate-50/70 dark:bg-slate-900/80 border-t border-slate-100 dark:border-slate-800">
+            <PaginationNavigator
+              currentPage={page}
+              totalPages={totalPages}
+              totalItems={totalCount}
+              pageSize={pageSize}
+              onPageChange={(p) => setPage(p)}
+              entryLabel="mutasi"
+            />
           </div>
         </div>
       )}
@@ -468,25 +473,15 @@ export default function RiwayatTransaksiPage() {
             </table>
           </div>
 
-          <div className="p-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
-            <span>Menampilkan {dataList.length} dari {totalCount} log</span>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40"
-              >
-                Sebelumnya
-              </button>
-              <span className="font-bold">{page} / {totalPages}</span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40"
-              >
-                Selanjutnya
-              </button>
-            </div>
+          <div className="p-3 bg-slate-50/70 dark:bg-slate-900/80 border-t border-slate-100 dark:border-slate-800">
+            <PaginationNavigator
+              currentPage={page}
+              totalPages={totalPages}
+              totalItems={totalCount}
+              pageSize={pageSize}
+              onPageChange={(p) => setPage(p)}
+              entryLabel="log"
+            />
           </div>
         </div>
       )}

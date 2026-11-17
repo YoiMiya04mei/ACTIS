@@ -17,6 +17,7 @@ import { useDeleteInventoryTransaction } from "@/hooks/useDeleteInventoryTransac
 import { DeleteTransactionDialog } from "@/components/inventory/DeleteTransactionDialog";
 import { HistoryBulkActionsBar } from "@/components/inventory/HistoryBulkActionsBar";
 import { SearchableItemSelect } from "@/components/inventory/SearchableItemSelect";
+import { PageSizeSelector, PaginationNavigator } from "@/components/Pagination";
 
 interface ItemOption {
   id: string;
@@ -39,6 +40,10 @@ export default function BarangMasukPage() {
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Form State
@@ -70,17 +75,30 @@ export default function BarangMasukPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      const params = new URLSearchParams({
+        type: "IN",
+        page: String(page),
+        limit: String(pageSize),
+      });
       const [freshItems, resTx] = await Promise.all([
         fetchActiveMasterItems<ItemOption>(),
-        fetch("/api/inventory/transactions?type=IN&limit=20", { cache: "no-store" }),
+        fetch(`/api/inventory/transactions?${params.toString()}`, { cache: "no-store" }),
       ]);
 
       if (freshItems) applyMasterItems(freshItems);
       const jsonTx = await resTx.json();
-      if (jsonTx.success) setRecentTransactions(jsonTx.data);
+      if (jsonTx.success) {
+        const nextTotalPages = jsonTx.pagination?.totalPages || 1;
+        setRecentTransactions(jsonTx.data);
+        setTotalPages(nextTotalPages);
+        setTotalCount(jsonTx.pagination?.total || jsonTx.data.length || 0);
+        if (nextTotalPages > 0 && page > nextTotalPages) {
+          setPage(nextTotalPages);
+        }
+      }
     } catch {}
     setLoading(false);
-  }, [applyMasterItems]);
+  }, [applyMasterItems, page, pageSize]);
 
   useEffect(() => {
     fetchData();
@@ -213,7 +231,11 @@ export default function BarangMasukPage() {
       // Reset form
       setNotes("");
       setRows([{ item_id: "", quantity: "1", notes: "", serials: "" }]);
-      fetchData();
+      if (page !== 1) {
+        setPage(1);
+      } else {
+        fetchData();
+      }
     } catch (err: any) {
       setNotification({ type: "error", message: err.message });
     } finally {
@@ -555,21 +577,31 @@ export default function BarangMasukPage() {
 
       {/* Recent In Transactions Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm space-y-3 p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <h2
-            id="recent-in-transactions-heading"
-            className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center"
-          >
-            <ArrowDownLeft className="w-4 h-4 mr-2 text-emerald-600" />
-            Riwayat Transaksi Barang Masuk
-          </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2
+              id="recent-in-transactions-heading"
+              className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center"
+            >
+              <ArrowDownLeft className="w-4 h-4 mr-2 text-emerald-600" />
+              Riwayat Transaksi Barang Masuk
+            </h2>
+            <PageSizeSelector
+              value={pageSize}
+              onChange={(newSize) => {
+                setPageSize(newSize);
+                setPage(1);
+              }}
+              options={[10, 30, 50, 100]}
+            />
+          </div>
 
           <HistoryBulkActionsBar
             visible={isAdministrator}
             selectedCount={selectedIds.length}
             hasItems={recentTransactions.length > 0}
             onDeleteSelected={openSelectedDelete}
-            onDeleteAll={() => openAllDelete(recentTransactions.length)}
+            onDeleteAll={() => openAllDelete(totalCount || recentTransactions.length)}
           />
         </div>
 
@@ -718,6 +750,17 @@ export default function BarangMasukPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+          <PaginationNavigator
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={totalCount}
+            pageSize={pageSize}
+            onPageChange={(p) => setPage(p)}
+            entryLabel="transaksi"
+          />
         </div>
       </div>
 

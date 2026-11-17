@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   RotateCcw,
@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
 import { computeRemainingSerialsForDetail } from "@/lib/inventoryClientFinish";
+import { PageSizeSelector, PaginationNavigator } from "@/components/Pagination";
 
 function PengembalianBarangContent() {
   const { currentUser } = useCurrentUser();
@@ -27,6 +28,10 @@ function PengembalianBarangContent() {
   const [recentReturns, setRecentReturns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Form
@@ -55,26 +60,38 @@ function PengembalianBarangContent() {
   // View Modal
   const [selectedReturn, setSelectedReturn] = useState<any | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      const returnsParams = new URLSearchParams({
+        page: String(page),
+        limit: String(pageSize),
+      });
       const [resOut, resRet] = await Promise.all([
-        fetch("/api/inventory/in-use?limit=50", { cache: "no-store" }),
-        fetch("/api/inventory/returns?limit=20", { cache: "no-store" }),
+        fetch("/api/inventory/in-use?limit=100", { cache: "no-store" }),
+        fetch(`/api/inventory/returns?${returnsParams.toString()}`, { cache: "no-store" }),
       ]);
 
       const jsonOut = await resOut.json();
       const jsonRet = await resRet.json();
 
       if (jsonOut.success) setActiveOutTxs(jsonOut.data);
-      if (jsonRet.success) setRecentReturns(jsonRet.data);
+      if (jsonRet.success) {
+        const nextTotalPages = jsonRet.pagination?.totalPages || 1;
+        setRecentReturns(jsonRet.data);
+        setTotalPages(nextTotalPages);
+        setTotalCount(jsonRet.pagination?.total || jsonRet.data.length || 0);
+        if (nextTotalPages > 0 && page > nextTotalPages) {
+          setPage(nextTotalPages);
+        }
+      }
     } catch {}
     setLoading(false);
-  };
+  }, [page, pageSize]);
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [fetchData]);
 
   // When selected transaction changes, populate return rows
   useEffect(() => {
@@ -199,7 +216,11 @@ function PengembalianBarangContent() {
       setSelectedTxId("");
       setReturnDetails([]);
       setNotes("");
-      fetchData();
+      if (page !== 1) {
+        setPage(1);
+      } else {
+        fetchData();
+      }
     } catch (err: any) {
       setNotification({ type: "error", message: err.message });
     } finally {
@@ -531,10 +552,20 @@ function PengembalianBarangContent() {
 
       {/* Return History Table */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm space-y-3 p-5">
-        <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center">
-          <RotateCcw className="w-4 h-4 mr-2 text-blue-600" />
-          Riwayat Pengembalian Barang
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center">
+            <RotateCcw className="w-4 h-4 mr-2 text-blue-600" />
+            Riwayat Pengembalian Barang
+          </h2>
+          <PageSizeSelector
+            value={pageSize}
+            onChange={(newSize) => {
+              setPageSize(newSize);
+              setPage(1);
+            }}
+            options={[10, 30, 50, 100]}
+          />
+        </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -607,6 +638,17 @@ function PengembalianBarangContent() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+          <PaginationNavigator
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={totalCount}
+            pageSize={pageSize}
+            onPageChange={(p) => setPage(p)}
+            entryLabel="pengembalian"
+          />
         </div>
       </div>
 

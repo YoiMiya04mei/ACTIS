@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
 import { computeRemainingSerialsForDetail } from "@/lib/inventoryClientFinish";
+import { PageSizeSelector, PaginationNavigator } from "@/components/Pagination";
 
 interface FinishItemAllocation {
   transaction_detail_id: string;
@@ -61,6 +62,7 @@ export default function BarangSedangDigunakanPage() {
   const [locationFilter, setLocationFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
@@ -95,15 +97,19 @@ export default function BarangSedangDigunakanPage() {
         location: locationFilter,
         status: statusFilter,
         page: String(page),
-        limit: "20",
+        limit: String(pageSize),
       });
 
       const res = await fetch(`/api/inventory/in-use?${params.toString()}`, { cache: "no-store" });
       const json = await res.json();
       if (json.success) {
+        const nextTotalPages = json.pagination.totalPages || 1;
         setTransactions(json.data);
-        setTotalPages(json.pagination.totalPages || 1);
+        setTotalPages(nextTotalPages);
         setTotalCount(json.pagination.total || 0);
+        if (nextTotalPages > 0 && page > nextTotalPages) {
+          setPage(nextTotalPages);
+        }
       }
     } catch (err: any) {
       setNotification({ type: "error", message: err.message || "Gagal memuat barang digunakan." });
@@ -111,7 +117,7 @@ export default function BarangSedangDigunakanPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [search, picFilter, locationFilter, statusFilter, page]);
+  }, [search, picFilter, locationFilter, statusFilter, page, pageSize]);
 
   useEffect(() => {
     fetchInUse();
@@ -842,9 +848,57 @@ export default function BarangSedangDigunakanPage() {
       </dialog>
 
       {/* Filter Toolbar */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <PageSizeSelector
+            value={pageSize}
+            onChange={(newSize) => {
+              setPageSize(newSize);
+              setPage(1);
+            }}
+            options={[10, 30, 50, 100]}
+          />
+
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
+            className="py-2 px-3 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+          >
+            <option value="">Semua Status Aktif</option>
+            <option value="SEDANG_DIGUNAKAN">Sedang Digunakan</option>
+            <option value="SEBAGIAN_KEMBALI">Sebagian Kembali</option>
+            <option value="MENUNGGU_PENGEMBALIAN">Menunggu Pengembalian</option>
+            <option value="SUDAH_KEMBALI">Sudah Kembali (Arsip)</option>
+          </select>
+
+          <input
+            type="text"
+            placeholder="Filter PIC..."
+            value={picFilter}
+            onChange={(e) => {
+              setPicFilter(e.target.value);
+              setPage(1);
+            }}
+            className="w-36 sm:w-44 py-2 px-3 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+          />
+
+          <input
+            type="text"
+            placeholder="Filter Lokasi..."
+            value={locationFilter}
+            onChange={(e) => {
+              setLocationFilter(e.target.value);
+              setPage(1);
+            }}
+            className="w-36 sm:w-44 py-2 px-3 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+          />
+        </div>
+
+        <div className="relative w-full xl:w-72">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-2.5" />
           <input
             type="text"
             placeholder="Cari transaksi, PIC, barang..."
@@ -855,49 +909,6 @@ export default function BarangSedangDigunakanPage() {
             }}
             className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
           />
-        </div>
-
-        <div>
-          <input
-            type="text"
-            placeholder="Filter PIC..."
-            value={picFilter}
-            onChange={(e) => {
-              setPicFilter(e.target.value);
-              setPage(1);
-            }}
-            className="w-full py-2 px-3 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-          />
-        </div>
-
-        <div>
-          <input
-            type="text"
-            placeholder="Filter Lokasi..."
-            value={locationFilter}
-            onChange={(e) => {
-              setLocationFilter(e.target.value);
-              setPage(1);
-            }}
-            className="w-full py-2 px-3 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-          />
-        </div>
-
-        <div>
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setPage(1);
-            }}
-            className="w-full py-2 px-3 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-          >
-            <option value="">Semua Status Aktif</option>
-            <option value="SEDANG_DIGUNAKAN">Sedang Digunakan</option>
-            <option value="SEBAGIAN_KEMBALI">Sebagian Kembali</option>
-            <option value="MENUNGGU_PENGEMBALIAN">Menunggu Pengembalian</option>
-            <option value="SUDAH_KEMBALI">Sudah Kembali (Arsip)</option>
-          </select>
         </div>
       </div>
 
@@ -1135,25 +1146,15 @@ export default function BarangSedangDigunakanPage() {
         </div>
 
         {/* Pagination Bar */}
-        <div className="p-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
-          <span>Menampilkan {transactions.length} transaksi</span>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40"
-            >
-              Sebelumnya
-            </button>
-            <span className="font-bold">{page} / {totalPages}</span>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-              className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40"
-            >
-              Selanjutnya
-            </button>
-          </div>
+        <div className="p-3 bg-slate-50/70 dark:bg-slate-900/80 border-t border-slate-100 dark:border-slate-800">
+          <PaginationNavigator
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={totalCount}
+            pageSize={pageSize}
+            onPageChange={(p) => setPage(p)}
+            entryLabel="transaksi"
+          />
         </div>
       </div>
 

@@ -32,27 +32,41 @@ export async function GET(request: NextRequest) {
       whereClause.category_id = categoryId;
     }
 
-    const [total, items] = await Promise.all([
-      prisma.inventoryItem.count({ where: whereClause }),
-      prisma.inventoryItem.findMany({
+    let total: number;
+    let data: Awaited<ReturnType<typeof prisma.inventoryItem.findMany>>;
+
+    if (lowStock) {
+      const allItems = await prisma.inventoryItem.findMany({
         where: whereClause,
         include: {
           category: { select: { id: true, name: true } },
           stock: true,
         },
         orderBy: { name: "asc" },
-        skip,
-        take: limit,
-      }),
-    ]);
-
-    let data = items;
-    if (lowStock) {
-      data = items.filter((it) => {
+      });
+      const filtered = allItems.filter((it) => {
         const avail = it.stock ? Number(it.stock.available_stock) : 0;
         const minStk = Number(it.min_stock);
         return minStk > 0 && avail <= minStk;
       });
+      total = filtered.length;
+      data = filtered.slice(skip, skip + limit);
+    } else {
+      const [count, items] = await Promise.all([
+        prisma.inventoryItem.count({ where: whereClause }),
+        prisma.inventoryItem.findMany({
+          where: whereClause,
+          include: {
+            category: { select: { id: true, name: true } },
+            stock: true,
+          },
+          orderBy: { name: "asc" },
+          skip,
+          take: limit,
+        }),
+      ]);
+      total = count;
+      data = items;
     }
 
     return NextResponse.json({

@@ -25,6 +25,7 @@ import {
 import { useCurrentUser } from "@/context/UserContext";
 import { notifyMasterInventoryChanged } from "@/lib/inventoryMasterSync";
 import { ImportInventoryItemsModal } from "@/components/inventory/ImportInventoryItemsModal";
+import { PageSizeSelector, PaginationNavigator } from "@/components/Pagination";
 
 interface Item {
   id: string;
@@ -81,6 +82,7 @@ export default function MasterBarangPage() {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("true");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
@@ -125,7 +127,7 @@ export default function MasterBarangPage() {
         category_id: selectedCategory,
         is_active: selectedStatus,
         page: String(page),
-        limit: "15",
+        limit: String(pageSize),
       });
 
       const res = await fetch(`/api/inventory/items?${params.toString()}`, {
@@ -133,9 +135,13 @@ export default function MasterBarangPage() {
       });
       const json = await res.json();
       if (json.success) {
+        const nextTotalPages = json.pagination.totalPages || 1;
         setItems(json.data);
-        setTotalPages(json.pagination.totalPages || 1);
+        setTotalPages(nextTotalPages);
         setTotalCount(json.pagination.total || 0);
+        if (nextTotalPages > 0 && page > nextTotalPages) {
+          setPage(nextTotalPages);
+        }
       }
     } catch (err: any) {
       setNotification({ type: "error", message: err.message || "Gagal memuat barang." });
@@ -143,7 +149,7 @@ export default function MasterBarangPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [search, selectedCategory, selectedStatus, page]);
+  }, [search, selectedCategory, selectedStatus, page, pageSize]);
 
   useEffect(() => {
     fetchCategories();
@@ -368,10 +374,56 @@ export default function MasterBarangPage() {
       )}
 
       {/* Filter Toolbar */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <PageSizeSelector
+            value={pageSize}
+            onChange={(newSize) => {
+              setPageSize(newSize);
+              setPage(1);
+            }}
+            options={[10, 30, 50, 100]}
+          />
+
+          {/* Filter Kategori */}
+          <div className="min-w-[200px]">
+            <select
+              value={selectedCategory}
+              onChange={(e) => {
+                setSelectedCategory(e.target.value);
+                setPage(1);
+              }}
+              className="w-full py-2 px-3 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-hidden"
+            >
+              <option value="">Semua Kategori (Aktif & Pasif)</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filter Status */}
+          <div className="min-w-[160px]">
+            <select
+              value={selectedStatus}
+              onChange={(e) => {
+                setSelectedStatus(e.target.value);
+                setPage(1);
+              }}
+              className="w-full py-2 px-3 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-hidden"
+            >
+              <option value="">Semua Status</option>
+              <option value="true">Status: Aktif</option>
+              <option value="false">Status: Nonaktif (Soft Deleted)</option>
+            </select>
+          </div>
+        </div>
+
         {/* Search */}
-        <div className="relative lg:col-span-2">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
+        <div className="relative w-full lg:w-72">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-2.5" />
           <input
             type="text"
             placeholder="Cari kode, nama barang, merek, lokasi..."
@@ -382,41 +434,6 @@ export default function MasterBarangPage() {
             }}
             className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
           />
-        </div>
-
-        {/* Filter Kategori */}
-        <div>
-          <select
-            value={selectedCategory}
-            onChange={(e) => {
-              setSelectedCategory(e.target.value);
-              setPage(1);
-            }}
-            className="w-full py-2 px-3 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-hidden"
-          >
-            <option value="">Semua Kategori (Aktif & Pasif)</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Filter Status */}
-        <div>
-          <select
-            value={selectedStatus}
-            onChange={(e) => {
-              setSelectedStatus(e.target.value);
-              setPage(1);
-            }}
-            className="w-full py-2 px-3 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-hidden"
-          >
-            <option value="">Semua Status</option>
-            <option value="true">Status: Aktif</option>
-            <option value="false">Status: Nonaktif (Soft Deleted)</option>
-          </select>
         </div>
       </div>
 
@@ -556,29 +573,15 @@ export default function MasterBarangPage() {
         </div>
 
         {/* Pagination Bar */}
-        <div className="p-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
-          <span>
-            Menampilkan {items.length} dari {totalCount} total barang
-          </span>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40"
-            >
-              Sebelumnya
-            </button>
-            <span className="font-bold">
-              {page} / {totalPages}
-            </span>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-              className="px-2.5 py-1 rounded-lg border border-slate-300 dark:border-slate-700 disabled:opacity-40"
-            >
-              Selanjutnya
-            </button>
-          </div>
+        <div className="p-3 bg-slate-50/70 dark:bg-slate-900/80 border-t border-slate-100 dark:border-slate-800">
+          <PaginationNavigator
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={totalCount}
+            pageSize={pageSize}
+            onPageChange={(p) => setPage(p)}
+            entryLabel="barang"
+          />
         </div>
       </div>
 

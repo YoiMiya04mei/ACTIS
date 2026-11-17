@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.23",
+      "date": "2026-11-17T12:19:55+07:00",
+      "title": "Page Size Selector & Navigasi Halaman pada Seluruh Menu Inventory Management",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Terapkan PageSizeSelector (opsi 10, 30, 50, 100) dan PaginationNavigator seperti menu List Antrean pada seluruh menu tabel Inventory Management (Master Barang, Stok Inventory, Barang Masuk, Barang Keluar, Barang Sedang Digunakan, Pengembalian Barang, Riwayat Transaksi, dan Laporan Inventory)."
+        },
+        {
+          "type": "improve",
+          "text": "Tingkatkan PageSizeSelector dengan portal rendering agar dropdown tidak terpotong kontainer overflow-hidden serta perbaiki perhitungan paginasi filter Stok Minimum pada endpoint stok."
+        }
+      ]
+    },
+    {
       "version": "1.2.22",
       "date": "2026-11-17T12:02:30+07:00",
       "title": "Hapus Riwayat Transaksi Barang Masuk Tanpa Mengubah Stok & Serial Number",

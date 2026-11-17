@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { PageSizeSelector, PaginationNavigator } from "@/components/Pagination";
 import {
   BarChart3,
   Download,
@@ -26,34 +27,50 @@ export default function LaporanInventoryPage() {
   const [endDate, setEndDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [reportData, setReportData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
-  const generateReport = async () => {
+  const generateReport = useCallback(async () => {
     setLoading(true);
     try {
-      if (reportType === "stock") {
-        const res = await fetch("/api/inventory/stock?limit=100");
-        const json = await res.json();
-        if (json.success) setReportData(json.data);
-      } else if (reportType === "movements") {
-        const res = await fetch(`/api/inventory/history?tab=movements&limit=100&start_date=${startDate}&end_date=${endDate}`);
-        const json = await res.json();
-        if (json.success) setReportData(json.data);
+      const qs = new URLSearchParams({
+        page: String(page),
+        limit: String(pageSize),
+      });
+      let url = `/api/inventory/stock?${qs.toString()}`;
+      if (reportType === "movements") {
+        qs.set("tab", "movements");
+        qs.set("start_date", startDate);
+        qs.set("end_date", endDate);
+        url = `/api/inventory/history?${qs.toString()}`;
       } else if (reportType === "in_use") {
-        const res = await fetch("/api/inventory/in-use?limit=100");
-        const json = await res.json();
-        if (json.success) setReportData(json.data);
+        url = `/api/inventory/in-use?${qs.toString()}`;
       } else if (reportType === "returns") {
-        const res = await fetch(`/api/inventory/returns?limit=100&start_date=${startDate}&end_date=${endDate}`);
-        const json = await res.json();
-        if (json.success) setReportData(json.data);
+        qs.set("start_date", startDate);
+        qs.set("end_date", endDate);
+        url = `/api/inventory/returns?${qs.toString()}`;
+      }
+
+      const res = await fetch(url, { cache: "no-store" });
+      const json = await res.json();
+      if (json.success) {
+        const nextTotalPages = json.pagination?.totalPages || 1;
+        setReportData(json.data);
+        setTotalPages(nextTotalPages);
+        setTotalCount(json.pagination?.total || json.data?.length || 0);
+        if (nextTotalPages > 0 && page > nextTotalPages) {
+          setPage(nextTotalPages);
+        }
       }
     } catch {}
     setLoading(false);
-  };
+  }, [reportType, startDate, endDate, page, pageSize]);
 
   useEffect(() => {
     generateReport();
-  }, [reportType]);
+  }, [generateReport]);
 
   const handlePrint = () => {
     window.print();
@@ -121,7 +138,10 @@ export default function LaporanInventoryPage() {
             </label>
             <select
               value={reportType}
-              onChange={(e) => setReportType(e.target.value as any)}
+              onChange={(e) => {
+                setReportType(e.target.value as any);
+                setPage(1);
+              }}
               className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-bold"
             >
               <option value="stock">Laporan Saldo Stok Saat Ini</option>
@@ -157,7 +177,13 @@ export default function LaporanInventoryPage() {
 
           <div className="flex items-end">
             <button
-              onClick={generateReport}
+              onClick={() => {
+                if (page !== 1) {
+                  setPage(1);
+                } else {
+                  generateReport();
+                }
+              }}
               disabled={loading}
               className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-md transition disabled:opacity-50"
             >
@@ -169,7 +195,7 @@ export default function LaporanInventoryPage() {
 
       {/* Printable Report Output Container */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-4 print:p-0 print:border-none print:shadow-none">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-slate-200 dark:border-slate-800">
           <div>
             <h2 className="text-lg font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight">
               PT JEMBATAN DATA PANGRANGO
@@ -184,9 +210,21 @@ export default function LaporanInventoryPage() {
                 : "LAPORAN PENGEMBALIAN BARANG GUDANG"}
             </p>
           </div>
-          <span className="text-[11px] text-slate-400 font-mono">
-            Dicetak: {new Date().toLocaleString("id-ID")}
-          </span>
+          <div className="flex items-center gap-3">
+            <div className="print:hidden">
+              <PageSizeSelector
+                value={pageSize}
+                onChange={(newSize) => {
+                  setPageSize(newSize);
+                  setPage(1);
+                }}
+                options={[10, 30, 50, 100]}
+              />
+            </div>
+            <span className="text-[11px] text-slate-400 font-mono">
+              Dicetak: {new Date().toLocaleString("id-ID")}
+            </span>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -304,6 +342,17 @@ export default function LaporanInventoryPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 print:hidden">
+          <PaginationNavigator
+            currentPage={page}
+            totalPages={totalPages}
+            totalItems={totalCount}
+            pageSize={pageSize}
+            onPageChange={(p) => setPage(p)}
+            entryLabel="data"
+          />
         </div>
       </div>
     </div>

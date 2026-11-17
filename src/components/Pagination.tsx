@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { ListOrdered, ChevronDown } from "lucide-react";
 
 // ============================================================================
@@ -20,16 +21,38 @@ export function PageSizeSelector({
   className = "",
 }: PageSizeSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number }>({
+    top: 0,
+    left: 0,
+    width: 96,
+  });
   const containerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const updateMenuPosition = useCallback(() => {
+    const el = containerRef.current;
+    if (!el || typeof window === "undefined") return;
+    const rect = el.getBoundingClientRect();
+    const width = Math.max(96, Math.round(rect.width));
+    const estHeight = options.length * 32 + 12;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUpward = spaceBelow < estHeight && rect.top > spaceBelow;
+    const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+    const top = openUpward ? Math.max(8, rect.top - estHeight - 6) : rect.bottom + 6;
+    setMenuPos({ top, left, width });
+  }, [options.length]);
 
   useEffect(() => {
+    if (!isOpen) return;
+
+    updateMenuPosition();
+
     function handleClickOutside(event: MouseEvent) {
-      if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
-      ) {
-        setIsOpen(false);
+      const target = event.target as Node;
+      if (containerRef.current?.contains(target) || menuRef.current?.contains(target)) {
+        return;
       }
+      setIsOpen(false);
     }
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
@@ -37,15 +60,17 @@ export function PageSizeSelector({
       }
     }
 
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-      document.addEventListener("keydown", handleKeyDown);
-    }
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    window.addEventListener("resize", updateMenuPosition);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+      window.removeEventListener("resize", updateMenuPosition);
     };
-  }, [isOpen]);
+  }, [isOpen, updateMenuPosition]);
 
   return (
     <div
@@ -70,8 +95,11 @@ export function PageSizeSelector({
         {/* Dropdown Toggle Button */}
         <button
           type="button"
-          onClick={() => setIsOpen((prev) => !prev)}
-          className="flex items-center space-x-2 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 rounded-r-xl hover:bg-slate-50 dark:hover:bg-slate-800/80 focus:outline-none transition min-w-[62px] justify-between"
+          onClick={() => {
+            if (!isOpen) updateMenuPosition();
+            setIsOpen((prev) => !prev);
+          }}
+          className="flex items-center space-x-2 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 rounded-r-xl hover:bg-slate-50 dark:hover:bg-slate-800/80 focus:outline-none transition min-w-[62px] justify-between cursor-pointer"
           aria-expanded={isOpen}
           aria-haspopup="listbox"
           title="Pilih Jumlah Data Per Halaman"
@@ -85,36 +113,41 @@ export function PageSizeSelector({
         </button>
       </div>
 
-      {/* Dropdown Menu */}
-      {isOpen && (
-        <div
-          className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1.5 w-24 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl py-1 z-50 animate-fadeIn"
-          role="listbox"
-        >
-          {options.map((opt) => {
-            const isSelected = opt === value;
-            return (
-              <button
-                key={opt}
-                type="button"
-                role="option"
-                aria-selected={isSelected}
-                onClick={() => {
-                  onChange(opt);
-                  setIsOpen(false);
-                }}
-                className={`w-full text-center py-2 text-xs font-bold transition flex items-center justify-center ${
-                  isSelected
-                    ? "bg-blue-600 text-white"
-                    : "text-slate-700 dark:text-slate-300 hover:bg-slate-100/90 dark:hover:bg-slate-800"
-                }`}
-              >
-                {opt}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {/* Portal Dropdown Menu (prevents clipping inside overflow-hidden cards/tables) */}
+      {isOpen &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={menuRef}
+            style={{ top: menuPos.top, left: menuPos.left, width: menuPos.width }}
+            className="fixed bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl py-1 z-[9999] animate-fadeIn"
+            role="listbox"
+          >
+            {options.map((opt) => {
+              const isSelected = opt === value;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  onClick={() => {
+                    onChange(opt);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full text-center py-2 text-xs font-bold transition flex items-center justify-center cursor-pointer ${
+                    isSelected
+                      ? "bg-blue-600 text-white"
+                      : "text-slate-700 dark:text-slate-300 hover:bg-slate-100/90 dark:hover:bg-slate-800"
+                  }`}
+                >
+                  {opt}
+                </button>
+              );
+            })}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
