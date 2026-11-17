@@ -128,7 +128,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const name = body.name ? String(body.name).trim().toUpperCase() : "";
     const categoryId = body.category_id?.trim();
-    const type = body.type === "CONSUMABLE" ? "CONSUMABLE" : "REUSABLE";
+    // All newly created items default silently to REUSABLE
+    const type = "REUSABLE";
     const brand = body.brand?.trim() || null;
     const model = body.model?.trim() || null;
     const serialNumber = body.serial_number?.trim() || null;

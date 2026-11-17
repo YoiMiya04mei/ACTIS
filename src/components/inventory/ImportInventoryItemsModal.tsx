@@ -217,16 +217,12 @@ export function ImportInventoryItemsModal({
               </button>
             </div>
             <div className="p-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 font-mono text-[11px] text-slate-700 dark:text-slate-300 overflow-x-auto">
-              Nama Barang, Kategori, Jenis, Merek, Model, Satuan, Stok Awal, Stok Minimum, Lokasi Penyimpanan
+              Nama Barang, Kategori, Merek, Model, Satuan, Stok Awal, Stok Minimum, Lokasi Penyimpanan
             </div>
             <div className="text-[11px] text-slate-500 dark:text-slate-400 space-y-0.5">
               <p>
                 &bull; Kolom wajib minimal: <code>Nama Barang</code>. Opsional tambahan:{" "}
                 <code>Kode Barang</code>, <code>Serial Number</code>.
-              </p>
-              <p>
-                &bull; Kolom <code>Jenis</code> diisi <code>REUSABLE</code> atau{" "}
-                <code>CONSUMABLE</code> (default <code>REUSABLE</code>).
               </p>
               <p>
                 &bull; Pilihan <code>Lokasi Penyimpanan</code>: <code>Gudang Pusat</code>,{" "}
@@ -337,7 +333,6 @@ export function ImportInventoryItemsModal({
                         <th className="py-2 px-3">Kode</th>
                         <th className="py-2 px-3">Nama Barang</th>
                         <th className="py-2 px-3">Kategori</th>
-                        <th className="py-2 px-3">Jenis</th>
                         <th className="py-2 px-3 text-right">Stok Awal</th>
                         <th className="py-2 px-3">Lokasi</th>
                         <th className="py-2 px-3">Status Cek</th>
@@ -359,7 +354,6 @@ export function ImportInventoryItemsModal({
                             {row.name || "-"}
                           </td>
                           <td className="py-2 px-3">{row.category}</td>
-                          <td className="py-2 px-3">{row.type}</td>
                           <td className="py-2 px-3 text-right font-semibold">
                             {row.initial_stock} {row.unit}
                           </td>

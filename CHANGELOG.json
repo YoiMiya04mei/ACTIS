@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.19",
+      "date": "2026-11-17T11:07:33+07:00",
+      "title": "Jadikan Semua Barang Baru & Impor Bertipe Reusable Secara Otomatis",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Menghilangkan kolom dan filter Jenis Barang pada tampilan Master Barang Inventory, modal Tambah/Edit Barang, format header CSV impor, template CSV, dan tabel pratinjau impor."
+        },
+        {
+          "type": "improve",
+          "text": "Menetapkan jenis barang menjadi REUSABLE secara default di API tambah barang baru dan import CSV tanpa mengubah mekanisme fungsional inventory."
+        }
+      ]
+    },
+    {
       "version": "1.2.18",
       "date": "2026-11-17T10:34:41+07:00",
       "title": "Perbaikan Import CSV Master Barang & Pratinjau + Tombol Import Eksplisit",

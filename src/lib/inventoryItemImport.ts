@@ -291,17 +291,13 @@ export function normalizeInventoryImportRecord(
     errors.push("Nama Barang wajib diisi.");
   }
 
-  const rawType = toCleanString(getFieldByAliases(rawRecord, "type")).toLowerCase();
-  const isConsumable =
-    rawType.includes("consumable") ||
-    rawType.includes("habis pakai") ||
-    rawType.includes("sekali pakai");
-  const type: "REUSABLE" | "CONSUMABLE" = isConsumable ? "CONSUMABLE" : "REUSABLE";
+  // Default all newly imported items silently to REUSABLE
+  const type: "REUSABLE" | "CONSUMABLE" = "REUSABLE";
 
   const rawCategory = toCleanString(getFieldByAliases(rawRecord, "category"));
   let category = rawCategory;
   if (!category) {
-    category = type === "CONSUMABLE" ? "Pasif" : "Aktif";
+    category = "Aktif";
   } else if (/^aktif$/i.test(category)) {
     category = "Aktif";
   } else if (/^pasif$/i.test(category)) {
@@ -446,7 +442,6 @@ export function generateInventoryItemCsvTemplate(): string {
   const headers = [
     "Nama Barang",
     "Kategori",
-    "Jenis",
     "Merek",
     "Model",
     "Satuan",
@@ -455,8 +450,8 @@ export function generateInventoryItemCsvTemplate(): string {
     "Lokasi Penyimpanan",
   ];
   const sampleRows = [
-    ["MODEM ONT DUAL BAND", "Aktif", "REUSABLE", "Huawei", "HG8245H5", "Unit", "10", "3", "Gudang Pusat"],
-    ["PATCHCORD SC-UPC 3M", "Pasif", "CONSUMABLE", "Netlink", "Simplex", "Pcs", "50", "10", "Gudang Bandung"],
+    ["MODEM ONT DUAL BAND", "Aktif", "Huawei", "HG8245H5", "Unit", "10", "3", "Gudang Pusat"],
+    ["PATCHCORD SC-UPC 3M", "Pasif", "Netlink", "Simplex", "Pcs", "50", "10", "Gudang Bandung"],
   ];
 
   return (

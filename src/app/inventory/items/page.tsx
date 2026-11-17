@@ -18,8 +18,6 @@ import {
   X,
   CheckCircle2,
   AlertTriangle,
-  RotateCcw,
-  Cable,
   Tag,
   MapPin,
   Barcode,
@@ -81,7 +79,6 @@ export default function MasterBarangPage() {
   // Filters
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
-  const [selectedType, setSelectedType] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("true");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -126,7 +123,6 @@ export default function MasterBarangPage() {
       const params = new URLSearchParams({
         search,
         category_id: selectedCategory,
-        type: selectedType,
         is_active: selectedStatus,
         page: String(page),
         limit: "15",
@@ -147,7 +143,7 @@ export default function MasterBarangPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [search, selectedCategory, selectedType, selectedStatus, page]);
+  }, [search, selectedCategory, selectedStatus, page]);
 
   useEffect(() => {
     fetchCategories();
@@ -289,7 +285,7 @@ export default function MasterBarangPage() {
               Master Data Barang
             </span>
             <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              Katalog SKU, Perangkat Reusable & Consumable
+              Katalog SKU, Perangkat & Material Inventory
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight mt-1 flex items-center">
@@ -372,7 +368,7 @@ export default function MasterBarangPage() {
       )}
 
       {/* Filter Toolbar */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {/* Search */}
         <div className="relative lg:col-span-2">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
@@ -407,22 +403,6 @@ export default function MasterBarangPage() {
           </select>
         </div>
 
-        {/* Filter Jenis */}
-        <div>
-          <select
-            value={selectedType}
-            onChange={(e) => {
-              setSelectedType(e.target.value);
-              setPage(1);
-            }}
-            className="w-full py-2 px-3 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 focus:outline-hidden"
-          >
-            <option value="">Semua Jenis (Reusable & Consumable)</option>
-            <option value="REUSABLE">Reusable (Bisa Kembali)</option>
-            <option value="CONSUMABLE">Consumable (Habis Pakai)</option>
-          </select>
-        </div>
-
         {/* Filter Status */}
         <div>
           <select
@@ -449,7 +429,6 @@ export default function MasterBarangPage() {
                 <th className="py-3 px-4">Kode Barang</th>
                 <th className="py-3 px-4">Nama Barang & Merek</th>
                 <th className="py-3 px-4">Kategori</th>
-                <th className="py-3 px-4">Jenis</th>
                 <th className="py-3 px-4 text-right">Stok Siap</th>
                 <th className="py-3 px-4 text-right">Stok Min</th>
                 <th className="py-3 px-4">Lokasi Rak</th>
@@ -460,14 +439,14 @@ export default function MasterBarangPage() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
                     Memuat data master barang...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     Tidak ada barang yang sesuai dengan filter pencarian.
                   </td>
                 </tr>
@@ -502,19 +481,6 @@ export default function MasterBarangPage() {
                         ) : (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                             {item.category?.name || "Aktif"}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        {item.type === "REUSABLE" ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                            <RotateCcw className="w-3 h-3 mr-1" />
-                            Reusable
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
-                            <Cable className="w-3 h-3 mr-1" />
-                            Consumable
                           </span>
                         )}
                       </td>
@@ -698,17 +664,29 @@ export default function MasterBarangPage() {
                 </div>
 
                 <div>
-                  <label className="block font-semibold mb-1 text-slate-700 dark:text-slate-300">
-                    Jenis Barang <span className="text-rose-500">*</span>
+                  <label
+                    htmlFor="item-storage-location"
+                    className="block font-semibold mb-1 text-slate-700 dark:text-slate-300"
+                  >
+                    Lokasi Penyimpanan <span className="text-rose-500">*</span>
                   </label>
                   <select
-                    disabled={!!editingItem}
-                    value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 disabled:bg-slate-100 dark:disabled:bg-slate-800"
+                    id="item-storage-location"
+                    required
+                    value={formData.storage_location}
+                    onChange={(e) => setFormData({ ...formData, storage_location: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-medium text-slate-900 dark:text-slate-100"
                   >
-                    <option value="REUSABLE">Reusable (Dapat Keluar & Kembali)</option>
-                    <option value="CONSUMABLE">Consumable (Habis Pakai Permanen)</option>
+                    {STORAGE_LOCATIONS.map((loc) => (
+                      <option key={loc} value={loc}>
+                        {loc}
+                      </option>
+                    ))}
+                    {formData.storage_location && !STORAGE_LOCATIONS.includes(formData.storage_location) && (
+                      <option value={formData.storage_location}>
+                        {formData.storage_location}
+                      </option>
+                    )}
                   </select>
                 </div>
 
@@ -768,33 +746,6 @@ export default function MasterBarangPage() {
                     onChange={(e) => setFormData({ ...formData, min_stock: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
                   />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label
-                    htmlFor="item-storage-location"
-                    className="block font-semibold mb-1 text-slate-700 dark:text-slate-300"
-                  >
-                    Lokasi Penyimpanan <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    id="item-storage-location"
-                    required
-                    value={formData.storage_location}
-                    onChange={(e) => setFormData({ ...formData, storage_location: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-medium text-slate-900 dark:text-slate-100"
-                  >
-                    {STORAGE_LOCATIONS.map((loc) => (
-                      <option key={loc} value={loc}>
-                        {loc}
-                      </option>
-                    ))}
-                    {formData.storage_location && !STORAGE_LOCATIONS.includes(formData.storage_location) && (
-                      <option value={formData.storage_location}>
-                        {formData.storage_location}
-                      </option>
-                    )}
-                  </select>
                 </div>
               </div>
 
@@ -975,13 +926,11 @@ export default function MasterBarangPage() {
           if (
             search !== "" ||
             selectedCategory !== "" ||
-            selectedType !== "" ||
             selectedStatus !== "true" ||
             page !== 1
           ) {
             setSearch("");
             setSelectedCategory("");
-            setSelectedType("");
             setSelectedStatus("true");
             setPage(1);
           } else {
