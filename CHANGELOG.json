@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.21",
+      "date": "2026-11-17T11:42:20+07:00",
+      "title": "Fitur Pencarian Langsung pada Dropdown Pilih Barang",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Tambahkan komponen SearchableItemSelect dengan pencarian real-time berdasarkan kode, nama, dan kategori, navigasi keyboard, serta portal dropdown pada Barang Masuk, Barang Keluar, dan Form Request Barang."
+        },
+        {
+          "type": "improve",
+          "text": "Integrasikan pencarian langsung di dalam setiap dropdown pilih barang pada Form Request Barang dengan tetap menampilkan nama dan kode barang tanpa unit maupun stok."
+        }
+      ]
+    },
+    {
       "version": "1.2.20",
       "date": "2026-11-17T11:30:35+07:00",
       "title": "Hapus Seluruh Fungsi & Percabangan Jenis Barang Consumable",

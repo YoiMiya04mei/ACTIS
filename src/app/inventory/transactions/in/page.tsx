@@ -16,6 +16,7 @@ import { useRealtimeMasterItems } from "@/hooks/useRealtimeMasterItems";
 import { useDeleteInventoryTransaction } from "@/hooks/useDeleteInventoryTransaction";
 import { DeleteTransactionDialog } from "@/components/inventory/DeleteTransactionDialog";
 import { HistoryBulkActionsBar } from "@/components/inventory/HistoryBulkActionsBar";
+import { SearchableItemSelect } from "@/components/inventory/SearchableItemSelect";
 
 interface ItemOption {
   id: string;
@@ -357,15 +358,19 @@ export default function BarangMasukPage() {
                     return (
                       <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition">
                         {/* Pilih Barang */}
-                        <td className="py-2 px-3 align-top">
-                          <select
-                            required
-                            aria-label={`Pilih barang baris ${idx + 1}`}
+                        <td className="py-2 px-3 align-top min-w-[260px]">
+                          <SearchableItemSelect
+                            ariaLabel={`Pilih barang baris ${idx + 1}`}
                             value={row.item_id}
-                            onFocus={() => void syncMasterItems(false)}
-                            onPointerDown={() => void syncMasterItems(false)}
-                            onChange={(e) => {
-                              const newId = e.target.value;
+                            items={availableItems}
+                            placeholder="-- Pilih Barang --"
+                            emptyItemsPlaceholder="-- Tidak ada barang aktif di Master --"
+                            searchPlaceholder="Cari kode atau nama barang..."
+                            mode="bracket"
+                            showUnit
+                            showCategory
+                            onOpen={() => void syncMasterItems(false)}
+                            onChange={(newId) => {
                               const selected = availableItems.find((it) => it.id === newId);
                               const isNewlyPasif = selected?.category?.name?.toLowerCase() === "pasif";
                               const updated = [...rows];
@@ -377,19 +382,7 @@ export default function BarangMasukPage() {
                               };
                               setRows(updated);
                             }}
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-medium [&:user-invalid]:border-rose-500"
-                          >
-                            <option value="">
-                              {availableItems.length === 0
-                                ? "-- Tidak ada barang aktif di Master --"
-                                : "-- Pilih Barang --"}
-                            </option>
-                            {availableItems.map((it) => (
-                              <option key={it.id} value={it.id}>
-                                [{it.code}] {it.name} ({it.unit}) {it.category?.name ? `• [${it.category.name}]` : ""}
-                              </option>
-                            ))}
-                          </select>
+                          />
                         </td>
 
                         {/* Kategori Badge */}

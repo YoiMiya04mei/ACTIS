@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useRef, useState } from "react";
+import { SearchableItemSelect } from "@/components/inventory/SearchableItemSelect";
 import {
   AlertTriangle,
   Boxes,
@@ -85,7 +86,6 @@ export default function PublicRequestBarangPage() {
   const [workTypeOther, setWorkTypeOther] = useState("");
   const [pickupLocation, setPickupLocation] = useState<PickupLocationOption | "">("");
   const [notes, setNotes] = useState("");
-  const [itemSearch, setItemSearch] = useState("");
   const [rows, setRows] = useState<RequestRow[]>([
     { rowKey: "row-1", item_id: "", quantity: "1", notes: "" },
   ]);
@@ -116,17 +116,6 @@ export default function PublicRequestBarangPage() {
   useEffect(() => {
     loadCatalog();
   }, [loadCatalog]);
-
-  const filteredCatalog = useMemo(() => {
-    const q = itemSearch.trim().toLowerCase();
-    if (!q) return catalog;
-    return catalog.filter(
-      (it) =>
-        it.name.toLowerCase().includes(q) ||
-        it.code.toLowerCase().includes(q) ||
-        (it.category_name || "").toLowerCase().includes(q)
-    );
-  }, [catalog, itemSearch]);
 
   const handleSelectWorkType = (option: WorkTypeOption) => {
     setFieldErrors((prev) => ({ ...prev, work_types: "" }));
@@ -726,39 +715,12 @@ export default function PublicRequestBarangPage() {
                   <p className="text-xs font-bold text-rose-600">{fieldErrors.items}</p>
                 )}
 
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <label
-                    htmlFor="catalog-filter"
-                    className="text-xs font-semibold text-slate-600 dark:text-slate-300"
-                  >
-                    Filter Cepat Nama / Kode Barang ({filteredCatalog.length} dari {catalog.length}{" "}
-                    item aktif):
-                  </label>
-                  <input
-                    id="catalog-filter"
-                    type="search"
-                    autoCorrect="off"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    value={itemSearch}
-                    onChange={(e) => setItemSearch(e.target.value)}
-                    placeholder="Cari nama barang..."
-                    className="sm:w-64 min-h-[40px] px-3 py-1.5 text-base rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-                  />
-                </div>
-
                 <div className="space-y-3">
                   {rows.map((row, idx) => {
                     const selectedItem = catalog.find((it) => it.id === row.item_id);
                     const selectId = `item-select-${row.rowKey}`;
                     const qtyId = `item-qty-${row.rowKey}`;
                     const noteId = `item-note-${row.rowKey}`;
-
-                    // Include already chosen item in options even if search filter excludes it
-                    const rowOptions =
-                      selectedItem && !filteredCatalog.some((c) => c.id === selectedItem.id)
-                        ? [selectedItem, ...filteredCatalog]
-                        : filteredCatalog;
 
                     return (
                       <div
@@ -772,22 +734,20 @@ export default function PublicRequestBarangPage() {
                           >
                             Barang #{idx + 1} <span className="text-rose-600">*</span>
                           </label>
-                          <select
+                          <SearchableItemSelect
                             id={selectId}
-                            name={`items[${idx}][item_id]`}
+                            ariaLabel={`Pilih barang request baris ${idx + 1}`}
                             value={row.item_id}
-                            onChange={(e) => handleRowChange(row.rowKey, "item_id", e.target.value)}
-                            className="w-full min-h-[48px] px-3 py-2 text-base rounded-lg border border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-                          >
-                            <option value="">
-                              {loadingCatalog ? "Memuat daftar barang..." : "-- Pilih Barang --"}
-                            </option>
-                            {rowOptions.map((it) => (
-                              <option key={it.id} value={it.id}>
-                                {it.name} ({it.code})
-                              </option>
-                            ))}
-                          </select>
+                            items={catalog}
+                            placeholder={
+                              loadingCatalog ? "Memuat daftar barang..." : "-- Pilih Barang --"
+                            }
+                            emptyItemsPlaceholder="-- Tidak ada barang aktif --"
+                            searchPlaceholder="Cari nama atau kode barang..."
+                            mode="parenthesis"
+                            triggerClassName="min-h-[48px] px-3 py-2 text-base border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-800"
+                            onChange={(newId) => handleRowChange(row.rowKey, "item_id", newId)}
+                          />
                         </div>
 
                         <div className="md:col-span-2 flex flex-col gap-1">

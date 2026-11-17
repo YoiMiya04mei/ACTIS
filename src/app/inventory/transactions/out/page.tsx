@@ -27,6 +27,7 @@ import { useRealtimeMasterItems } from "@/hooks/useRealtimeMasterItems";
 import { useDeleteInventoryTransaction } from "@/hooks/useDeleteInventoryTransaction";
 import { DeleteTransactionDialog } from "@/components/inventory/DeleteTransactionDialog";
 import { HistoryBulkActionsBar } from "@/components/inventory/HistoryBulkActionsBar";
+import { SearchableItemSelect } from "@/components/inventory/SearchableItemSelect";
 import {
   StockOutRequestsDialog,
   type InventoryRequestRecord,
@@ -697,30 +698,22 @@ export default function BarangKeluarPage() {
                     return (
                       <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20 transition">
                         {/* 1. Pilih Barang */}
-                        <td className="py-2.5 px-3 align-top">
-                          <select
-                            required
-                            aria-label={`Pilih barang keluar baris ${idx + 1}`}
+                        <td className="py-2.5 px-3 align-top min-w-[260px]">
+                          <SearchableItemSelect
+                            ariaLabel={`Pilih barang keluar baris ${idx + 1}`}
                             value={row.item_id}
-                            onFocus={() => void syncMasterItems(false)}
-                            onPointerDown={() => void syncMasterItems(false)}
-                            onChange={(e) => handleItemSelect(idx, e.target.value)}
-                            className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-medium [&:user-invalid]:border-rose-500"
-                          >
-                            <option value="">
-                              {availableItems.length === 0
-                                ? "-- Tidak ada barang aktif di Master --"
-                                : "-- Pilih Barang --"}
-                            </option>
-                            {availableItems.map((it) => {
-                              const st = it.stock ? Number(it.stock.available_stock) : 0;
-                              return (
-                                <option key={it.id} value={it.id} disabled={st <= 0}>
-                                  [{it.code}] {it.name} - Tersedia: {st} {it.unit} {it.category?.name ? `• [${it.category.name}]` : ""}
-                                </option>
-                              );
-                            })}
-                          </select>
+                            items={availableItems}
+                            placeholder="-- Pilih Barang --"
+                            emptyItemsPlaceholder="-- Tidak ada barang aktif di Master --"
+                            searchPlaceholder="Cari kode atau nama barang..."
+                            mode="bracket"
+                            showStock
+                            showCategory
+                            disableOutOfStock
+                            onOpen={() => void syncMasterItems(false)}
+                            onChange={(itemId) => handleItemSelect(idx, itemId)}
+                            triggerClassName="py-1.5 text-xs"
+                          />
                         </td>
 
                         {/* 2. Kategori Badge */}
