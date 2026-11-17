@@ -55,16 +55,38 @@ for PENDING_FILE in /app/data/updates/.pending-release /app/updates/.pending-rel
   fi
 done
 
+run_prisma() {
+  if [ -f "/opt/prisma/node_modules/prisma/build/index.js" ]; then
+    node /opt/prisma/node_modules/prisma/build/index.js "$@"
+  else
+    npx prisma "$@"
+  fi
+}
+
 # Sinkronisasi skema database PostgreSQL via Prisma (non-destruktif; tanpa --accept-data-loss)
 if [ "$SKIP_DB_SYNC" = "true" ]; then
   echo "==> [ACTIS] SKIP_DB_SYNC=true -> Melewati sinkronisasi skema Prisma (database existing tidak disentuh)."
 else
+  # Terapkan kolom & unique index baru secara idempoten agar prisma db push tidak memicu false-positive warning data-loss
+  echo "==> [ACTIS] Applying additive schema pre-sync for PostgreSQL..."
+  run_prisma db execute --schema=./prisma/schema.prisma --stdin <<'SQL'
+DO $actis$
+DECLARE
+  has_dup BOOLEAN := FALSE;
+BEGIN
+  IF to_regclass(format('%I.users', current_schema())) IS NOT NULL THEN
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "username" TEXT;
+    ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "request_barang_access" BOOLEAN;
+    EXECUTE 'SELECT EXISTS (SELECT 1 FROM "users" WHERE "username" IS NOT NULL GROUP BY "username" HAVING COUNT(*) > 1)' INTO has_dup;
+    IF NOT has_dup THEN
+      EXECUTE 'CREATE UNIQUE INDEX IF NOT EXISTS "users_username_key" ON "users"("username")';
+    END IF;
+  END IF;
+END $actis$;
+SQL
+
   echo "==> [ACTIS] Synchronizing PostgreSQL Database Schema via Prisma..."
-  if [ -f "/opt/prisma/node_modules/prisma/build/index.js" ]; then
-    node /opt/prisma/node_modules/prisma/build/index.js db push --skip-generate --schema=./prisma/schema.prisma
-  else
-    npx prisma db push --skip-generate
-  fi
+  run_prisma db push --skip-generate --schema=./prisma/schema.prisma
 fi
 
 # Jika variabel INITIAL_SEED=true diaktifkan, jalankan initial seed

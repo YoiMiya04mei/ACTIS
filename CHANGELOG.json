@@ -4,6 +4,25 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.31",
+      "date": "2026-11-17T17:13:30+07:00",
+      "title": "Login Username Web Request Barang, Halaman Login Terisolasi & Sinkronisasi Skema Docker",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Mengubah login portal /request-barang serta formulir Tambah/Edit User Request Barang agar menggunakan Username tanpa mewajibkan email"
+        },
+        {
+          "type": "improve",
+          "text": "Memisahkan cookie sesi portal /request-barang (actis_rb_session & actis_rb_remember) agar akses pertama kali selalu menampilkan halaman Login penuh terlebih dahulu dengan aturan keamanan & Ingat Saya setara halaman /login utama"
+        },
+        {
+          "type": "fix",
+          "text": "Menambahkan pre-sync skema aditif non-destruktif (kolom username, request_barang_access, dan indeks unik users_username_key) di docker-entrypoint.sh agar container VPS tidak gagal startup saat prisma db push menambahkan indeks unik baru pada tabel users existing"
+        }
+      ]
+    },
+    {
       "version": "1.2.30",
       "date": "2026-11-17T15:48:53+07:00",
       "title": "Portal Login Web Request Barang & Pengaturan User Akses",
