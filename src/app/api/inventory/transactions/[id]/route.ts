@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/security";
 import { prisma } from "@/lib/prisma";
 import { deleteInventoryTransaction } from "@/lib/inventoryService";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { triggerInventoryMirrorSync } from "@/lib/inventoryMirrorService";
 
 export async function GET(
   request: NextRequest,
@@ -112,6 +113,8 @@ export async function DELETE(
       result.type === "IN"
         ? `Riwayat transaksi Barang Masuk ${result.transaction_number} berhasil dihapus tanpa mengubah saldo Stok Inventory dan Serial Number.`
         : `Transaksi ${result.transaction_number} berhasil dihapus dan stok telah disinkronkan.`;
+
+    triggerInventoryMirrorSync({ event: "TRANSACTION_DELETE", triggeredBy: auth.user.nama });
 
     return NextResponse.json({
       success: true,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/security";
 import { processFinishInUse } from "@/lib/inventoryService";
 import { getInventoryPermissions } from "@/lib/inventoryAuth";
+import { triggerInventoryMirrorSync } from "@/lib/inventoryMirrorService";
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request);
@@ -25,6 +26,8 @@ export async function POST(request: NextRequest) {
       created_by: auth.user.id,
       clients: body.clients,
     });
+
+    triggerInventoryMirrorSync({ event: "FINISH_IN_USE", triggeredBy: auth.user.nama });
 
     const msg =
       result.pending_return_count > 0

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/security";
 import { getInventoryPermissions } from "@/lib/inventoryAuth";
 import { rejectInventoryRequest } from "@/lib/inventoryService";
+import { triggerInventoryMirrorSync } from "@/lib/inventoryMirrorService";
 
 export async function POST(
   request: NextRequest,
@@ -30,6 +31,8 @@ export async function POST(
       rejected_by: auth.user.id,
       user_name: auth.user.nama,
     });
+
+    triggerInventoryMirrorSync({ event: "REQUEST_REJECT", triggeredBy: auth.user.nama });
 
     return NextResponse.json({
       success: true,

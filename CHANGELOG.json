@@ -4,6 +4,25 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.24",
+      "date": "2026-11-17T13:24:59+07:00",
+      "title": "Mirroring Database Inventory Management ke Google Drive & Google Sheets",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Tambahkan fitur Database Mirroring Inventory ke Google Sheets (5 sheet lengkap) & backup snapshot JSON ke Google Drive melalui Apps Script Webhook, Google OAuth2 API, atau Service Account JSON di menu /inventory/mirror."
+        },
+        {
+          "type": "feat",
+          "text": "Terapkan Auto-Sync real-time non-blocking di seluruh endpoint mutasi Inventory Management beserta tombol Force Mirror dan unduh snapshot JSON lokal."
+        },
+        {
+          "type": "improve",
+          "text": "Refaktor helper autentikasi Google bersama dengan enkripsi kredensial AES-256-GCM, proteksi SSRF webhook HTTPS, dan sanitasi formula sel spreadsheet."
+        }
+      ]
+    },
+    {
       "version": "1.2.23",
       "date": "2026-11-17T12:19:55+07:00",
       "title": "Page Size Selector & Navigasi Halaman pada Seluruh Menu Inventory Management",

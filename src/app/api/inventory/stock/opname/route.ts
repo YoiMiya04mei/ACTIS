@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/security";
 import { performStockOpname } from "@/lib/inventoryService";
 import { getInventoryPermissions } from "@/lib/inventoryAuth";
+import { triggerInventoryMirrorSync } from "@/lib/inventoryMirrorService";
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request);
@@ -35,6 +36,8 @@ export async function POST(request: NextRequest) {
       user_id: auth.user.id,
       user_name: auth.user.nama,
     });
+
+    triggerInventoryMirrorSync({ event: "STOCK_OPNAME", triggeredBy: auth.user.nama });
 
     return NextResponse.json({
       success: true,

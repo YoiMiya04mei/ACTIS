@@ -382,6 +382,12 @@ export default function InventorySettingsPage() {
                 >
                   → Lihat Audit Log Lengkap
                 </Link>
+                <Link
+                  href="/inventory/mirror"
+                  className="block p-2.5 rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30 hover:bg-emerald-100/70 dark:hover:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-semibold transition-colors"
+                >
+                  → Mirror Google Drive &amp; Sheets
+                </Link>
               </div>
             </div>
           </div>

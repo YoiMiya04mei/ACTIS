@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/security";
 import { deleteBulkInventoryTransactions } from "@/lib/inventoryService";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import { triggerInventoryMirrorSync } from "@/lib/inventoryMirrorService";
 
 /**
  * Bulk/complete deletion of IN or OUT transactions.
@@ -55,6 +56,8 @@ export async function POST(request: NextRequest) {
       detail: result.deleted_numbers.slice(0, 10).join(", "),
       user_agent: userAgent,
     }).catch(() => {});
+
+    triggerInventoryMirrorSync({ event: "TRANSACTION_DELETE", triggeredBy: auth.user.nama });
 
     const message =
       type === "IN"

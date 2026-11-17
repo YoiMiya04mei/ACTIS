@@ -4,6 +4,7 @@ import {
   createPublicInventoryRequest,
   getPublicInventoryCatalog,
 } from "@/lib/inventoryService";
+import { triggerInventoryMirrorSync } from "@/lib/inventoryMirrorService";
 
 function extractRequestIp(request: NextRequest): string {
   const forwarded = request.headers.get("x-forwarded-for");
@@ -53,6 +54,11 @@ export async function POST(request: NextRequest) {
       body,
       ip === "unknown" ? null : ip
     );
+
+    triggerInventoryMirrorSync({
+      event: "REQUEST_CREATE",
+      triggeredBy: created.pic_name || "Form Publik",
+    });
 
     return NextResponse.json(
       {

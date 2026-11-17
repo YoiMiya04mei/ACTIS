@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/security";
 import { prisma } from "@/lib/prisma";
 import { processStockOut } from "@/lib/inventoryService";
 import { getInventoryPermissions } from "@/lib/inventoryAuth";
+import { triggerInventoryMirrorSync } from "@/lib/inventoryMirrorService";
 import { Prisma } from "@prisma/client";
 
 export async function POST(request: NextRequest) {
@@ -135,6 +136,8 @@ export async function POST(request: NextRequest) {
         created_by: auth.user.id,
         user_name: auth.user.nama,
       });
+
+      triggerInventoryMirrorSync({ event: "STOCK_OUT", triggeredBy: auth.user.nama });
 
       return NextResponse.json({
         success: true,

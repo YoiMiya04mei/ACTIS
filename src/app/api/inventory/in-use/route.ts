@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/security";
 import { prisma } from "@/lib/prisma";
 import { updateInUseAssignment } from "@/lib/inventoryService";
 import { getInventoryPermissions } from "@/lib/inventoryAuth";
+import { triggerInventoryMirrorSync } from "@/lib/inventoryMirrorService";
 import { Prisma } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
@@ -200,6 +201,8 @@ export async function PUT(request: NextRequest) {
       user_id: auth.user.id,
       user_name: auth.user.nama,
     });
+
+    triggerInventoryMirrorSync({ event: "IN_USE_UPDATE", triggeredBy: auth.user.nama });
 
     return NextResponse.json({
       success: true,

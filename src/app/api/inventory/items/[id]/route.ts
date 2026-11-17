@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/security";
 import { prisma } from "@/lib/prisma";
 import { getInventoryPermissions } from "@/lib/inventoryAuth";
+import { triggerInventoryMirrorSync } from "@/lib/inventoryMirrorService";
 import { Prisma } from "@prisma/client";
 
 export async function GET(
@@ -178,6 +179,8 @@ export async function PUT(
       return itm;
     });
 
+    triggerInventoryMirrorSync({ event: "ITEM_UPDATE", triggeredBy: auth.user.nama });
+
     return NextResponse.json({
       success: true,
       data: updated,
@@ -247,6 +250,8 @@ export async function DELETE(
         },
       });
 
+      triggerInventoryMirrorSync({ event: "ITEM_DELETE", triggeredBy: auth.user.nama });
+
       return NextResponse.json({
         success: true,
         message: "Barang dinonaktifkan (soft delete) untuk mempertahankan riwayat transaksi.",
@@ -270,6 +275,8 @@ export async function DELETE(
         },
       });
     });
+
+    triggerInventoryMirrorSync({ event: "ITEM_DELETE", triggeredBy: auth.user.nama });
 
     return NextResponse.json({
       success: true,

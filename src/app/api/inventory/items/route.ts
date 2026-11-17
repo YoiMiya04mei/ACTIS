@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/security";
 import { prisma } from "@/lib/prisma";
 import { getInventoryPermissions } from "@/lib/inventoryAuth";
 import { generateItemCode } from "@/lib/inventoryService";
+import { triggerInventoryMirrorSync } from "@/lib/inventoryMirrorService";
 import { Prisma } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
@@ -281,6 +282,8 @@ export async function POST(request: NextRequest) {
 
       return { ...item, stock };
     });
+
+    triggerInventoryMirrorSync({ event: "ITEM_CREATE", triggeredBy: auth.user.nama });
 
     return NextResponse.json({
       success: true,

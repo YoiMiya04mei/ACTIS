@@ -650,6 +650,31 @@ export function Sidebar({
                       </div>
                     </Link>
                   )}
+
+                  {/* 13. Mirror Google Drive / Sheets */}
+                  {(isSuperAdmin || currentUser?.role === "warehouse_admin") && (
+                    <Link
+                      href="/inventory/mirror"
+                      onClick={onCloseMobile}
+                      className={`group flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
+                        pathname === "/inventory/mirror"
+                          ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/80 font-bold shadow-xs"
+                          : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                      title="Mirroring Database Inventory ke Google Drive & Google Sheets"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <FileSpreadsheet
+                          className={`w-4 h-4 shrink-0 ${
+                            pathname === "/inventory/mirror"
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400"
+                          }`}
+                        />
+                        <span className="truncate">Mirror Drive / Sheets</span>
+                      </div>
+                    </Link>
+                  )}
                 </div>
               )}
             </div>

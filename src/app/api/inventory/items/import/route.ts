@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/security";
 import { prisma } from "@/lib/prisma";
 import { getInventoryPermissions } from "@/lib/inventoryAuth";
 import { generateItemCode } from "@/lib/inventoryService";
+import { triggerInventoryMirrorSync } from "@/lib/inventoryMirrorService";
 import {
   generateInventoryItemCsvTemplate,
   normalizeInventoryImportRecord,
@@ -259,6 +260,10 @@ export async function POST(request: NextRequest) {
     }
     if (errors.length > 0) {
       summaryParts.push(`• ${errors.length} baris dilewati karena tidak valid`);
+    }
+
+    if (importedCount > 0) {
+      triggerInventoryMirrorSync({ event: "ITEM_IMPORT", triggeredBy: auth.user.nama });
     }
 
     return NextResponse.json({
