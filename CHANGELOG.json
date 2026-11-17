@@ -4,6 +4,40 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.18",
+      "date": "2026-11-17T10:34:41+07:00",
+      "title": "Perbaikan Import CSV Master Barang & Pratinjau + Tombol Import Eksplisit",
+      "changes": [
+        {
+          "type": "fix",
+          "text": "Memperbaiki kegagalan import CSV akibat UTF-8 BOM, pemisah titik koma (;) dari Excel Indonesia, tanda kutip, header case-sensitive, error desimal pada Stok Awal/Stok Minimum, serta reaktivasi item nonaktif saat update by kode."
+        },
+        {
+          "type": "feat",
+          "text": "Menambahkan pratinjau file CSV terpilih, download template CSV, deteksi error per baris, dan tombol eksplisit Import File pada modal Import Data Barang."
+        },
+        {
+          "type": "improve",
+          "text": "Merapikan modal impor dengan native dialog aksesibel dan sinkronisasi ulang daftar Master Barang beserta kategori setelah impor berhasil."
+        }
+      ]
+    },
+    {
+      "version": "1.2.17",
+      "date": "2026-11-17T10:24:29+07:00",
+      "title": "Penghapusan Menu & Fungsi Barang Habis Pakai",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Menghapus menu sidebar dan halaman Barang Habis Pakai (/inventory/consumables) beserta endpoint API (/api/inventory/consumables)."
+        },
+        {
+          "type": "improve",
+          "text": "Menghapus kartu metrik Consumable di Dashboard Inventory, mengarahkan tautan Total Terpakai ke Stok Inventory, serta menghapus opsi Laporan Pemakaian Material Habis Pakai di Laporan Inventory."
+        }
+      ]
+    },
+    {
       "version": "1.2.16",
       "date": "2026-11-16T17:32:20+07:00",
       "title": "Sederhanakan Pilihan Barang pada Form Request Publik",

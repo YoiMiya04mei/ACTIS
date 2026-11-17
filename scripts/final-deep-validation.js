@@ -177,7 +177,6 @@ async function testAllRoutesUnauthenticated() {
     { method: "POST", path: "/api/inventory/categories", expected: 401, desc: "Create inventory category", data: { name: "Router" } },
     { method: "PUT", path: "/api/inventory/categories/cat-fake-1", expected: 401, desc: "Update inventory category", data: {} },
     { method: "DELETE", path: "/api/inventory/categories/cat-fake-1", expected: 401, desc: "Delete inventory category" },
-    { method: "GET", path: "/api/inventory/consumables", expected: 401, desc: "List consumables" },
     { method: "GET", path: "/api/inventory/dashboard", expected: 401, desc: "Inventory metrics" },
     { method: "GET", path: "/api/inventory/history", expected: 401, desc: "Inventory log history" },
     { method: "DELETE", path: "/api/inventory/history", expected: 401, desc: "Clear inventory history" },

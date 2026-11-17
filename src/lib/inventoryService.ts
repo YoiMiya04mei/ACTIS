@@ -1213,7 +1213,6 @@ export async function getInventoryDashboardStats() {
   const [
     totalItems,
     reusableCount,
-    consumableCount,
     stocks,
     activeInUseTransactions,
     recentIn,
@@ -1223,7 +1222,6 @@ export async function getInventoryDashboardStats() {
   ] = await Promise.all([
     prisma.inventoryItem.count({ where: { is_active: true } }),
     prisma.inventoryItem.count({ where: { is_active: true, type: "REUSABLE" } }),
-    prisma.inventoryItem.count({ where: { is_active: true, type: "CONSUMABLE" } }),
     prisma.inventoryStock.findMany({
       include: {
         item: {
@@ -1380,7 +1378,6 @@ export async function getInventoryDashboardStats() {
       total_item_types: totalItems,
       total_available_stock: totalAvailableStock,
       total_reusable_items: reusableCount,
-      total_consumable_items: consumableCount,
       total_in_use: totalInUse,
       total_pending_return: activeInUseTransactions.length,
       total_consumed: totalConsumed,

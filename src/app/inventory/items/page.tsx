@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
 import { notifyMasterInventoryChanged } from "@/lib/inventoryMasterSync";
+import { ImportInventoryItemsModal } from "@/components/inventory/ImportInventoryItemsModal";
 
 interface Item {
   id: string;
@@ -963,96 +964,31 @@ export default function MasterBarangPage() {
         </div>
       )}
 
-      {/* MODAL: IMPORT EXCEL / CSV */}
-      {isImportModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg p-6 space-y-4 shadow-xl">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center">
-                <Upload className="w-5 h-5 mr-2 text-indigo-600" />
-                Import Data Barang dari CSV / Excel
-              </h2>
-              <button
-                onClick={() => setIsImportModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="text-xs text-slate-600 dark:text-slate-400 space-y-2">
-              <p>
-                Unggah file CSV dengan kolom header berikut:
-              </p>
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl font-mono text-[11px] overflow-x-auto">
-                Nama Barang, Kategori, Jenis, Merek, Model, Satuan, Stok Awal, Stok Minimum, Lokasi Penyimpanan
-              </div>
-              <p className="text-[11px] text-slate-500">
-                * Kolom Jenis diisi <code>REUSABLE</code> atau <code>CONSUMABLE</code>.
-              </p>
-              <p className="text-[11px] text-slate-500">
-                * Pilihan Lokasi Penyimpanan: <code>Gudang Pusat</code>, <code>Gudang Bandung</code>, <code>Gudang Gekbrong</code>.
-              </p>
-            </div>
-
-            <input
-              type="file"
-              accept=".csv"
-              onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file) return;
-
-                const text = await file.text();
-                const lines = text.split(/\r?\n/).filter(Boolean);
-                if (lines.length < 2) {
-                  alert("File CSV tidak memiliki data.");
-                  return;
-                }
-
-                const headers = lines[0].split(",").map((h) => h.replace(/"/g, "").trim());
-                const rows = [];
-
-                for (let i = 1; i < lines.length; i++) {
-                  const values = lines[i].split(",").map((v) => v.replace(/"/g, "").trim());
-                  const obj: Record<string, string> = {};
-                  headers.forEach((h, idx) => {
-                    obj[h] = values[idx] || "";
-                  });
-                  rows.push(obj);
-                }
-
-                try {
-                  const res = await fetch("/api/inventory/items/import", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ items: rows }),
-                  });
-                  const json = await res.json();
-                  if (!res.ok || !json.success) throw new Error(json.error);
-
-                  setNotification({ type: "success", message: json.message });
-                  setIsImportModalOpen(false);
-                  notifyMasterInventoryChanged("import");
-                  fetchItems();
-                } catch (err: any) {
-                  alert("Error impor: " + err.message);
-                }
-              }}
-              className="w-full text-xs file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            />
-
-            <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => setIsImportModalOpen(false)}
-                className="px-4 py-2 rounded-xl border text-xs font-semibold"
-              >
-                Batal
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ImportInventoryItemsModal
+        open={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onSuccess={(msg) => {
+          setIsImportModalOpen(false);
+          setNotification({ type: "success", message: msg });
+          notifyMasterInventoryChanged("import");
+          fetchCategories();
+          if (
+            search !== "" ||
+            selectedCategory !== "" ||
+            selectedType !== "" ||
+            selectedStatus !== "true" ||
+            page !== 1
+          ) {
+            setSearch("");
+            setSelectedCategory("");
+            setSelectedType("");
+            setSelectedStatus("true");
+            setPage(1);
+          } else {
+            fetchItems(true);
+          }
+        }}
+      />
     </div>
   );
 }

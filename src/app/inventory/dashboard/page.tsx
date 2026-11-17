@@ -16,7 +16,6 @@ import {
   ExternalLink,
   ChevronRight,
   ShieldCheck,
-  Cable,
   CheckCircle2,
 } from "lucide-react";
 
@@ -25,7 +24,6 @@ interface DashboardData {
     total_item_types: number;
     total_available_stock: number;
     total_reusable_items: number;
-    total_consumable_items: number;
     total_in_use: number;
     total_pending_return: number;
     total_consumed: number;
@@ -88,7 +86,6 @@ export default function InventoryDashboardPage() {
     total_item_types: 0,
     total_available_stock: 0,
     total_reusable_items: 0,
-    total_consumable_items: 0,
     total_in_use: 0,
     total_pending_return: 0,
     total_consumed: 0,
@@ -166,8 +163,8 @@ export default function InventoryDashboardPage() {
         </div>
       )}
 
-      {/* 8 Primary Inventory Metric Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 2xl:gap-3.5">
+      {/* 7 Primary Inventory Metric Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 2xl:gap-3.5">
         {/* Total Jenis Barang */}
         <Link
           href="/inventory/items"
@@ -213,21 +210,6 @@ export default function InventoryDashboardPage() {
           <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Bisa dikembalikan</p>
         </Link>
 
-        {/* Total Barang Consumable */}
-        <Link
-          href="/inventory/consumables"
-          className="p-3.5 rounded-2xl border bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-purple-400 dark:hover:border-purple-500 shadow-sm transition group"
-        >
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-400">
-            <span>Consumable</span>
-            <Cable className="w-4 h-4 text-purple-500 group-hover:scale-110 transition" />
-          </div>
-          <p className="text-xl font-black text-purple-600 dark:text-purple-400 mt-1.5">
-            {summary.total_consumable_items}
-          </p>
-          <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Habis pakai</p>
-        </Link>
-
         {/* Total Sedang Digunakan */}
         <Link
           href="/inventory/in-use"
@@ -258,9 +240,9 @@ export default function InventoryDashboardPage() {
           <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Item belum kembali</p>
         </Link>
 
-        {/* Total Consumable Terpakai */}
+        {/* Total Terpakai */}
         <Link
-          href="/inventory/consumables"
+          href="/inventory/stock"
           className="p-3.5 rounded-2xl border bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-cyan-400 dark:hover:border-cyan-500 shadow-sm transition group"
         >
           <div className="flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-400">
@@ -270,7 +252,7 @@ export default function InventoryDashboardPage() {
           <p className="text-xl font-black text-cyan-600 dark:text-cyan-400 mt-1.5">
             {summary.total_consumed.toLocaleString("id-ID")}
           </p>
-          <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Pemakaian material</p>
+          <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Terpakai &amp; Client</p>
         </Link>
 
         {/* Stok Minimum (Alert) */}

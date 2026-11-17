@@ -11,14 +11,13 @@ import {
   Printer,
   Boxes,
   RotateCcw,
-  Cable,
   Layers,
   ArrowDownLeft,
   ArrowUpRight,
 } from "lucide-react";
 
 export default function LaporanInventoryPage() {
-  const [reportType, setReportType] = useState<"stock" | "movements" | "in_use" | "consumables" | "returns">("stock");
+  const [reportType, setReportType] = useState<"stock" | "movements" | "in_use" | "returns">("stock");
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -43,10 +42,6 @@ export default function LaporanInventoryPage() {
         const res = await fetch("/api/inventory/in-use?limit=100");
         const json = await res.json();
         if (json.success) setReportData(json.data);
-      } else if (reportType === "consumables") {
-        const res = await fetch("/api/inventory/consumables?limit=100");
-        const json = await res.json();
-        if (json.success) setReportData(json.data);
       } else if (reportType === "returns") {
         const res = await fetch(`/api/inventory/returns?limit=100&start_date=${startDate}&end_date=${endDate}`);
         const json = await res.json();
@@ -65,7 +60,7 @@ export default function LaporanInventoryPage() {
   };
 
   const handleExportCSV = () => {
-    if (reportType === "stock" || reportType === "consumables") {
+    if (reportType === "stock") {
       window.open("/api/inventory/items/export?format=csv", "_blank");
     } else {
       window.print();
@@ -90,7 +85,7 @@ export default function LaporanInventoryPage() {
             Laporan Inventory
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
-            Ekspor rekapitulasi posisi saldo stok, mutasi pergerakan barang, status peminjaman di lapangan, dan pemakaian material habis pakai.
+            Ekspor rekapitulasi posisi saldo stok, mutasi pergerakan barang, status barang sedang digunakan di lapangan, dan pengembalian barang.
           </p>
         </div>
 
@@ -132,7 +127,6 @@ export default function LaporanInventoryPage() {
               <option value="stock">Laporan Saldo Stok Saat Ini</option>
               <option value="movements">Laporan Mutasi Fisik (Movements)</option>
               <option value="in_use">Laporan Perangkat Sedang Digunakan</option>
-              <option value="consumables">Laporan Pemakaian Material Habis Pakai</option>
               <option value="returns">Laporan Pengembalian Barang</option>
             </select>
           </div>
@@ -187,8 +181,6 @@ export default function LaporanInventoryPage() {
                 ? `LAPORAN MUTASI LOGISTIK (${startDate} s.d ${endDate})`
                 : reportType === "in_use"
                 ? "LAPORAN PERANGKAT REUSABLE SEDANG DIGUNAKAN"
-                : reportType === "consumables"
-                ? "LAPORAN KONSUMSI MATERIAL HABIS PAKAI"
                 : "LAPORAN PENGEMBALIAN BARANG GUDANG"}
             </p>
           </div>
@@ -231,16 +223,6 @@ export default function LaporanInventoryPage() {
                   <th className="py-2.5 px-3">Lokasi</th>
                   <th className="py-2.5 px-3">Barang & Sisa Belum Kembali</th>
                   <th className="py-2.5 px-3 text-center">Status</th>
-                </tr>
-              )}
-              {reportType === "consumables" && (
-                <tr>
-                  <th className="py-2.5 px-3">Kode</th>
-                  <th className="py-2.5 px-3">Nama Material</th>
-                  <th className="py-2.5 px-3 text-right">Total Masuk</th>
-                  <th className="py-2.5 px-3 text-right text-purple-600">Terpakai Permanen</th>
-                  <th className="py-2.5 px-3 text-right">Stok Siap Pakai</th>
-                  <th className="py-2.5 px-3 text-right">Stok Min</th>
                 </tr>
               )}
               {reportType === "returns" && (
@@ -304,16 +286,6 @@ export default function LaporanInventoryPage() {
                           {row.details?.map((d: any) => `${d.item?.name} (${Number(d.qty_remaining)} ${d.unit})`).join(", ")}
                         </td>
                         <td className="py-2.5 px-3 text-center">{row.status}</td>
-                      </>
-                    )}
-                    {reportType === "consumables" && (
-                      <>
-                        <td className="py-2.5 px-3 font-mono font-bold text-purple-600">{row.code}</td>
-                        <td className="py-2.5 px-3 font-semibold">{row.name}</td>
-                        <td className="py-2.5 px-3 text-right">{Number(row.stock?.total_in || 0)}</td>
-                        <td className="py-2.5 px-3 text-right font-bold text-purple-600">{Number(row.stock?.total_consumed || 0)}</td>
-                        <td className="py-2.5 px-3 text-right font-black text-emerald-600">{Number(row.stock?.available_stock || 0)} {row.unit}</td>
-                        <td className="py-2.5 px-3 text-right">{row.min_stock} {row.unit}</td>
                       </>
                     )}
                     {reportType === "returns" && (

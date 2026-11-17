@@ -580,30 +580,7 @@ export function Sidebar({
                     </div>
                   </Link>
 
-                  {/* 9. Barang Habis Pakai */}
-                  <Link
-                    href="/inventory/consumables"
-                    onClick={onCloseMobile}
-                    className={`group flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
-                      pathname === "/inventory/consumables"
-                        ? "bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/80 font-bold shadow-xs"
-                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
-                    }`}
-                    title="Pengelolaan & Riwayat Konsumsi Material Habis Pakai"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <Cable
-                        className={`w-4 h-4 shrink-0 ${
-                          pathname === "/inventory/consumables"
-                            ? "text-purple-600 dark:text-purple-400"
-                            : "text-slate-400 group-hover:text-purple-600 dark:group-hover:text-purple-400"
-                        }`}
-                      />
-                      <span className="truncate">Barang Habis Pakai</span>
-                    </div>
-                  </Link>
-
-                  {/* 10. Riwayat Transaksi */}
+                  {/* 9. Riwayat Transaksi */}
                   <Link
                     href="/inventory/history"
                     onClick={onCloseMobile}
