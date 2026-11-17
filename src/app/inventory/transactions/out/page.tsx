@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import {
   ArrowUpRight,
   PlusCircle,
@@ -17,6 +18,7 @@ import {
   Zap,
   Users,
   ClipboardList,
+  FileDown,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
 import { fetchActiveMasterItems } from "@/lib/inventoryMasterSync";
@@ -1368,7 +1370,14 @@ export default function BarangKeluarPage() {
               )}
             </div>
 
-            <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex justify-end items-center gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <Link
+                href={`/inventory/form-barang?tx_id=${selectedTx.id}`}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0F2B59] hover:bg-blue-900 text-white font-bold text-xs shadow-xs transition"
+              >
+                <FileDown className="w-3.5 h-3.5" />
+                <span>Generate Form Barang (PDF)</span>
+              </Link>
               <button
                 onClick={() => setSelectedTx(null)}
                 className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 font-semibold text-xs transition"

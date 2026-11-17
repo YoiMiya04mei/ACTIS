@@ -580,6 +580,29 @@ export function Sidebar({
                     </div>
                   </Link>
 
+                  {/* 9. Generate Form Barang */}
+                  <Link
+                    href="/inventory/form-barang"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/inventory/form-barang" || pathname.startsWith("/inventory/form-barang/")
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Generate Form Barang & Form Pengembalian Barang (PDF)"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <FileText
+                        className={`w-4 h-4 shrink-0 ${
+                          pathname.startsWith("/inventory/form-barang")
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                        }`}
+                      />
+                      <span className="truncate">Generate Form Barang</span>
+                    </div>
+                  </Link>
+
                   {/* 9. Riwayat Transaksi */}
                   <Link
                     href="/inventory/history"

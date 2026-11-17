@@ -4,6 +4,29 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.25",
+      "date": "2026-11-17T13:54:46+07:00",
+      "title": "Generate Form Barang (PDF) Otomatis dari Alur Inventory",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Menambahkan menu Generate Form Barang (/inventory/form-barang) tepat di bawah menu Pengembalian Barang pada sidebar Inventory Management"
+        },
+        {
+          "type": "feat",
+          "text": "Menghadirkan template dokumen A4 multi-halaman (FORM BARANG & FORM PENGEMBALIAN BARANG) yang 100% sesuai format Word resmi PT Jembatan Data Pangrango lengkap dengan kop surat, wave, logo, watermark, tabel A/B/C, persetujuan, catatan, dan footer"
+        },
+        {
+          "type": "feat",
+          "text": "Mengisi otomatis INFORMASI REQUEST, BARANG KELUAR, BARANG TERPAKAI, dan BARANG KEMBALI / SISA langsung dari alur database Inventory serta mengekspor ke file PDF A4 siap cetak"
+        },
+        {
+          "type": "improve",
+          "text": "Menambahkan pintasan langsung ke Generate Form Barang (PDF) pada halaman Barang Keluar, Barang Sedang Digunakan, dan Pengembalian Barang"
+        }
+      ]
+    },
+    {
       "version": "1.2.24",
       "date": "2026-11-17T13:24:59+07:00",
       "title": "Mirroring Database Inventory Management ke Google Drive & Google Sheets",

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, Suspense } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   RotateCcw,
@@ -14,6 +15,7 @@ import {
   ShieldAlert,
   ArrowRight,
   Users,
+  FileDown,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
 import { computeRemainingSerialsForDetail } from "@/lib/inventoryClientFinish";
@@ -626,12 +628,24 @@ function PengembalianBarangContent() {
                       </div>
                     </td>
                     <td className="py-2.5 px-3 text-center">
-                      <button
-                        onClick={() => setSelectedReturn(ret)}
-                        className="p-1 rounded text-slate-500 hover:text-blue-600"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
+                      <div className="inline-flex items-center justify-center gap-1">
+                        {ret.out_transaction_id && (
+                          <Link
+                            href={`/inventory/form-barang?tx_id=${ret.out_transaction_id}`}
+                            className="p-1 rounded text-slate-500 hover:text-blue-600"
+                            title="Generate Form Barang (PDF)"
+                          >
+                            <FileDown className="w-4 h-4" />
+                          </Link>
+                        )}
+                        <button
+                          onClick={() => setSelectedReturn(ret)}
+                          className="p-1 rounded text-slate-500 hover:text-blue-600"
+                          title="Lihat detail pengembalian"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

@@ -573,7 +573,7 @@ html.dark [class*="shadow-teal-500/"] {
 /* PRINTABLE DOCUMENT PREVIEW SHEETS (ALWAYS CRISP WHITE PAPER + BLACK INK)   */
 /* ========================================================================== */
 
-html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container) {
+html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container, .form-barang-container) {
   color-scheme: light;
   --slate-50: 248 250 252;
   --slate-100: 241 245 249;
@@ -590,49 +590,49 @@ html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-con
   color: #0f172a !important;
 }
 
-html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container) .bg-white {
+html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container, .form-barang-container) .bg-white {
   background-color: #ffffff;
 }
-html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container) .bg-slate-50 {
+html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container, .form-barang-container) .bg-slate-50 {
   background-color: #f8fafc;
 }
-html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container) .bg-slate-50\/50 {
+html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container, .form-barang-container) .bg-slate-50\/50 {
   background-color: rgba(248, 250, 252, 0.5);
 }
-html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container) .bg-slate-100 {
+html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container, .form-barang-container) .bg-slate-100 {
   background-color: #f1f5f9;
 }
-html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container) .text-black {
+html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container, .form-barang-container) .text-black {
   color: #000000;
 }
-html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container) .text-slate-900 {
+html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container, .form-barang-container) .text-slate-900 {
   color: #0f172a;
 }
-html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container) .text-slate-800 {
+html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container, .form-barang-container) .text-slate-800 {
   color: #1e293b;
 }
-html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container) .text-slate-700 {
+html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container, .form-barang-container) .text-slate-700 {
   color: #334155;
 }
-html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container) .text-slate-600 {
+html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container, .form-barang-container) .text-slate-600 {
   color: #475569;
 }
-html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container) .text-slate-500 {
+html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container, .form-barang-container) .text-slate-500 {
   color: #64748b;
 }
-html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container) .text-slate-400 {
+html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container, .form-barang-container) .text-slate-400 {
   color: #94a3b8;
 }
-html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container) .text-blue-600 {
+html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container, .form-barang-container) .text-blue-600 {
   color: #2563eb;
 }
-html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container) .border-slate-200 {
+html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container, .form-barang-container) .border-slate-200 {
   border-color: #e2e8f0;
 }
-html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container) .border-slate-300 {
+html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container, .form-barang-container) .border-slate-300 {
   border-color: #cbd5e1;
 }
-html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container) .border-slate-300\/80 {
+html.dark :is(.rfo-document-container, .surat-tugas-container, .berita-acara-container, .permit-barang-container, .bank-voucher-container, .form-barang-container) .border-slate-300\/80 {
   border-color: rgba(203, 213, 225, 0.8);
 }
 

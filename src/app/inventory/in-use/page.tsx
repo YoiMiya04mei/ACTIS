@@ -19,6 +19,7 @@ import {
   Plus,
   Trash2,
   Users,
+  FileDown,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
 import { computeRemainingSerialsForDetail } from "@/lib/inventoryClientFinish";
@@ -1127,6 +1128,13 @@ export default function BarangSedangDigunakanPage() {
                             Proses Pengembalian
                           </Link>
                         )}
+                        <Link
+                          href={`/inventory/form-barang?tx_id=${tx.id}`}
+                          className="p-1 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50"
+                          title="Generate Form Barang (PDF)"
+                        >
+                          <FileDown className="w-4 h-4" />
+                        </Link>
                         {isAdmin && (
                           <button
                             onClick={() => handleOpenEditModal(tx)}
