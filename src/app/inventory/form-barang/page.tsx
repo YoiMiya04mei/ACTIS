@@ -9,14 +9,11 @@ import {
   Search,
   RefreshCw,
   FileText,
-  RotateCcw,
   CheckCircle2,
   AlertTriangle,
   FilePlus2,
   ZoomIn,
   ZoomOut,
-  CheckSquare,
-  SlidersHorizontal,
 } from "lucide-react";
 import { PDFService } from "@/services/pdfService";
 import { FormBarangPaperDocument } from "@/components/inventory/FormBarangPaperDocument";
@@ -27,7 +24,6 @@ import {
   type FormBarangDocumentData,
   type FormBarangSourceListItem,
 } from "@/lib/inventoryFormBarang";
-import { WORK_TYPE_OPTIONS, type WorkTypeOption } from "@/lib/inventoryRequest";
 
 const STATUS_FILTER_OPTIONS = [
   { value: "ALL", label: "Semua Alur" },
@@ -61,13 +57,7 @@ function GenerateFormBarangContent() {
     return { type: "blank", id: null };
   });
 
-  // Options fetched from backend
-  const [includePendingRemaining, setIncludePendingRemaining] = useState(false);
-
-  // Active Document State (populated automatically from DB, editable before PDF)
-  const [dbSnapshot, setDbSnapshot] = useState<FormBarangDocumentData>(() =>
-    createEmptyFormBarangData()
-  );
+  // Active Document State (populated automatically from DB)
   const [docData, setDocData] = useState<FormBarangDocumentData>(() =>
     createEmptyFormBarangData()
   );
@@ -120,16 +110,14 @@ function GenerateFormBarangContent() {
     return () => clearTimeout(timer);
   }, [fetchSourceList]);
 
-  // Load full workflow document when selection or options change
+  // Load full workflow document when selection changes
   const loadSelectedDocument = useCallback(
     async (
       targetType: "transaction" | "request" | "blank",
-      targetId: string | null,
-      withPending: boolean
+      targetId: string | null
     ) => {
       if (targetType === "blank" || !targetId) {
         const empty = createEmptyFormBarangData();
-        setDbSnapshot(empty);
         setDocData(empty);
         setPreviewPageTab("all");
         return;
@@ -141,7 +129,7 @@ function GenerateFormBarangContent() {
         const params = new URLSearchParams({
           id: targetId,
           sourceType: targetType,
-          includePendingRemaining: String(withPending),
+          includePendingRemaining: "false",
           prefillPenerima: "false",
         });
 
@@ -154,7 +142,6 @@ function GenerateFormBarangContent() {
         }
 
         const loaded: FormBarangDocumentData = json.data;
-        setDbSnapshot(loaded);
         setDocData(loaded);
         setPreviewPageTab("all");
       } catch (err: any) {
@@ -176,18 +163,18 @@ function GenerateFormBarangContent() {
 
   useEffect(() => {
     if (initialTxId) {
-      loadSelectedDocument("transaction", initialTxId, includePendingRemaining);
+      loadSelectedDocument("transaction", initialTxId);
       return;
     }
     if (initialRequestId) {
-      loadSelectedDocument("request", initialRequestId, includePendingRemaining);
+      loadSelectedDocument("request", initialRequestId);
       return;
     }
     if (!hasAutoSelected && !listLoading && sources.length > 0) {
       setHasAutoSelected(true);
       const first = sources[0];
       setSelectedSource({ type: first.sourceType, id: first.id });
-      loadSelectedDocument(first.sourceType, first.id, includePendingRemaining);
+      loadSelectedDocument(first.sourceType, first.id);
     }
   }, [
     initialTxId,
@@ -195,48 +182,20 @@ function GenerateFormBarangContent() {
     hasAutoSelected,
     listLoading,
     sources,
-    includePendingRemaining,
     loadSelectedDocument,
   ]);
 
   const handleSelectItem = (item: FormBarangSourceListItem) => {
     setSelectedSource({ type: item.sourceType, id: item.id });
-    loadSelectedDocument(item.sourceType, item.id, includePendingRemaining);
+    loadSelectedDocument(item.sourceType, item.id);
   };
 
   const handleUseBlankTemplate = () => {
     setHasAutoSelected(true);
     setSelectedSource({ type: "blank", id: null });
     const empty = createEmptyFormBarangData();
-    setDbSnapshot(empty);
     setDocData(empty);
     setPreviewPageTab("all");
-  };
-
-  const handleTogglePendingRemaining = (checked: boolean) => {
-    setIncludePendingRemaining(checked);
-
-    if (selectedSource.type !== "blank" && selectedSource.id) {
-      loadSelectedDocument(selectedSource.type, selectedSource.id, checked);
-    }
-  };
-
-  const handleToggleWorkType = (wt: WorkTypeOption) => {
-    setDocData((prev) => {
-      const exists = prev.requestInfo.workTypes.includes(wt);
-      const next = exists
-        ? prev.requestInfo.workTypes.filter((x) => x !== wt)
-        : WORK_TYPE_OPTIONS.filter((opt) =>
-            opt === wt ? true : prev.requestInfo.workTypes.includes(opt)
-          );
-      return {
-        ...prev,
-        requestInfo: {
-          ...prev.requestInfo,
-          workTypes: next,
-        },
-      };
-    });
   };
 
   const handleDownloadPdf = async () => {
@@ -473,7 +432,7 @@ function GenerateFormBarangContent() {
               </select>
             </div>
 
-            <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200/80 dark:border-slate-800 rounded-xl">
+            <div className="max-h-[560px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200/80 dark:border-slate-800 rounded-xl">
               {listLoading && sources.length === 0 ? (
                 <div className="p-6 text-center text-xs text-slate-400">
                   Memuat alur transaksi...
@@ -548,199 +507,13 @@ function GenerateFormBarangContent() {
                 })
               )}
             </div>
-          </div>
 
-          {/* Card 2: Active Workflow Summary & Adjustments */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-3.5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <SlidersHorizontal className="w-4 h-4 text-[#0F2B59] dark:text-blue-400" />
-                <span>Penyesuaian Informasi &amp; TTD</span>
-              </h2>
-              {summary.sourceType !== "blank" && (
-                <button
-                  type="button"
-                  onClick={() => setDocData(dbSnapshot)}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:underline cursor-pointer"
-                  title="Kembalikan field ke hasil otomatis dari database"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Reset DB</span>
-                </button>
-              )}
-            </div>
-
-            {/* Workflow Status Alert */}
             {summary.sourceType === "request" && (
               <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-200">
                 Request <strong>{summary.requestNumber}</strong> masih berstatus{" "}
                 <strong>{summary.requestStatus}</strong>. Tabel Barang Keluar, Terpakai, dan Kembali akan terisi otomatis setelah diproses di menu Barang Keluar.
               </div>
             )}
-
-            <div className="space-y-2.5 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Nama Tim
-                </label>
-                <input
-                  type="text"
-                  value={docData.requestInfo.namaTim}
-                  onChange={(e) =>
-                    setDocData((p) => ({
-                      ...p,
-                      requestInfo: { ...p.requestInfo, namaTim: e.target.value },
-                    }))
-                  }
-                  placeholder="Nama PIC / Tim Lapangan"
-                  className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Tanggal Request
-                  </label>
-                  <input
-                    type="text"
-                    value={docData.requestInfo.tanggalRequest}
-                    onChange={(e) =>
-                      setDocData((p) => ({
-                        ...p,
-                        requestInfo: {
-                          ...p.requestInfo,
-                          tanggalRequest: e.target.value,
-                        },
-                      }))
-                    }
-                    placeholder="DD/MM/YYYY"
-                    className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Lokasi Pengembalian
-                  </label>
-                  <input
-                    type="text"
-                    value={docData.requestInfo.lokasiPengembalian}
-                    onChange={(e) =>
-                      setDocData((p) => ({
-                        ...p,
-                        requestInfo: {
-                          ...p.requestInfo,
-                          lokasiPengembalian: e.target.value,
-                        },
-                      }))
-                    }
-                    placeholder="Gudang Pusat"
-                    className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Jenis Pekerjaan (Centang Otomatis / Manual)
-                </label>
-                <div className="grid grid-cols-2 gap-1.5">
-                  {WORK_TYPE_OPTIONS.map((wt) => (
-                    <label
-                      key={wt}
-                      className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={docData.requestInfo.workTypes.includes(wt)}
-                        onChange={() => handleToggleWorkType(wt)}
-                        className="rounded border-slate-300 text-blue-600"
-                      />
-                      <span>{wt}</span>
-                    </label>
-                  ))}
-                </div>
-                {docData.requestInfo.workTypes.includes("Lainnya") && (
-                  <input
-                    type="text"
-                    value={docData.requestInfo.workTypeOther}
-                    onChange={(e) =>
-                      setDocData((p) => ({
-                        ...p,
-                        requestInfo: {
-                          ...p.requestInfo,
-                          workTypeOther: e.target.value,
-                        },
-                      }))
-                    }
-                    placeholder="Detail pekerjaan lainnya..."
-                    className="mt-1.5 w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                  />
-                )}
-              </div>
-
-              {/* Opsi Sinkronisasi Baris Tabel */}
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer text-slate-700 dark:text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={includePendingRemaining}
-                    onChange={(e) => handleTogglePendingRemaining(e.target.checked)}
-                    className="rounded border-slate-300 text-blue-600"
-                  />
-                  <span>
-                    Sertakan sisa belum dikembalikan di Bagian C (
-                    {docData.pendingRemainingRows.length} item)
-                  </span>
-                </label>
-              </div>
-
-              {/* Nama Penanda Tangan Persetujuan */}
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
-                <p className="font-bold text-[11px] uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
-                  <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Nama Penanda Tangan (Opsional)</span>
-                </p>
-                <div className="space-y-2">
-                  <input
-                    type="text"
-                    value={docData.approval.pemohonName}
-                    onChange={(e) =>
-                      setDocData((p) => ({
-                        ...p,
-                        approval: { ...p.approval, pemohonName: e.target.value },
-                      }))
-                    }
-                    placeholder="Pemohon / SPV (kosong = titik-titik)"
-                    className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                  />
-                  <input
-                    type="text"
-                    value={docData.approval.pengelolaName}
-                    onChange={(e) =>
-                      setDocData((p) => ({
-                        ...p,
-                        approval: { ...p.approval, pengelolaName: e.target.value },
-                      }))
-                    }
-                    placeholder="Pengelola Gudang / SPV CS (kosong = titik-titik)"
-                    className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                  />
-                  <input
-                    type="text"
-                    value={docData.approval.penerimaName}
-                    onChange={(e) =>
-                      setDocData((p) => ({
-                        ...p,
-                        approval: { ...p.approval, penerimaName: e.target.value },
-                      }))
-                    }
-                    placeholder="Penerima / PIC Tim Lapangan (kosong = titik-titik)"
-                    className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-                  />
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 

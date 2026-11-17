@@ -4,6 +4,17 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.27",
+      "date": "2026-11-17T14:52:57+07:00",
+      "title": "Form Barang PDF: Sederhanakan Panel Pemilih Alur Otomatis",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Menghapus panel Penyesuaian Informasi & TTD pada halaman Generate Form Barang agar seluruh data surat tampil murni otomatis dari alur database"
+        }
+      ]
+    },
+    {
       "version": "1.2.26",
       "date": "2026-11-17T14:38:52+07:00",
       "title": "Form Barang PDF: Kolom SN Barang Otomatis, Penerima Kosong & Baris Dinamis",
