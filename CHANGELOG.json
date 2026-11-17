@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.30",
+      "date": "2026-11-17T15:48:53+07:00",
+      "title": "Portal Login Web Request Barang & Pengaturan User Akses",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Menambahkan sistem login terautentikasi pada portal Web /request-barang serta proteksi API pengajuan barang keluar"
+        },
+        {
+          "type": "feat",
+          "text": "Menambahkan kontrol izin login /request-barang per akun, role khusus User Request Barang, dan sakelar kebijakan Wajib Login di menu Pengaturan User Akses"
+        }
+      ]
+    },
+    {
       "version": "1.2.29",
       "date": "2026-11-17T15:21:48+07:00",
       "title": "Form Barang PDF: Label Jabatan SPV Teknisi",

@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkRateLimit } from "@/lib/security";
+import { checkRateLimit, requireAuth, type AuthenticatedUser } from "@/lib/security";
 import {
   createPublicInventoryRequest,
   getPublicInventoryCatalog,
 } from "@/lib/inventoryService";
 import { triggerInventoryMirrorSync } from "@/lib/inventoryMirrorService";
+import {
+  hasRequestBarangAccess,
+  isRequestBarangLoginRequired,
+} from "@/lib/requestBarangAuth";
+import { parseUserAgent, recordActivity } from "@/lib/activityLogService";
 
 function extractRequestIp(request: NextRequest): string {
   const forwarded = request.headers.get("x-forwarded-for");
@@ -16,7 +21,44 @@ function extractRequestIp(request: NextRequest): string {
   return realIp || "unknown";
 }
 
-export async function GET() {
+async function guardRequestBarangApiAccess(
+  request: NextRequest
+): Promise<
+  | { ok: true; user: AuthenticatedUser | null }
+  | { ok: false; response: NextResponse }
+> {
+  const loginRequired = await isRequestBarangLoginRequired();
+  const auth = await requireAuth(request, { allowRequestBarangOnly: true });
+
+  if (!auth.ok) {
+    if (loginRequired) {
+      return { ok: false, response: auth.response };
+    }
+    return { ok: true, user: null };
+  }
+
+  if (loginRequired && !hasRequestBarangAccess(auth.user)) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          success: false,
+          code: "NO_PERMISSION",
+          error:
+            "Akun Anda tidak diizinkan mengakses Web /request-barang. Hubungi Administrator di menu Pengaturan User Akses.",
+        },
+        { status: 403 }
+      ),
+    };
+  }
+
+  return { ok: true, user: auth.user };
+}
+
+export async function GET(request: NextRequest) {
+  const access = await guardRequestBarangApiAccess(request);
+  if (!access.ok) return access.response;
+
   try {
     const items = await getPublicInventoryCatalog();
     return NextResponse.json(
@@ -36,6 +78,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const access = await guardRequestBarangApiAccess(request);
+  if (!access.ok) return access.response;
+
   const ip = extractRequestIp(request);
   const rate = checkRateLimit(`public-inv-req:${ip}`, 20, 60);
   if (!rate.allowed) {
@@ -55,9 +100,22 @@ export async function POST(request: NextRequest) {
       ip === "unknown" ? null : ip
     );
 
+    if (access.user) {
+      recordActivity({
+        nama_lengkap: access.user.nama,
+        email: access.user.email,
+        ip_address: ip === "unknown" ? "103.155.196.63" : ip,
+        tipe: "UPDATE_DATA",
+        aktifitas: `Mengirim Form Request Barang Keluar ${created.request_number} (PIC: ${created.pic_name}) melalui portal /request-barang`,
+        user_agent: parseUserAgent(request.headers.get("user-agent")),
+      }).catch(() => {});
+    }
+
     triggerInventoryMirrorSync({
       event: "REQUEST_CREATE",
-      triggeredBy: created.pic_name || "Form Publik",
+      triggeredBy: access.user
+        ? `${created.pic_name} (${access.user.nama})`
+        : created.pic_name || "Form Request Barang",
     });
 
     return NextResponse.json(

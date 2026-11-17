@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
         nama: true,
         email: true,
         role: true,
+        request_barang_access: true,
         created_at: true,
       },
     });

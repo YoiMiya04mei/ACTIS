@@ -35,6 +35,7 @@ async function resolveRememberedUser(request: NextRequest) {
       nama: true,
       email: true,
       role: true,
+      request_barang_access: true,
       password_hash: true,
     },
   });
@@ -178,7 +179,10 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({
       success: true,
       message: "Berhasil masuk kembali dengan Ingat Saya.",
-      user: sessionPayload,
+      user: {
+        ...sessionPayload,
+        request_barang_access: resolved.dbUser.request_barang_access,
+      },
       rememberMe: keepRememberMe,
     });
 

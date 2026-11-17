@@ -3,7 +3,13 @@ import net from "net";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-export type UserRole = "admin" | "noc_engineer" | "field_engineer" | "sales_corporate" | "warehouse_admin";
+export type UserRole =
+  | "admin"
+  | "noc_engineer"
+  | "field_engineer"
+  | "sales_corporate"
+  | "warehouse_admin"
+  | "request_barang";
 
 export const REMEMBER_COOKIE_NAME = "actis_remember";
 export const REMEMBER_TOKEN_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
@@ -36,12 +42,14 @@ export interface AuthenticatedUser {
   nama: string;
   email: string;
   role: string;
+  request_barang_access?: boolean | null;
 }
 
 export interface RequireAuthOptions {
   roles?: UserRole[];
   allowedRoles?: string[];
   requireAdmin?: boolean;
+  allowRequestBarangOnly?: boolean;
 }
 
 // In-memory token revocation list (e.g. on logout or password change)
@@ -325,7 +333,7 @@ export async function requireAuth(
   // Always verify against live database record to ensure role and account are current
   const dbUser = await prisma.user.findUnique({
     where: { id: session.id },
-    select: { id: true, nama: true, email: true, role: true },
+    select: { id: true, nama: true, email: true, role: true, request_barang_access: true },
   });
 
   if (!dbUser) {
@@ -338,6 +346,21 @@ export async function requireAuth(
           error: "Akun pengguna tidak ditemukan atau telah dinonaktifkan.",
         },
         { status: 401 }
+      ),
+    };
+  }
+
+  // Strictly confine request_barang-only accounts away from main ACTIS dashboard APIs
+  if (dbUser.role === "request_barang" && !options?.allowRequestBarangOnly) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        {
+          success: false,
+          code: "FORBIDDEN",
+          error: "Akses ditolak: Akun Request Barang hanya diizinkan mengakses portal /request-barang.",
+        },
+        { status: 403 }
       ),
     };
   }

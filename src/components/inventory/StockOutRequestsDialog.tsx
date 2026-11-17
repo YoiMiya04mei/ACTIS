@@ -220,10 +220,10 @@ export function StockOutRequestsDialog({
             </div>
             <div>
               <h2 id={titleId} className="text-base font-extrabold text-slate-900 dark:text-slate-100">
-                Daftar Request Barang (Form Publik)
+                Daftar Request Barang (Portal Teknisi)
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Request dari formulir tanpa login untuk di-ACC atau diproses keluar di menu Barang Keluar.
+                Request dari portal <code className="font-mono">/request-barang</code> untuk di-ACC atau diproses keluar di menu Barang Keluar.
               </p>
             </div>
           </div>
@@ -233,7 +233,7 @@ export function StockOutRequestsDialog({
               type="button"
               onClick={handleCopyPublicLink}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-              title="Salin link formulir request tanpa login"
+              title="Salin link portal request barang (/request-barang)"
             >
               {copiedLink ? (
                 <>
@@ -347,7 +347,7 @@ export function StockOutRequestsDialog({
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 Bagikan link <code className="font-mono font-bold">/request-barang</code> kepada
-                PIC/teknisi untuk pengajuan tanpa login.
+                PIC/teknisi yang telah diberi izin di menu Pengaturan User Akses.
               </p>
             </div>
           ) : (

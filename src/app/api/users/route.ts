@@ -3,6 +3,10 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth";
 import { requireAuth } from "@/lib/security";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
+import {
+  ALL_USER_ROLES,
+  resolveDefaultRequestBarangAccess,
+} from "@/lib/requestBarangAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +25,7 @@ export async function GET(request: NextRequest) {
         nama: true,
         email: true,
         role: true,
+        request_barang_access: true,
         created_at: true,
       },
     });
@@ -42,7 +47,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const { nama, email, password, role } = body;
+    const { nama, email, password, role, request_barang_access } = body;
 
     // Validate inputs
     if (!nama || !email || !password) {
@@ -85,8 +90,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const allowedRoles = ["admin", "noc_engineer", "field_engineer", "sales_corporate"];
-    const targetRole = allowedRoles.includes(role) ? role : "noc_engineer";
+    const targetRole = (ALL_USER_ROLES as readonly string[]).includes(role) ? role : "noc_engineer";
+    const resolvedReqAccess = resolveDefaultRequestBarangAccess(
+      targetRole,
+      request_barang_access
+    );
 
     const hashedPassword = hashPassword(String(password));
     const newUser = await prisma.user.create({
@@ -95,12 +103,14 @@ export async function POST(request: NextRequest) {
         email: cleanEmail,
         password_hash: hashedPassword,
         role: targetRole,
+        request_barang_access: resolvedReqAccess,
       },
       select: {
         id: true,
         nama: true,
         email: true,
         role: true,
+        request_barang_access: true,
         created_at: true,
       },
     });

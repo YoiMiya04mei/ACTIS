@@ -111,6 +111,11 @@ export async function POST(request: NextRequest) {
       role: user.role,
     };
 
+    const userResponsePayload = {
+      ...sessionPayload,
+      request_barang_access: user.request_barang_access,
+    };
+
     const sessionMaxAge = useRemember ? REMEMBER_TOKEN_MAX_AGE : STANDARD_SESSION_MAX_AGE;
     const token = createSessionToken(sessionPayload, sessionMaxAge, { rememberMe: useRemember });
 
@@ -129,7 +134,7 @@ export async function POST(request: NextRequest) {
     const response = NextResponse.json({
       success: true,
       message: "Login berhasil.",
-      user: sessionPayload,
+      user: userResponsePayload,
       rememberMe: useRemember,
     });
 

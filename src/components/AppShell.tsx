@@ -15,12 +15,13 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useCurrentUser();
+  const { currentUser, isAuthenticated, isLoading } = useCurrentUser();
   const [isOpenMobile, setIsOpenMobile] = useState(false);
   const [appVersion, setAppVersion] = useState("1.1.0");
+  const isRequestBarangOnlyUser = isAuthenticated && currentUser?.role === "request_barang";
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || isRequestBarangOnlyUser) return;
     let active = true;
     fetch("/api/system/updates", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
@@ -33,7 +34,7 @@ export function AppShell({ children }: AppShellProps) {
     return () => {
       active = false;
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, isRequestBarangOnlyUser]);
 
   const isPublicPage =
     pathname === "/login" ||
@@ -48,10 +49,15 @@ export function AppShell({ children }: AppShellProps) {
       } else {
         router.push("/login");
       }
+      return;
     }
-  }, [isLoading, isAuthenticated, isPublicPage, pathname, router]);
 
-  // If on login or standalone public form page, render bare without navigation chrome
+    if (!isLoading && isRequestBarangOnlyUser && !isPublicPage) {
+      router.replace("/request-barang");
+    }
+  }, [isLoading, isAuthenticated, isRequestBarangOnlyUser, isPublicPage, pathname, router]);
+
+  // If on login or standalone portal page, render bare without dashboard navigation chrome
   if (pathname === "/login") {
     return <main className="min-h-screen bg-slate-900">{children}</main>;
   }
@@ -59,8 +65,8 @@ export function AppShell({ children }: AppShellProps) {
     return <main className="min-h-screen bg-slate-50 dark:bg-slate-950">{children}</main>;
   }
 
-  // If verifying authentication state, show loading indicator
-  if (isLoading && !isAuthenticated) {
+  // If verifying authentication state or redirecting request_barang-only account, show loading indicator
+  if ((isLoading && !isAuthenticated) || isRequestBarangOnlyUser) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />

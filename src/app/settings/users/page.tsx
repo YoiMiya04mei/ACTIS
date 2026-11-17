@@ -27,12 +27,19 @@ import {
   Network,
   Radio,
   Clock,
+  ClipboardList,
+  ExternalLink,
 } from "lucide-react";
+import Link from "next/link";
 import {
   DEFAULT_SERVER_OPTIONS,
   DEFAULT_INFRASTRUCTURE_OPTIONS,
   DEFAULT_MEDIA_OPTIONS,
 } from "@/lib/ticketUtils";
+import {
+  hasRequestBarangAccess,
+  REQUEST_BARANG_LOGIN_SETTING_KEY,
+} from "@/lib/requestBarangAuth";
 
 export default function UserSettingsPage() {
   const { currentUser, users, addUser, updateUser, deleteUser, changePassword, fetchUsers } = useCurrentUser();
@@ -47,6 +54,7 @@ export default function UserSettingsPage() {
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState("noc_engineer");
+  const [newReqBarangAccess, setNewReqBarangAccess] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [addSuccess, setAddSuccess] = useState<string | null>(null);
@@ -57,10 +65,18 @@ export default function UserSettingsPage() {
   const [editNama, setEditNama] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editRole, setEditRole] = useState("noc_engineer");
+  const [editReqBarangAccess, setEditReqBarangAccess] = useState(false);
   const [editPassword, setEditPassword] = useState("");
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [editSuccess, setEditSuccess] = useState<string | null>(null);
+
+  // Request-Barang Portal Access Controls (Admin Only)
+  const [reqBarangLoginRequired, setReqBarangLoginRequired] = useState(true);
+  const [reqBarangPolicyLoading, setReqBarangPolicyLoading] = useState(false);
+  const [reqBarangPolicySuccess, setReqBarangPolicySuccess] = useState<string | null>(null);
+  const [reqBarangPolicyError, setReqBarangPolicyError] = useState<string | null>(null);
+  const [togglingReqUserId, setTogglingReqUserId] = useState<string | null>(null);
 
   // Delete User Confirmation State
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
@@ -389,12 +405,84 @@ export default function UserSettingsPage() {
           setIdleTimeoutMinutes(String(json.data.session_idle_timeout_minutes));
           localStorage.setItem("actis_session_idle_timeout", String(json.data.session_idle_timeout_minutes));
         }
+        if (json.success && json.data?.[REQUEST_BARANG_LOGIN_SETTING_KEY] !== undefined) {
+          setReqBarangLoginRequired(
+            String(json.data[REQUEST_BARANG_LOGIN_SETTING_KEY]).trim().toLowerCase() !== "false"
+          );
+        }
       } catch (err) {
         console.error("Failed to load session timeout setting", err);
       }
     };
     loadSessionSettings();
   }, []);
+
+  const handleSaveReqBarangPolicy = async (nextRequired: boolean) => {
+    setReqBarangPolicyLoading(true);
+    setReqBarangPolicyError(null);
+    setReqBarangPolicySuccess(null);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          key: REQUEST_BARANG_LOGIN_SETTING_KEY,
+          value: nextRequired ? "true" : "false",
+          actorRole: currentUser?.role,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setReqBarangPolicyError(data.error || "Gagal menyimpan kebijakan login /request-barang.");
+      } else {
+        setReqBarangLoginRequired(nextRequired);
+        setReqBarangPolicySuccess(
+          nextRequired
+            ? "Login Wajib untuk Web /request-barang AKTIF. Hanya akun berizin di bawah yang dapat masuk."
+            : "Login untuk Web /request-barang dinonaktifkan (mode formulir terbuka)."
+        );
+        setTimeout(() => setReqBarangPolicySuccess(null), 3500);
+      }
+    } catch (err: any) {
+      setReqBarangPolicyError(err?.message || "Gagal menyimpan pengaturan /request-barang.");
+    } finally {
+      setReqBarangPolicyLoading(false);
+    }
+  };
+
+  const handleToggleUserReqAccess = async (targetUser: any) => {
+    if (!isAdmin || togglingReqUserId) return;
+    const nextAllowed = !hasRequestBarangAccess(targetUser);
+    setTogglingReqUserId(targetUser.id);
+    try {
+      const res = await fetch(`/api/users/${targetUser.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_barang_access: nextAllowed }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        await fetchUsers();
+      } else {
+        setReqBarangPolicyError(json.error || "Gagal mengubah akses /request-barang pengguna.");
+      }
+    } catch (err: any) {
+      setReqBarangPolicyError(err?.message || "Gagal menghubungi server saat mengubah akses.");
+    } finally {
+      setTogglingReqUserId(null);
+    }
+  };
+
+  const handleOpenAddModal = (presetRole = "noc_engineer") => {
+    setAddError(null);
+    setAddSuccess(null);
+    setNewNama("");
+    setNewEmail("");
+    setNewPassword("");
+    setNewRole(presetRole);
+    setNewReqBarangAccess(presetRole === "admin" || presetRole === "request_barang");
+    setIsAddModalOpen(true);
+  };
 
   const handleSaveIdleTimeout = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -438,6 +526,10 @@ export default function UserSettingsPage() {
         return "Field Engineer";
       case "sales_corporate":
         return "Sales Corporate";
+      case "warehouse_admin":
+        return "Admin Gudang";
+      case "request_barang":
+        return "User Request Barang";
       default:
         return role;
     }
@@ -453,6 +545,10 @@ export default function UserSettingsPage() {
         return "bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800";
       case "sales_corporate":
         return "bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800";
+      case "warehouse_admin":
+        return "bg-indigo-100 dark:bg-indigo-950/70 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800";
+      case "request_barang":
+        return "bg-sky-100 dark:bg-sky-950/70 text-sky-800 dark:text-sky-300 border-sky-200 dark:border-sky-800";
       default:
         return "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700";
     }
@@ -468,8 +564,8 @@ export default function UserSettingsPage() {
       return;
     }
 
-    if (newPassword.length < 6) {
-      setAddError("Password baru minimal 6 karakter.");
+    if (newPassword.length < 8) {
+      setAddError("Password baru minimal 8 karakter.");
       return;
     }
 
@@ -479,6 +575,7 @@ export default function UserSettingsPage() {
       email: newEmail,
       password: newPassword,
       role: newRole,
+      request_barang_access: newReqBarangAccess,
     });
     setAddLoading(false);
 
@@ -490,6 +587,7 @@ export default function UserSettingsPage() {
       setNewEmail("");
       setNewPassword("");
       setNewRole("noc_engineer");
+      setNewReqBarangAccess(false);
       setTimeout(() => {
         setIsAddModalOpen(false);
         setAddSuccess(null);
@@ -502,6 +600,7 @@ export default function UserSettingsPage() {
     setEditNama(user.nama);
     setEditEmail(user.email);
     setEditRole(user.role);
+    setEditReqBarangAccess(hasRequestBarangAccess(user));
     setEditPassword("");
     setEditError(null);
     setEditSuccess(null);
@@ -518,8 +617,8 @@ export default function UserSettingsPage() {
       return;
     }
 
-    if (editPassword && editPassword.length < 6) {
-      setEditError("Password baru minimal 6 karakter (atau kosongkan jika tidak diubah).");
+    if (editPassword && editPassword.length < 8) {
+      setEditError("Password baru minimal 8 karakter (atau kosongkan jika tidak diubah).");
       return;
     }
 
@@ -529,6 +628,7 @@ export default function UserSettingsPage() {
       email: editEmail,
       role: editRole,
       password: editPassword || undefined,
+      request_barang_access: editReqBarangAccess,
     });
     setEditLoading(false);
 
@@ -619,18 +719,25 @@ export default function UserSettingsPage() {
         </div>
 
         {isAdmin && (
-          <button
-            type="button"
-            onClick={() => {
-              setAddError(null);
-              setAddSuccess(null);
-              setIsAddModalOpen(true);
-            }}
-            className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-md shadow-blue-500/25 transition cursor-pointer"
-          >
-            <UserPlus className="w-4 h-4 mr-2" />
-            + Tambah Pengguna Baru
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handleOpenAddModal("request_barang")}
+              className="inline-flex items-center justify-center px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 transition cursor-pointer"
+              title="Buat akun teknisi/lapangan khusus untuk login ke https://actis.jembatandata.com/request-barang"
+            >
+              <ClipboardList className="w-4 h-4 mr-1.5" />
+              + Akun /request-barang
+            </button>
+            <button
+              type="button"
+              onClick={() => handleOpenAddModal("noc_engineer")}
+              className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-md shadow-blue-500/25 transition cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              + Tambah Pengguna Baru
+            </button>
+          </div>
         )}
       </div>
 
@@ -720,6 +827,7 @@ export default function UserSettingsPage() {
                   <th className="px-5 py-3.5">Nama & Pengguna</th>
                   <th className="px-5 py-3.5">Email Kantor</th>
                   <th className="px-5 py-3.5">Level Akses (Role)</th>
+                  <th className="px-5 py-3.5">Login /request-barang</th>
                   <th className="px-5 py-3.5">Hak Akses Sistem</th>
                   <th className="px-5 py-3.5 text-right">Aksi</th>
                 </tr>
@@ -728,6 +836,9 @@ export default function UserSettingsPage() {
                 {filteredUsers.map((u) => {
                   const isSelf = u.id === currentUser?.id;
                   const isUserAdmin = u.role === "admin";
+                  const isReqBarangOnly = u.role === "request_barang";
+                  const canLoginReqBarang = hasRequestBarangAccess(u);
+                  const isToggling = togglingReqUserId === u.id;
                   return (
                     <tr key={u.id} className="hover:bg-slate-50/60 transition">
                       <td className="px-5 py-3.5">
@@ -761,10 +872,45 @@ export default function UserSettingsPage() {
                       </td>
 
                       <td className="px-5 py-3.5">
+                        <button
+                          type="button"
+                          disabled={isToggling}
+                          onClick={() => handleToggleUserReqAccess(u)}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition cursor-pointer disabled:opacity-50 ${
+                            canLoginReqBarang
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                              : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
+                          }`}
+                          title={
+                            canLoginReqBarang
+                              ? "Klik untuk menonaktifkan login akun ini di /request-barang"
+                              : "Klik untuk mengizinkan akun ini login di /request-barang"
+                          }
+                        >
+                          {canLoginReqBarang ? (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>{isToggling ? "..." : "Diizinkan"}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Lock className="w-3.5 h-3.5 text-slate-400" />
+                              <span>{isToggling ? "..." : "Ditolak"}</span>
+                            </>
+                          )}
+                        </button>
+                      </td>
+
+                      <td className="px-5 py-3.5">
                         {isUserAdmin ? (
                           <span className="inline-flex items-center text-[11px] font-bold text-emerald-700">
                             <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-500" />
                             Penuh (Tambah, Edit & Hapus)
+                          </span>
+                        ) : isReqBarangOnly ? (
+                          <span className="inline-flex items-center text-[11px] font-bold text-sky-700">
+                            <ClipboardList className="w-3.5 h-3.5 mr-1 text-sky-600" />
+                            Khusus Portal /request-barang
                           </span>
                         ) : (
                           <span className="inline-flex items-center text-[11px] font-semibold text-slate-400">
@@ -813,13 +959,94 @@ export default function UserSettingsPage() {
 
                 {filteredUsers.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-5 py-8 text-center text-slate-400">
+                    <td colSpan={6} className="px-5 py-8 text-center text-slate-400">
                       Tidak ada pengguna yang cocok dengan pencarian "{searchTerm}".
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Request-Barang Web Portal Login Control (Admin Only) */}
+          <div className="p-4 sm:p-5 border-t border-slate-100 bg-sky-50/40">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-slate-900 flex flex-wrap items-center gap-2">
+                  <ClipboardList className="w-4 h-4 text-sky-600" />
+                  <span>Kontrol Login Web Form Request Barang (/request-barang)</span>
+                  <span
+                    className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
+                      reqBarangLoginRequired
+                        ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                        : "bg-amber-100 text-amber-800 border-amber-200"
+                    }`}
+                  >
+                    {reqBarangLoginRequired ? "Wajib Login Aktif" : "Mode Tanpa Login"}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800">
+                    {users.filter((u) => hasRequestBarangAccess(u)).length} Akun Diizinkan
+                  </span>
+                </h4>
+                <p className="text-[11px] text-slate-600 leading-relaxed max-w-3xl">
+                  Atur akun yang diperbolehkan masuk ke portal{" "}
+                  <Link
+                    href="/request-barang"
+                    target="_blank"
+                    className="inline-flex items-center gap-0.5 font-bold text-sky-700 hover:underline"
+                  >
+                    <span>/request-barang</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </Link>{" "}
+                  melalui kolom <strong>Login /request-barang</strong> di tabel atas, atau buat akun khusus dengan role{" "}
+                  <strong>User Request Barang</strong> (otomatis hanya bisa mengakses portal pengajuan barang).
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleOpenAddModal("request_barang")}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition cursor-pointer"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>+ Tambah Akun Request Barang</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={reqBarangPolicyLoading}
+                  onClick={() => handleSaveReqBarangPolicy(!reqBarangLoginRequired)}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer disabled:opacity-50 ${
+                    reqBarangLoginRequired
+                      ? "bg-white border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                      : "bg-amber-600 border-amber-600 text-white hover:bg-amber-700"
+                  }`}
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>
+                    {reqBarangPolicyLoading
+                      ? "Menyimpan..."
+                      : reqBarangLoginRequired
+                        ? "Wajib Login: ON (Klik Matikan)"
+                        : "Wajib Login: OFF (Klik Aktifkan)"}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {reqBarangPolicyError && (
+              <div className="mt-3 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{reqBarangPolicyError}</span>
+              </div>
+            )}
+
+            {reqBarangPolicySuccess && (
+              <div className="mt-3 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center space-x-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{reqBarangPolicySuccess}</span>
+              </div>
+            )}
           </div>
 
           {/* Server Management Section (Admin Only) */}
@@ -1326,7 +1553,7 @@ export default function UserSettingsPage() {
                   type="text"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Minimal 6 karakter (cth: actis123)"
+                  placeholder="Minimal 8 karakter (cth: actis1234)"
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
                   required
                 />
@@ -1338,20 +1565,45 @@ export default function UserSettingsPage() {
                 </label>
                 <select
                   value={newRole}
-                  onChange={(e) => setNewRole(e.target.value)}
+                  onChange={(e) => {
+                    const roleVal = e.target.value;
+                    setNewRole(roleVal);
+                    if (roleVal === "request_barang" || roleVal === "admin") {
+                      setNewReqBarangAccess(true);
+                    }
+                  }}
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
                 >
-                  <option value="noc_engineer">NOC Engineer (Hanya Ganti Password)</option>
+                  <option value="request_barang">User Request Barang (Khusus Web /request-barang)</option>
                   <option value="field_engineer">Field Engineer (Hanya Ganti Password)</option>
+                  <option value="noc_engineer">NOC Engineer (Hanya Ganti Password)</option>
                   <option value="sales_corporate">Sales Corporate (Hanya Ganti Password)</option>
+                  <option value="warehouse_admin">Admin Gudang (Manajemen Inventory)</option>
                   <option value="admin">Administrator (Bisa Tambah, Edit & Hapus User)</option>
                 </select>
                 <p className="text-[10px] text-slate-400 mt-1">
                   {newRole === "admin"
                     ? "Akun Administrator memiliki hak penuh untuk menambah, mengedit & menghapus user."
-                    : "Akun non-admin hanya memiliki hak untuk mengganti password sendiri."}
+                    : newRole === "request_barang"
+                      ? "Akun ini khusus untuk login dan mengirim pengajuan barang di https://actis.jembatandata.com/request-barang (tanpa akses dashboard admin/NOC)."
+                      : "Akun staf non-admin tidak dapat mengelola pengguna lain."}
                 </p>
               </div>
+
+              <label className="flex items-start gap-2.5 p-3 rounded-xl bg-sky-50/70 border border-sky-200 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={newReqBarangAccess}
+                  onChange={(e) => setNewReqBarangAccess(e.target.checked)}
+                  className="mt-0.5 rounded border-slate-300 text-sky-600"
+                />
+                <span className="text-xs text-slate-700 leading-snug">
+                  <strong className="block text-slate-900">Izinkan Login ke Web /request-barang</strong>
+                  <span className="text-[11px] text-slate-500">
+                    Jika dicentang, akun ini dapat login pada portal pengajuan barang keluar.
+                  </span>
+                </span>
+              </label>
 
               <div className="pt-3 flex items-center justify-end space-x-2 border-t border-slate-100">
                 <button
@@ -1457,20 +1709,45 @@ export default function UserSettingsPage() {
                 </label>
                 <select
                   value={editRole}
-                  onChange={(e) => setEditRole(e.target.value)}
+                  onChange={(e) => {
+                    const roleVal = e.target.value;
+                    setEditRole(roleVal);
+                    if (roleVal === "request_barang") {
+                      setEditReqBarangAccess(true);
+                    }
+                  }}
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
                 >
-                  <option value="noc_engineer">NOC Engineer (Hanya Ganti Password)</option>
+                  <option value="request_barang">User Request Barang (Khusus Web /request-barang)</option>
                   <option value="field_engineer">Field Engineer (Hanya Ganti Password)</option>
+                  <option value="noc_engineer">NOC Engineer (Hanya Ganti Password)</option>
                   <option value="sales_corporate">Sales Corporate (Hanya Ganti Password)</option>
+                  <option value="warehouse_admin">Admin Gudang (Manajemen Inventory)</option>
                   <option value="admin">Administrator (Bisa Tambah, Edit & Hapus User)</option>
                 </select>
                 <p className="text-[10px] text-slate-400 mt-1">
                   {editRole === "admin"
                     ? "Akun Administrator memiliki hak penuh untuk menambah, mengedit & menghapus user."
-                    : "Akun non-admin hanya memiliki hak untuk mengganti password sendiri."}
+                    : editRole === "request_barang"
+                      ? "Akun ini khusus untuk login dan mengajukan barang di Web /request-barang."
+                      : "Akun staf non-admin tidak dapat mengelola pengguna lain."}
                 </p>
               </div>
+
+              <label className="flex items-start gap-2.5 p-3 rounded-xl bg-sky-50/70 border border-sky-200 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editReqBarangAccess}
+                  onChange={(e) => setEditReqBarangAccess(e.target.checked)}
+                  className="mt-0.5 rounded border-slate-300 text-sky-600"
+                />
+                <span className="text-xs text-slate-700 leading-snug">
+                  <strong className="block text-slate-900">Izinkan Login ke Web /request-barang</strong>
+                  <span className="text-[11px] text-slate-500">
+                    Mengatur apakah akun ini boleh login di https://actis.jembatandata.com/request-barang.
+                  </span>
+                </span>
+              </label>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -1484,7 +1761,7 @@ export default function UserSettingsPage() {
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
                 />
                 <p className="text-[10px] text-slate-400 mt-1">
-                  Isi minimal 6 karakter jika ingin mereset password akun ini. Biarkan kosong untuk tetap memakai password saat ini.
+                  Isi minimal 8 karakter jika ingin mereset password akun ini. Biarkan kosong untuk tetap memakai password saat ini.
                 </p>
               </div>
 

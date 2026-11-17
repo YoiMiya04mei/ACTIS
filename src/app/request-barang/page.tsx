@@ -1,15 +1,25 @@
 "use client";
 
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
+import Link from "next/link";
 import { SearchableItemSelect } from "@/components/inventory/SearchableItemSelect";
 import {
   AlertTriangle,
+  ArrowLeft,
   Boxes,
   CheckCircle2,
   ClipboardList,
+  Eye,
+  EyeOff,
+  Lock,
+  LogIn,
+  LogOut,
+  Mail,
   PlusCircle,
   RefreshCw,
   Send,
+  ShieldAlert,
+  ShieldCheck,
   Trash2,
 } from "lucide-react";
 import {
@@ -19,6 +29,22 @@ import {
   type WorkTypeOption,
   formatWorkTypeLabel,
 } from "@/lib/inventoryRequest";
+
+interface PortalAuthUser {
+  id: string;
+  nama: string;
+  email: string;
+  role: string;
+  request_barang_access?: boolean | null;
+}
+
+interface PortalAuthState {
+  loading: boolean;
+  loginRequired: boolean;
+  authenticated: boolean;
+  hasAccess: boolean;
+  user: PortalAuthUser | null;
+}
 
 interface PublicCatalogItem {
   id: string;
@@ -74,6 +100,21 @@ export default function PublicRequestBarangPage() {
   const requestDateRef = useRef<HTMLInputElement | null>(null);
   const errorBannerRef = useRef<HTMLDivElement | null>(null);
 
+  const [portalAuth, setPortalAuth] = useState<PortalAuthState>({
+    loading: true,
+    loginRequired: true,
+    authenticated: false,
+    hasAccess: false,
+    user: null,
+  });
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginRememberMe, setLoginRememberMe] = useState(false);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [loginSubmitting, setLoginSubmitting] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loggingOut, setLoggingOut] = useState(false);
+
   const [catalog, setCatalog] = useState<PublicCatalogItem[]>([]);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -102,6 +143,15 @@ export default function PublicRequestBarangPage() {
     try {
       const res = await fetch("/api/public/inventory-requests", { cache: "no-store" });
       const json = await res.json();
+      if (res.status === 401 || res.status === 403) {
+        setPortalAuth((prev) => ({
+          ...prev,
+          loading: false,
+          authenticated: res.status === 403 ? true : false,
+          hasAccess: false,
+        }));
+        return;
+      }
       if (!res.ok || !json.success) {
         throw new Error(json.error || "Gagal memuat daftar barang.");
       }
@@ -113,9 +163,93 @@ export default function PublicRequestBarangPage() {
     }
   }, []);
 
-  useEffect(() => {
-    loadCatalog();
+  const checkPortalAuth = useCallback(async () => {
+    setPortalAuth((prev) => ({ ...prev, loading: true }));
+    try {
+      const res = await fetch("/api/request-barang/auth", { cache: "no-store" });
+      const json = await res.json();
+      const nextState: PortalAuthState = {
+        loading: false,
+        loginRequired: json?.loginRequired !== false,
+        authenticated: Boolean(json?.authenticated),
+        hasAccess: Boolean(json?.hasAccess),
+        user: json?.user || null,
+      };
+      setPortalAuth(nextState);
+
+      if (!nextState.loginRequired || (nextState.authenticated && nextState.hasAccess)) {
+        if (nextState.user?.nama) {
+          setPicName((prev) => prev || nextState.user?.nama || "");
+        }
+        loadCatalog();
+      } else {
+        setLoadingCatalog(false);
+      }
+    } catch {
+      setPortalAuth({
+        loading: false,
+        loginRequired: true,
+        authenticated: false,
+        hasAccess: false,
+        user: null,
+      });
+      setLoadingCatalog(false);
+    }
   }, [loadCatalog]);
+
+  useEffect(() => {
+    checkPortalAuth();
+  }, [checkPortalAuth]);
+
+  const handlePortalLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (loginSubmitting) return;
+    setLoginError(null);
+    setLoginSubmitting(true);
+    try {
+      const res = await fetch("/api/request-barang/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: loginEmail.trim(),
+          password: loginPassword,
+          rememberMe: loginRememberMe,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success) {
+        setLoginError(json.error || "Login gagal. Periksa kembali email dan password Anda.");
+        return;
+      }
+      setLoginPassword("");
+      await checkPortalAuth();
+    } catch (err: any) {
+      setLoginError(err?.message || "Terjadi kesalahan saat memproses login.");
+    } finally {
+      setLoginSubmitting(false);
+    }
+  };
+
+  const handlePortalLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await fetch("/api/request-barang/auth", { method: "DELETE" });
+    } catch {}
+    setCatalog([]);
+    setReceipt(null);
+    setPicName("");
+    setLoginPassword("");
+    setLoginError(null);
+    setPortalAuth((prev) => ({
+      ...prev,
+      loading: false,
+      authenticated: false,
+      hasAccess: false,
+      user: null,
+    }));
+    setLoggingOut(false);
+  };
 
   const handleSelectWorkType = (option: WorkTypeOption) => {
     setFieldErrors((prev) => ({ ...prev, work_types: "" }));
@@ -149,7 +283,7 @@ export default function PublicRequestBarangPage() {
 
   const resetForNewRequest = () => {
     setReceipt(null);
-    setPicName("");
+    setPicName(portalAuth.user?.nama || "");
     setPicPhone("");
     setRequestDate(getTodayDateString());
     setSelectedWorkType("");
@@ -221,6 +355,10 @@ export default function PublicRequestBarangPage() {
       });
 
       const json = await res.json();
+      if (res.status === 401 || res.status === 403) {
+        await checkPortalAuth();
+        throw new Error(json.error || "Sesi Anda berakhir atau akses dicabut.");
+      }
       if (!res.ok || !json.success) {
         if (json.field) {
           setFieldErrors((prev) => ({ ...prev, [json.field]: json.error }));
@@ -243,6 +381,10 @@ export default function PublicRequestBarangPage() {
     }
   };
 
+  const canRenderForm =
+    !portalAuth.loading &&
+    (!portalAuth.loginRequired || (portalAuth.authenticated && portalAuth.hasAccess));
+
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -250,7 +392,9 @@ export default function PublicRequestBarangPage() {
         <header className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 text-white text-xs font-bold tracking-wider uppercase">
             <ClipboardList className="w-3.5 h-3.5 text-sky-300" />
-            Formulir Publik (Tanpa Login)
+            {portalAuth.loginRequired
+              ? "Portal Terautentikasi • Request Barang"
+              : "Formulir Request Barang (Tanpa Login)"}
           </div>
           <h1
             id={formHeadingId}
@@ -265,7 +409,199 @@ export default function PublicRequestBarangPage() {
           </p>
         </header>
 
-        {receipt ? (
+        {/* Active Session Bar */}
+        {canRenderForm && portalAuth.authenticated && portalAuth.user && (
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-4 py-3 shadow-xs flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-blue-600 text-white font-bold text-sm flex items-center justify-center shrink-0">
+                {portalAuth.user.nama.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                    {portalAuth.user.nama}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                    <ShieldCheck className="w-3 h-3" />
+                    Akses Terverifikasi
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                  {portalAuth.user.email}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {portalAuth.user.role !== "request_barang" && (
+                <Link
+                  href="/queue"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Dashboard ACTIS</span>
+                </Link>
+              )}
+              <button
+                type="button"
+                onClick={handlePortalLogout}
+                disabled={loggingOut}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs font-bold text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-950/70 transition cursor-pointer disabled:opacity-50"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>{loggingOut ? "Keluar..." : "Keluar"}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {portalAuth.loading ? (
+          <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center shadow-sm">
+            <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+              Memeriksa status autentikasi Portal Request Barang...
+            </p>
+          </section>
+        ) : portalAuth.loginRequired && portalAuth.authenticated && !portalAuth.hasAccess ? (
+          <section className="max-w-lg mx-auto bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-2xl p-6 sm:p-8 shadow-sm text-center space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 mx-auto flex items-center justify-center">
+              <ShieldAlert className="w-6 h-6" />
+            </div>
+            <div className="space-y-1.5">
+              <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">
+                Akses Portal Ditolak
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                Akun <strong>{portalAuth.user?.nama}</strong> ({portalAuth.user?.email}) saat ini belum memiliki izin untuk mengakses Web Form Request Barang (<code>/request-barang</code>).
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Hubungi Administrator untuk mengaktifkan akses akun ini di menu{" "}
+                <strong>Pengaturan User Akses</strong>.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
+              {portalAuth.user?.role !== "request_barang" && (
+                <Link
+                  href="/queue"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Kembali ke Dashboard</span>
+                </Link>
+              )}
+              <button
+                type="button"
+                onClick={handlePortalLogout}
+                disabled={loggingOut}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm transition cursor-pointer disabled:opacity-50"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>{loggingOut ? "Memproses..." : "Keluar & Ganti Akun"}</span>
+              </button>
+            </div>
+          </section>
+        ) : !canRenderForm ? (
+          <section className="max-w-md mx-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-md space-y-5">
+            <div className="text-center space-y-1.5">
+              <div className="w-12 h-12 rounded-2xl bg-[#0F2B59] text-white mx-auto flex items-center justify-center shadow-sm">
+                <Lock className="w-5 h-5" />
+              </div>
+              <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">
+                Login Web Request Barang
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Masuk dengan akun yang telah diizinkan pada menu <strong>Pengaturan User Akses</strong>.
+              </p>
+            </div>
+
+            {loginError && (
+              <div
+                role="alert"
+                className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs flex items-start gap-2"
+              >
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{loginError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handlePortalLogin} className="space-y-4">
+              <div>
+                <label
+                  htmlFor="req-login-email"
+                  className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5"
+                >
+                  Email Pengguna
+                </label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    id="req-login-email"
+                    type="email"
+                    autoComplete="username"
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    placeholder="teknisi@jembatandata.com"
+                    className="w-full min-h-[44px] pl-10 pr-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white dark:focus:bg-slate-900"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="req-login-password"
+                  className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-1.5"
+                >
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    id="req-login-password"
+                    type={showLoginPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="Masukkan password"
+                    className="w-full min-h-[44px] pl-10 pr-11 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white dark:focus:bg-slate-900"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowLoginPassword((s) => !s)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    aria-label={showLoginPassword ? "Sembunyikan password" : "Lihat password"}
+                  >
+                    {showLoginPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={loginRememberMe}
+                  onChange={(e) => setLoginRememberMe(e.target.checked)}
+                  className="rounded border-slate-300 text-blue-600"
+                />
+                <span>Ingat saya di perangkat ini (30 hari)</span>
+              </label>
+
+              <button
+                type="submit"
+                disabled={loginSubmitting}
+                className="w-full min-h-[46px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#0F2B59] hover:bg-blue-900 disabled:opacity-60 text-white text-sm font-bold shadow-md transition cursor-pointer"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>{loginSubmitting ? "Memverifikasi..." : "Masuk ke Form Request Barang"}</span>
+              </button>
+            </form>
+          </section>
+        ) : receipt ? (
           <section
             role="status"
             aria-live="polite"

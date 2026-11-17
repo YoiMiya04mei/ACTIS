@@ -6,7 +6,15 @@ export interface AppUser {
   id: string;
   nama: string;
   email: string;
-  role: "admin" | "noc_engineer" | "field_engineer" | "sales_corporate" | string;
+  role:
+    | "admin"
+    | "noc_engineer"
+    | "field_engineer"
+    | "sales_corporate"
+    | "warehouse_admin"
+    | "request_barang"
+    | string;
+  request_barang_access?: boolean | null;
   created_at?: string;
 }
 
@@ -56,11 +64,26 @@ interface UserContextType {
   ) => Promise<{ success: boolean; error?: string; rememberMe?: boolean; user?: AppUser }>;
   loginWithRememberMe: (options?: {
     rememberMe?: boolean;
-  }) => Promise<{ success: boolean; error?: string; rememberMe?: boolean }>;
+  }) => Promise<{ success: boolean; error?: string; rememberMe?: boolean; user?: AppUser }>;
   logout: (options?: { reason?: "timeout" | "manual" }) => Promise<void>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string; message?: string }>;
-  addUser: (data: { nama: string; email: string; password: string; role: string }) => Promise<{ success: boolean; error?: string; data?: any }>;
-  updateUser: (id: string, data: { nama: string; email: string; role: string; password?: string }) => Promise<{ success: boolean; error?: string; data?: any; message?: string }>;
+  addUser: (data: {
+    nama: string;
+    email: string;
+    password: string;
+    role: string;
+    request_barang_access?: boolean;
+  }) => Promise<{ success: boolean; error?: string; data?: any }>;
+  updateUser: (
+    id: string,
+    data: {
+      nama: string;
+      email: string;
+      role: string;
+      password?: string;
+      request_barang_access?: boolean;
+    }
+  ) => Promise<{ success: boolean; error?: string; data?: any; message?: string }>;
   deleteUser: (id: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   fetchUsers: () => Promise<void>;
 }
@@ -103,7 +126,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             setCurrentUserState(meJson.user);
             setIsAuthenticated(true);
             localStorage.setItem("actis_active_user", JSON.stringify(meJson.user));
-            fetchUsers();
+            if (meJson.user.role !== "request_barang") {
+              fetchUsers();
+            }
             return;
           }
         }
@@ -183,7 +208,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       } catch {}
 
       handleSetUser(data.user);
-      await fetchUsers();
+      if (data.user?.role !== "request_barang") {
+        await fetchUsers();
+      }
 
       return {
         success: true,
@@ -228,9 +255,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
       setCurrentUserState(data.user);
       setIsAuthenticated(true);
-      await fetchUsers();
+      if (data.user?.role !== "request_barang") {
+        await fetchUsers();
+      }
 
-      return { success: true, rememberMe: keepRememberMe };
+      return { success: true, rememberMe: keepRememberMe, user: data.user };
     } catch (err: any) {
       return { success: false, error: err.message || "Terjadi kesalahan koneksi server." };
     }
@@ -274,7 +303,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const addUser = async (userData: { nama: string; email: string; password: string; role: string }) => {
+  const addUser = async (userData: {
+    nama: string;
+    email: string;
+    password: string;
+    role: string;
+    request_barang_access?: boolean;
+  }) => {
     try {
       const res = await fetch("/api/users", {
         method: "POST",
@@ -298,7 +333,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const updateUser = async (
     id: string,
-    userData: { nama: string; email: string; role: string; password?: string }
+    userData: {
+      nama: string;
+      email: string;
+      role: string;
+      password?: string;
+      request_barang_access?: boolean;
+    }
   ) => {
     try {
       const res = await fetch(`/api/users/${id}`, {
@@ -322,6 +363,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           nama: data.data.nama,
           email: data.data.email,
           role: data.data.role,
+          request_barang_access: data.data.request_barang_access,
         };
         setCurrentUserState(updated);
         localStorage.setItem("actis_active_user", JSON.stringify(updated));

@@ -32,6 +32,7 @@ const ROLE_LABELS: Record<string, string> = {
   field_engineer: "Field Engineer",
   sales_corporate: "Sales Corporate",
   warehouse_admin: "Admin Gudang",
+  request_barang: "User Request Barang",
 };
 
 const SAVED_PASSWORD_SENTINEL = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
@@ -138,10 +139,14 @@ export default function LoginPage() {
       setError(result.error || "Sesi Ingat Saya tidak berlaku lagi. Silakan masuk manual.");
       emailInputRef.current?.focus();
     } else {
+      const targetPath =
+        (result.user?.role || rememberedUser?.role) === "request_barang"
+          ? "/request-barang"
+          : "/queue";
       setStatusNote("Berhasil masuk kembali melalui Ingat Saya.");
       setSuccess(true);
       setTimeout(() => {
-        router.push("/queue");
+        router.push(targetPath);
       }, 450);
     }
   };
@@ -203,10 +208,18 @@ export default function LoginPage() {
         setUsingSavedCredential(false);
       }
 
-      setStatusNote("Login berhasil! Mengalihkan ke dashboard antrean.");
+      const targetPath =
+        (result.user?.role || rememberedUser?.role) === "request_barang"
+          ? "/request-barang"
+          : "/queue";
+      setStatusNote(
+        targetPath === "/request-barang"
+          ? "Login berhasil! Mengalihkan ke portal Request Barang."
+          : "Login berhasil! Mengalihkan ke dashboard antrean."
+      );
       setSuccess(true);
       setTimeout(() => {
-        router.push("/queue");
+        router.push(targetPath);
       }, 450);
       return;
     }
@@ -254,10 +267,15 @@ export default function LoginPage() {
         }
       }
 
-      setStatusNote("Login berhasil! Mengalihkan ke dashboard antrean.");
+      const targetPath = result.user?.role === "request_barang" ? "/request-barang" : "/queue";
+      setStatusNote(
+        targetPath === "/request-barang"
+          ? "Login berhasil! Mengalihkan ke portal Request Barang."
+          : "Login berhasil! Mengalihkan ke dashboard antrean."
+      );
       setSuccess(true);
       setTimeout(() => {
-        router.push("/queue");
+        router.push(targetPath);
       }, 500);
     }
   };
