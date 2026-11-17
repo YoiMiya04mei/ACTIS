@@ -4,6 +4,17 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.28",
+      "date": "2026-11-17T15:06:25+07:00",
+      "title": "Form Barang PDF: Pagination Mengalir Otomatis & Kop Surat Seragam",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Menghapus judul FORM PENGEMBALIAN BARANG dan menyesuaikan isi form surat agar otomatis mengisi ruang kosong halaman sebelumnya serta membuka halaman lanjutan berkop surat identik ketika penuh"
+        }
+      ]
+    },
+    {
       "version": "1.2.27",
       "date": "2026-11-17T14:52:57+07:00",
       "title": "Form Barang PDF: Sederhanakan Panel Pemilih Alur Otomatis",

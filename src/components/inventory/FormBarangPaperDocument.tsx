@@ -104,7 +104,6 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
     doc.requestInfo.workTypes.includes(wt);
 
   const renderPage = (slice: FormBarangPageSlice, idx: number, totalVisible: number) => {
-    const isReturnPage = slice.kind === "FORM_PENGEMBALIAN";
     const isLastRendered = idx === totalVisible - 1;
 
     return (
@@ -131,7 +130,7 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
           breakAfter: isLastRendered ? "auto" : "page",
         }}
       >
-        {/* Top-Right Decorative Wave Ornament (exact from Word Group 5 / Group 17) */}
+        {/* Top-Right Decorative Wave Ornament (identical Kop Surat across every page) */}
         <img
           src={FORM_BARANG_WAVE_DATA_URI}
           alt=""
@@ -140,8 +139,8 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
             position: "absolute",
             top: 0,
             right: 0,
-            width: isReturnPage ? "283px" : "240px",
-            height: isReturnPage ? "133px" : "102px",
+            width: "240px",
+            height: "102px",
             objectFit: "fill",
             pointerEvents: "none",
             userSelect: "none",
@@ -254,30 +253,32 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
           />
         </div>
 
-        {/* Form Title (FORM BARANG / FORM PENGEMBALIAN BARANG) */}
-        <div
-          style={{
-            position: "absolute",
-            top: "121px",
-            left: "60.5px",
-            width: "673px",
-            textAlign: "center",
-            fontSize: "11.5pt",
-            fontWeight: 700,
-            color: NAVY_HEADER,
-            letterSpacing: "0.01em",
-            zIndex: 3,
-          }}
-        >
-          {slice.title}
-        </div>
+        {/* Form Title (only on Page 1: FORM BARANG; continuation pages start directly under Kop Surat) */}
+        {slice.title && (
+          <div
+            style={{
+              position: "absolute",
+              top: "121px",
+              left: "60.5px",
+              width: "673px",
+              textAlign: "center",
+              fontSize: "11.5pt",
+              fontWeight: 700,
+              color: NAVY_HEADER,
+              letterSpacing: "0.01em",
+              zIndex: 3,
+            }}
+          >
+            {slice.title}
+          </div>
+        )}
 
-        {/* Main Content Body (strictly bounded between Title bottom and Footer top) */}
+        {/* Main Content Body (strictly bounded between Title/Kop Surat and Footer top) */}
         <div
           style={{
             position: "relative",
             zIndex: 2,
-            paddingTop: "152px",
+            paddingTop: slice.title ? "152px" : "118px",
             paddingLeft: "60.5px",
             paddingRight: "60.5px",
             paddingBottom: "78px",
@@ -445,7 +446,7 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
 
           {/* ================= A. BARANG KELUAR ================= */}
           {slice.keluarHeaderVisible && (
-            <div style={{ marginBottom: slice.terpakaiHeaderVisible ? "12px" : "8px" }}>
+            <div style={{ marginBottom: "12px" }}>
               <div
                 style={{
                   width: "673px",
@@ -586,7 +587,7 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
 
           {/* ================= B. BARANG TERPAKAI ================= */}
           {slice.terpakaiHeaderVisible && (
-            <div style={{ marginBottom: "8px" }}>
+            <div style={{ marginBottom: "12px" }}>
               <div
                 style={{
                   width: "673px",
@@ -927,7 +928,7 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
           {/* ================= B. PERSETUJUAN DAN SERAH TERIMA ================= */}
           {slice.includeApprovalAndNotes && (
             <>
-              <div style={{ marginBottom: "14px" }}>
+              <div style={{ marginBottom: "10px" }}>
                 <table
                   style={{
                     width: "673px",
@@ -1051,7 +1052,7 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
               </div>
 
               {/* ================= CATATAN ================= */}
-              <div style={{ marginTop: "8px", paddingLeft: "2px" }}>
+              <div style={{ marginTop: "6px", paddingLeft: "2px" }}>
                 <div
                   style={{
                     fontSize: "8.5pt",

@@ -116,7 +116,7 @@ export interface FormBarangSourceListItem {
 
 export interface FormBarangPageSlice {
   pageNumber: number;
-  kind: "FORM_BARANG" | "FORM_PENGEMBALIAN";
+  kind: "FORM_BARANG";
   title: string;
   includeRequestInfo: boolean;
   keluarHeaderVisible: boolean;
@@ -522,56 +522,152 @@ export function buildFormBarangDataFromRequest(
   };
 }
 
-function estimateKeluarRowUnits(row: FormBarangKeluarRow): number {
-  const nameLines = Math.max(1, Math.ceil(row.itemName.length / 26));
-  const snLines = Math.max(1, Math.ceil((row.snBarang || "").length / 32));
-  const maxLines = Math.max(nameLines, snLines);
-  return maxLines > 1 ? 1 + (maxLines - 1) * 0.72 : 1;
+// A4 paper dimensions (794x1123px) safe printable vertical budgets in pixels:
+// Page 1 starts content below Kop Surat + "FORM BARANG" title (paddingTop: 152px)
+// Page >= 2 starts content directly below the identical Kop Surat (paddingTop: 118px)
+// Footer divider starts around y = 1045px -> keep safe bottom margin <= 1017px (p1: 865px, p2+: 895px)
+const PAGE_1_CONTENT_BUDGET_PX = 865;
+const PAGE_N_CONTENT_BUDGET_PX = 895;
+
+const SECTION_A_HEADER_HEIGHT_PX = 84;
+const SECTION_B_HEADER_HEIGHT_PX = 96;
+const SECTION_C_HEADER_HEIGHT_PX = 98;
+const APPROVAL_AND_NOTES_HEIGHT_PX = 280;
+
+const EMPTY_PLACEHOLDER_ROW_HEIGHT_PX = 21;
+
+function countWrappedLines(text: string | null | undefined, charsPerLine: number): number {
+  const clean = (text || "").trim();
+  if (!clean) return 1;
+  return Math.max(1, Math.ceil(clean.length / Math.max(1, charsPerLine)));
 }
 
-function estimateTerpakaiRowUnits(row: FormBarangTerpakaiRow): number {
-  const nameLines = Math.max(1, Math.ceil(row.itemName.length / 19));
-  const snLines = Math.max(1, Math.ceil((row.snBarang || "").length / 21));
-  const clientLines = Math.max(1, Math.ceil(row.clientName.length / 15));
-  const locLines = Math.max(1, Math.ceil(row.location.length / 13));
-  const maxLines = Math.max(nameLines, snLines, clientLines, locLines);
-  return maxLines > 1 ? 1 + (maxLines - 1) * 0.72 : 1;
+function estimateWrappedRowHeightPx(lineCount: number): number {
+  const safeLines = Math.max(1, lineCount);
+  return safeLines === 1 ? 22 : 22 + (safeLines - 1) * 15;
 }
 
-function estimateKembaliRowUnits(row: FormBarangKembaliRow): number {
-  const nameLines = Math.max(1, Math.ceil(row.itemName.length / 18));
-  const snLines = Math.max(1, Math.ceil((row.snBarang || "").length / 20));
-  const notesLines = Math.max(1, Math.ceil(row.notes.length / 15));
-  const maxLines = Math.max(nameLines, snLines, notesLines);
-  return maxLines > 1 ? 1 + (maxLines - 1) * 0.72 : 1;
+function estimateKeluarRowHeightPx(row: FormBarangKeluarRow | null): number {
+  if (!row) return EMPTY_PLACEHOLDER_ROW_HEIGHT_PX;
+  const maxLines = Math.max(
+    countWrappedLines(row.itemName, 23),
+    countWrappedLines(row.snBarang, 28),
+    countWrappedLines(row.quantity, 12)
+  );
+  return estimateWrappedRowHeightPx(maxLines);
 }
 
-function chunkByRowUnits<T>(
-  items: T[],
-  estimateUnits: (item: T) => number,
-  maxUnitsFirst: number,
-  maxUnitsNext: number
-): T[][] {
-  if (items.length === 0) return [];
-  const chunks: T[][] = [];
-  let current: T[] = [];
-  let used = 0;
-  let budget = maxUnitsFirst;
+function estimateTerpakaiRowHeightPx(row: FormBarangTerpakaiRow | null): number {
+  if (!row) return EMPTY_PLACEHOLDER_ROW_HEIGHT_PX;
+  const maxLines = Math.max(
+    countWrappedLines(row.itemName, 16),
+    countWrappedLines(row.snBarang, 18),
+    countWrappedLines(row.quantityUsed, 8),
+    countWrappedLines(row.clientName, 12),
+    countWrappedLines(row.location, 10)
+  );
+  return estimateWrappedRowHeightPx(maxLines);
+}
 
-  for (const item of items) {
-    const cost = estimateUnits(item);
-    if (current.length > 0 && used + cost > budget) {
-      chunks.push(current);
-      current = [item];
-      used = cost;
-      budget = maxUnitsNext;
-    } else {
-      current.push(item);
-      used += cost;
+function estimateKembaliRowHeightPx(row: FormBarangKembaliRow | null): number {
+  if (!row) return EMPTY_PLACEHOLDER_ROW_HEIGHT_PX;
+  const maxLines = Math.max(
+    countWrappedLines(row.itemName, 15),
+    countWrappedLines(row.snBarang, 17),
+    countWrappedLines(row.quantityReturned, 8),
+    countWrappedLines(row.condition, 10),
+    countWrappedLines(row.notes, 12)
+  );
+  return estimateWrappedRowHeightPx(maxLines);
+}
+
+function estimateRequestInfoHeightPx(info: FormBarangRequestInfo): number {
+  const extraLines = Math.max(
+    0,
+    countWrappedLines(info.namaTim, 32) - 1,
+    countWrappedLines(info.lokasiPengembalian, 26) - 1
+  );
+  const hasOther = info.workTypes.includes("Lainnya") && Boolean(info.workTypeOther?.trim());
+  return 102 + extraLines * 15 + (hasOther ? 12 : 0);
+}
+
+function createEmptyPageSlice(pageNumber: number): FormBarangPageSlice {
+  return {
+    pageNumber,
+    kind: "FORM_BARANG",
+    title: pageNumber === 1 ? "FORM BARANG" : "",
+    includeRequestInfo: pageNumber === 1,
+    keluarHeaderVisible: false,
+    keluarContinuation: false,
+    keluarRows: [],
+    terpakaiHeaderVisible: false,
+    terpakaiContinuation: false,
+    terpakaiRows: [],
+    kembaliHeaderVisible: false,
+    kembaliContinuation: false,
+    kembaliRows: [],
+    includeApprovalAndNotes: false,
+  };
+}
+
+function appendSectionFlowToPages<TRow>(
+  pages: FormBarangPageSlice[],
+  remainingPxRef: { current: number },
+  rows: Array<TRow | null>,
+  headerHeightPx: number,
+  estimateRowHeightPx: (row: TRow | null) => number,
+  attachChunk: (
+    page: FormBarangPageSlice,
+    chunk: Array<TRow | null>,
+    isContinuation: boolean
+  ) => void
+): void {
+  if (rows.length === 0) return;
+
+  let cursor = 0;
+  let isContinuation = false;
+
+  while (cursor < rows.length) {
+    let currentPage = pages[pages.length - 1];
+    const firstRowHeight = estimateRowHeightPx(rows[cursor]);
+    const isFreshContinuationPage =
+      currentPage.pageNumber > 1 &&
+      !currentPage.keluarHeaderVisible &&
+      !currentPage.terpakaiHeaderVisible &&
+      !currentPage.kembaliHeaderVisible;
+
+    // Avoid orphan section headers with zero rows at the bottom of a filled page
+    if (
+      !isFreshContinuationPage &&
+      remainingPxRef.current < headerHeightPx + firstRowHeight
+    ) {
+      currentPage = createEmptyPageSlice(pages.length + 1);
+      pages.push(currentPage);
+      remainingPxRef.current = PAGE_N_CONTENT_BUDGET_PX;
+    }
+
+    remainingPxRef.current = Math.max(0, remainingPxRef.current - headerHeightPx);
+    const chunk: Array<TRow | null> = [];
+
+    while (cursor < rows.length) {
+      const rowHeight = estimateRowHeightPx(rows[cursor]);
+      if (chunk.length > 0 && rowHeight > remainingPxRef.current) {
+        break;
+      }
+      chunk.push(rows[cursor]);
+      remainingPxRef.current = Math.max(0, remainingPxRef.current - rowHeight);
+      cursor++;
+    }
+
+    attachChunk(currentPage, chunk, isContinuation);
+    isContinuation = true;
+
+    // Current page ran out of vertical space mid-table; open a new page with Kop Surat
+    if (cursor < rows.length) {
+      pages.push(createEmptyPageSlice(pages.length + 1));
+      remainingPxRef.current = PAGE_N_CONTENT_BUDGET_PX;
     }
   }
-  if (current.length > 0) chunks.push(current);
-  return chunks;
 }
 
 export function padTableRows<T>(rows: T[], minCount = FORM_BARANG_MIN_TABLE_ROWS): Array<T | null> {
@@ -590,172 +686,73 @@ export function resolveDynamicTableRows<T>(rows: T[], isBlankTemplate: boolean):
 }
 
 /**
- * Splits a FormBarangDocumentData into crisp A4 pages where populated tables render
- * strictly the exact count of items (no trailing blank padding rows) while multi-line SNs
- * and large lists spill cleanly onto continuation pages without clipping the footer.
+ * Flow-paginates a FormBarangDocumentData across A4 pages:
+ * - Packs sections (A -> B -> C -> Persetujuan & Catatan) seamlessly into remaining
+ *   vertical space on earlier pages (no forced blank half-page breaks).
+ * - Whenever the current page is full, automatically opens a new page sharing the
+ *   identical company Kop Surat without redundant sub-titles.
  */
 export function paginateFormBarangData(doc: FormBarangDocumentData): FormBarangPageSlice[] {
   const isBlankTemplate = doc.summary.sourceType === "blank";
-  const keluar = doc.barangKeluar || [];
-  const terpakai = doc.barangTerpakai || [];
-  const kembali = doc.barangKembali || [];
+  const keluarRows = resolveDynamicTableRows(doc.barangKeluar || [], isBlankTemplate);
+  const terpakaiRows = resolveDynamicTableRows(doc.barangTerpakai || [], isBlankTemplate);
+  const kembaliRows = resolveDynamicTableRows(doc.barangKembali || [], isBlankTemplate);
 
-  const totalKeluarUnits = keluar.reduce((s, r) => s + estimateKeluarRowUnits(r), 0);
-  const totalTerpakaiUnits = terpakai.reduce((s, r) => s + estimateTerpakaiRowUnits(r), 0);
-  const totalKembaliUnits = kembali.reduce((s, r) => s + estimateKembaliRowUnits(r), 0);
+  const page1 = createEmptyPageSlice(1);
+  const pages: FormBarangPageSlice[] = [page1];
+  const remainingPxRef = {
+    current: PAGE_1_CONTENT_BUDGET_PX - estimateRequestInfoHeightPx(doc.requestInfo),
+  };
 
-  const pages: FormBarangPageSlice[] = [];
-
-  // Part 1: FORM BARANG (Informasi Request + A. BARANG KELUAR + B. BARANG TERPAKAI)
-  if (
-    totalKeluarUnits + totalTerpakaiUnits <= 22 &&
-    (!isBlankTemplate || (keluar.length <= 8 && terpakai.length <= 8))
-  ) {
-    pages.push({
-      pageNumber: 1,
-      kind: "FORM_BARANG",
-      title: "FORM BARANG",
-      includeRequestInfo: true,
-      keluarHeaderVisible: true,
-      keluarContinuation: false,
-      keluarRows: resolveDynamicTableRows(keluar, isBlankTemplate),
-      terpakaiHeaderVisible: true,
-      terpakaiContinuation: false,
-      terpakaiRows: resolveDynamicTableRows(terpakai, isBlankTemplate),
-      kembaliHeaderVisible: false,
-      kembaliContinuation: false,
-      kembaliRows: [],
-      includeApprovalAndNotes: false,
-    });
-  } else {
-    const keluarChunks =
-      keluar.length === 0
-        ? [[]]
-        : chunkByRowUnits(keluar, estimateKeluarRowUnits, 22, 30);
-
-    keluarChunks.forEach((chunk, idx) => {
-      pages.push({
-        pageNumber: pages.length + 1,
-        kind: "FORM_BARANG",
-        title: idx === 0 ? "FORM BARANG" : "FORM BARANG (LANJUTAN)",
-        includeRequestInfo: idx === 0,
-        keluarHeaderVisible: true,
-        keluarContinuation: idx > 0,
-        keluarRows: resolveDynamicTableRows(chunk, isBlankTemplate),
-        terpakaiHeaderVisible: false,
-        terpakaiContinuation: false,
-        terpakaiRows: [],
-        kembaliHeaderVisible: false,
-        kembaliContinuation: false,
-        kembaliRows: [],
-        includeApprovalAndNotes: false,
-      });
-    });
-
-    // Place Section B either on last Keluar page if plenty of room, or dedicated clean FORM BARANG page(s)
-    const lastPage = pages[pages.length - 1];
-    const lastKeluarCost = lastPage.keluarRows.reduce(
-      (s, r) => s + (r ? estimateKeluarRowUnits(r) : 1),
-      0
-    );
-    const availableAfterKeluar =
-      (lastPage.includeRequestInfo ? 21 : 29) - lastKeluarCost - 4;
-
-    if (
-      Math.max(1, totalTerpakaiUnits) <= availableAfterKeluar &&
-      (!isBlankTemplate || terpakai.length <= 8)
-    ) {
-      lastPage.terpakaiHeaderVisible = true;
-      lastPage.terpakaiContinuation = false;
-      lastPage.terpakaiRows = resolveDynamicTableRows(terpakai, isBlankTemplate);
-    } else {
-      const terpakaiChunks =
-        terpakai.length === 0
-          ? [[]]
-          : chunkByRowUnits(terpakai, estimateTerpakaiRowUnits, 28, 28);
-      terpakaiChunks.forEach((chunk, idx) => {
-        pages.push({
-          pageNumber: pages.length + 1,
-          kind: "FORM_BARANG",
-          title: "FORM BARANG (LANJUTAN)",
-          includeRequestInfo: false,
-          keluarHeaderVisible: false,
-          keluarContinuation: false,
-          keluarRows: [],
-          terpakaiHeaderVisible: true,
-          terpakaiContinuation: idx > 0,
-          terpakaiRows: resolveDynamicTableRows(chunk, isBlankTemplate),
-          kembaliHeaderVisible: false,
-          kembaliContinuation: false,
-          kembaliRows: [],
-          includeApprovalAndNotes: false,
-        });
-      });
+  // A. BARANG KELUAR
+  appendSectionFlowToPages(
+    pages,
+    remainingPxRef,
+    keluarRows,
+    SECTION_A_HEADER_HEIGHT_PX,
+    estimateKeluarRowHeightPx,
+    (page, chunk, isContinuation) => {
+      page.keluarHeaderVisible = true;
+      page.keluarContinuation = isContinuation;
+      page.keluarRows = chunk;
     }
-  }
+  );
 
-  // Part 2: FORM PENGEMBALIAN BARANG (C. BARANG KEMBALI / SISA + B. PERSETUJUAN DAN SERAH TERIMA + CATATAN)
-  if (totalKembaliUnits <= 18) {
-    pages.push({
-      pageNumber: pages.length + 1,
-      kind: "FORM_PENGEMBALIAN",
-      title: "FORM PENGEMBALIAN BARANG",
-      includeRequestInfo: false,
-      keluarHeaderVisible: false,
-      keluarContinuation: false,
-      keluarRows: [],
-      terpakaiHeaderVisible: false,
-      terpakaiContinuation: false,
-      terpakaiRows: [],
-      kembaliHeaderVisible: true,
-      kembaliContinuation: false,
-      kembaliRows: resolveDynamicTableRows(kembali, isBlankTemplate),
-      includeApprovalAndNotes: true,
-    });
+  // B. BARANG TERPAKAI
+  appendSectionFlowToPages(
+    pages,
+    remainingPxRef,
+    terpakaiRows,
+    SECTION_B_HEADER_HEIGHT_PX,
+    estimateTerpakaiRowHeightPx,
+    (page, chunk, isContinuation) => {
+      page.terpakaiHeaderVisible = true;
+      page.terpakaiContinuation = isContinuation;
+      page.terpakaiRows = chunk;
+    }
+  );
+
+  // C. BARANG KEMBALI / SISA
+  appendSectionFlowToPages(
+    pages,
+    remainingPxRef,
+    kembaliRows,
+    SECTION_C_HEADER_HEIGHT_PX,
+    estimateKembaliRowHeightPx,
+    (page, chunk, isContinuation) => {
+      page.kembaliHeaderVisible = true;
+      page.kembaliContinuation = isContinuation;
+      page.kembaliRows = chunk;
+    }
+  );
+
+  // PERSETUJUAN DAN SERAH TERIMA + CATATAN
+  if (remainingPxRef.current >= APPROVAL_AND_NOTES_HEIGHT_PX) {
+    pages[pages.length - 1].includeApprovalAndNotes = true;
   } else {
-    const kembaliChunks = chunkByRowUnits(kembali, estimateKembaliRowUnits, 26, 26);
-    kembaliChunks.forEach((chunk, idx) => {
-      const isLast = idx === kembaliChunks.length - 1;
-      const chunkCost = chunk.reduce((s, r) => s + estimateKembaliRowUnits(r), 0);
-      const fitsApprovalOnSamePage = isLast && chunkCost <= 18;
-
-      pages.push({
-        pageNumber: pages.length + 1,
-        kind: "FORM_PENGEMBALIAN",
-        title:
-          idx === 0 ? "FORM PENGEMBALIAN BARANG" : "FORM PENGEMBALIAN BARANG (LANJUTAN)",
-        includeRequestInfo: false,
-        keluarHeaderVisible: false,
-        keluarContinuation: false,
-        keluarRows: [],
-        terpakaiHeaderVisible: false,
-        terpakaiContinuation: false,
-        terpakaiRows: [],
-        kembaliHeaderVisible: true,
-        kembaliContinuation: idx > 0,
-        kembaliRows: chunk,
-        includeApprovalAndNotes: fitsApprovalOnSamePage,
-      });
-
-      if (isLast && !fitsApprovalOnSamePage) {
-        pages.push({
-          pageNumber: pages.length + 1,
-          kind: "FORM_PENGEMBALIAN",
-          title: "FORM PENGEMBALIAN BARANG (LANJUTAN)",
-          includeRequestInfo: false,
-          keluarHeaderVisible: false,
-          keluarContinuation: false,
-          keluarRows: [],
-          terpakaiHeaderVisible: false,
-          terpakaiContinuation: false,
-          terpakaiRows: [],
-          kembaliHeaderVisible: false,
-          kembaliContinuation: false,
-          kembaliRows: [],
-          includeApprovalAndNotes: true,
-        });
-      }
-    });
+    const approvalPage = createEmptyPageSlice(pages.length + 1);
+    approvalPage.includeApprovalAndNotes = true;
+    pages.push(approvalPage);
   }
 
   return pages;
