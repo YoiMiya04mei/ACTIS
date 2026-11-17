@@ -62,7 +62,6 @@ function GenerateFormBarangContent() {
   });
 
   // Options fetched from backend
-  const [includeSerials, setIncludeSerials] = useState(false);
   const [includePendingRemaining, setIncludePendingRemaining] = useState(false);
 
   // Active Document State (populated automatically from DB, editable before PDF)
@@ -126,7 +125,6 @@ function GenerateFormBarangContent() {
     async (
       targetType: "transaction" | "request" | "blank",
       targetId: string | null,
-      withSerials: boolean,
       withPending: boolean
     ) => {
       if (targetType === "blank" || !targetId) {
@@ -143,9 +141,8 @@ function GenerateFormBarangContent() {
         const params = new URLSearchParams({
           id: targetId,
           sourceType: targetType,
-          includeSerials: String(withSerials),
           includePendingRemaining: String(withPending),
-          prefillPenerima: "true",
+          prefillPenerima: "false",
         });
 
         const res = await fetch(`/api/inventory/form-barang?${params.toString()}`, {
@@ -179,18 +176,18 @@ function GenerateFormBarangContent() {
 
   useEffect(() => {
     if (initialTxId) {
-      loadSelectedDocument("transaction", initialTxId, includeSerials, includePendingRemaining);
+      loadSelectedDocument("transaction", initialTxId, includePendingRemaining);
       return;
     }
     if (initialRequestId) {
-      loadSelectedDocument("request", initialRequestId, includeSerials, includePendingRemaining);
+      loadSelectedDocument("request", initialRequestId, includePendingRemaining);
       return;
     }
     if (!hasAutoSelected && !listLoading && sources.length > 0) {
       setHasAutoSelected(true);
       const first = sources[0];
       setSelectedSource({ type: first.sourceType, id: first.id });
-      loadSelectedDocument(first.sourceType, first.id, includeSerials, includePendingRemaining);
+      loadSelectedDocument(first.sourceType, first.id, includePendingRemaining);
     }
   }, [
     initialTxId,
@@ -198,14 +195,13 @@ function GenerateFormBarangContent() {
     hasAutoSelected,
     listLoading,
     sources,
-    includeSerials,
     includePendingRemaining,
     loadSelectedDocument,
   ]);
 
   const handleSelectItem = (item: FormBarangSourceListItem) => {
     setSelectedSource({ type: item.sourceType, id: item.id });
-    loadSelectedDocument(item.sourceType, item.id, includeSerials, includePendingRemaining);
+    loadSelectedDocument(item.sourceType, item.id, includePendingRemaining);
   };
 
   const handleUseBlankTemplate = () => {
@@ -217,22 +213,11 @@ function GenerateFormBarangContent() {
     setPreviewPageTab("all");
   };
 
-  const handleToggleOption = (
-    option: "serials" | "pending",
-    checked: boolean
-  ) => {
-    const nextSerials = option === "serials" ? checked : includeSerials;
-    const nextPending = option === "pending" ? checked : includePendingRemaining;
-    if (option === "serials") setIncludeSerials(checked);
-    if (option === "pending") setIncludePendingRemaining(checked);
+  const handleTogglePendingRemaining = (checked: boolean) => {
+    setIncludePendingRemaining(checked);
 
     if (selectedSource.type !== "blank" && selectedSource.id) {
-      loadSelectedDocument(
-        selectedSource.type,
-        selectedSource.id,
-        nextSerials,
-        nextPending
-      );
+      loadSelectedDocument(selectedSource.type, selectedSource.id, checked);
     }
   };
 
@@ -699,18 +684,8 @@ function GenerateFormBarangContent() {
                 <label className="flex items-center gap-2 cursor-pointer text-slate-700 dark:text-slate-300">
                   <input
                     type="checkbox"
-                    checked={includeSerials}
-                    onChange={(e) => handleToggleOption("serials", e.target.checked)}
-                    className="rounded border-slate-300 text-blue-600"
-                  />
-                  <span>Tampilkan Serial Number (SN) di Nama Barang</span>
-                </label>
-
-                <label className="flex items-center gap-2 cursor-pointer text-slate-700 dark:text-slate-300">
-                  <input
-                    type="checkbox"
                     checked={includePendingRemaining}
-                    onChange={(e) => handleToggleOption("pending", e.target.checked)}
+                    onChange={(e) => handleTogglePendingRemaining(e.target.checked)}
                     className="rounded border-slate-300 text-blue-600"
                   />
                   <span>
@@ -760,7 +735,7 @@ function GenerateFormBarangContent() {
                         approval: { ...p.approval, penerimaName: e.target.value },
                       }))
                     }
-                    placeholder="Penerima / PIC Tim Lapangan"
+                    placeholder="Penerima / PIC Tim Lapangan (kosong = titik-titik)"
                     className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
                   />
                 </div>

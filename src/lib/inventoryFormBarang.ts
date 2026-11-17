@@ -1,3 +1,4 @@
+import { computeRemainingSerialsForDetail } from "@/lib/inventoryClientFinish";
 import {
   parseWorkTypes,
   WORK_TYPE_OPTIONS,
@@ -34,7 +35,7 @@ export interface FormBarangKeluarRow {
   no: number;
   transactionNumber: string;
   itemName: string;
-  itemCode: string;
+  snBarang: string;
   quantity: string;
 }
 
@@ -42,7 +43,7 @@ export interface FormBarangTerpakaiRow {
   no: number;
   transactionNumber: string;
   itemName: string;
-  itemCode: string;
+  snBarang: string;
   quantityUsed: string;
   clientName: string;
   location: string;
@@ -52,7 +53,7 @@ export interface FormBarangKembaliRow {
   no: number;
   transactionNumber: string;
   itemName: string;
-  itemCode: string;
+  snBarang: string;
   quantityReturned: string;
   condition: string;
   notes: string;
@@ -235,9 +236,12 @@ export function createEmptyFormBarangData(): FormBarangDocumentData {
 }
 
 export interface BuildFormBarangOptions {
-  includeSerialNumbers?: boolean;
   includePendingRemaining?: boolean;
   prefillPenerimaName?: boolean;
+}
+
+function formatSerialsCell(sns: string[]): string {
+  return sns.length > 0 ? sns.join(", ") : "-";
 }
 
 export function buildFormBarangDataFromOutTransaction(
@@ -297,18 +301,13 @@ export function buildFormBarangDataFromOutTransaction(
     totalRemainingQty += Math.max(0, rem);
 
     const unit = (d?.unit || d?.item?.unit || "Unit").trim();
-    const baseName = d?.item?.name || "-";
-    const sns = options.includeSerialNumbers
-      ? parseJsonStringArray(d?.unit_serial_numbers)
-      : [];
-    const displayName =
-      sns.length > 0 ? `${baseName} (SN: ${sns.join(", ")})` : baseName;
+    const sns = parseJsonStringArray(d?.unit_serial_numbers);
 
     return {
       no: idx + 1,
       transactionNumber: tx?.transaction_number || "-",
-      itemName: displayName,
-      itemCode: d?.item?.code || "-",
+      itemName: d?.item?.name || "-",
+      snBarang: formatSerialsCell(sns),
       quantity: `${formatFormBarangQty(qty)} ${unit}`.trim(),
     };
   });
@@ -336,18 +335,13 @@ export function buildFormBarangDataFromOutTransaction(
 
       totalUsedQty += qty;
       const unit = (ui?.unit || ui?.item?.unit || linkedDetail?.unit || "Unit").trim();
-      const baseName = ui?.item?.name || linkedDetail?.item?.name || "-";
-      const sns = options.includeSerialNumbers
-        ? parseJsonStringArray(ui?.serial_numbers)
-        : [];
-      const displayName =
-        sns.length > 0 ? `${baseName} (SN: ${sns.join(", ")})` : baseName;
+      const sns = parseJsonStringArray(ui?.serial_numbers);
 
       barangTerpakai.push({
         no: barangTerpakai.length + 1,
         transactionNumber: tx?.transaction_number || "-",
-        itemName: displayName,
-        itemCode: ui?.item?.code || linkedDetail?.item?.code || "-",
+        itemName: ui?.item?.name || linkedDetail?.item?.name || "-",
+        snBarang: formatSerialsCell(sns),
         quantityUsed: `${formatFormBarangQty(qty)} ${unit}`.trim(),
         clientName: usage?.client_name?.trim() || "-",
         location: usage?.client_address?.trim() || tx?.location?.trim() || "-",
@@ -368,11 +362,12 @@ export function buildFormBarangDataFromOutTransaction(
     if (uncovered > 0) {
       totalUsedQty += uncovered;
       const unit = (d?.unit || d?.item?.unit || "Unit").trim();
+      const sns = parseJsonStringArray(d?.unit_serial_numbers);
       barangTerpakai.push({
         no: barangTerpakai.length + 1,
         transactionNumber: tx?.transaction_number || "-",
         itemName: d?.item?.name || "-",
-        itemCode: d?.item?.code || "-",
+        snBarang: formatSerialsCell(sns),
         quantityUsed: `${formatFormBarangQty(uncovered)} ${unit}`.trim(),
         clientName: tx?.purpose?.trim() || tx?.pic_name?.trim() || "-",
         location: tx?.location?.trim() || "-",
@@ -400,18 +395,13 @@ export function buildFormBarangDataFromOutTransaction(
         linkedDetail?.item?.unit ||
         "Unit"
       ).trim();
-      const baseName = rd?.item?.name || linkedDetail?.item?.name || "-";
-      const sns = options.includeSerialNumbers
-        ? parseJsonStringArray(rd?.serial_numbers)
-        : [];
-      const displayName =
-        sns.length > 0 ? `${baseName} (SN: ${sns.join(", ")})` : baseName;
+      const sns = parseJsonStringArray(rd?.serial_numbers);
 
       confirmedReturns.push({
         no: confirmedReturns.length + 1,
         transactionNumber: ret?.return_number || tx?.transaction_number || "-",
-        itemName: displayName,
-        itemCode: rd?.item?.code || linkedDetail?.item?.code || "-",
+        itemName: rd?.item?.name || linkedDetail?.item?.name || "-",
+        snBarang: formatSerialsCell(sns),
         quantityReturned: `${formatFormBarangQty(qty)} ${unit}`.trim(),
         condition: formatReturnConditionLabel(rd?.condition),
         notes: rd?.notes?.trim() || rd?.action_taken?.trim() || "-",
@@ -426,11 +416,16 @@ export function buildFormBarangDataFromOutTransaction(
     const rem = Number(d?.qty_remaining || 0);
     if (rem <= 0) continue;
     const unit = (d?.unit || d?.item?.unit || "Unit").trim();
+    const remSns = computeRemainingSerialsForDetail(
+      { id: d.id, unit_serial_numbers: d.unit_serial_numbers },
+      clientUsages,
+      returns
+    );
     pendingRemainingRows.push({
       no: confirmedReturns.length + pendingRemainingRows.length + 1,
       transactionNumber: tx?.transaction_number || "-",
       itemName: d?.item?.name || "-",
-      itemCode: d?.item?.code || "-",
+      snBarang: formatSerialsCell(remSns),
       quantityReturned: `${formatFormBarangQty(rem)} ${unit}`.trim(),
       condition: "Belum Kembali",
       notes:
@@ -455,9 +450,9 @@ export function buildFormBarangDataFromOutTransaction(
       pemohonName: "",
       pengelolaName: "",
       penerimaName:
-        options.prefillPenerimaName === false
-          ? ""
-          : (primaryReq?.pic_name || tx?.pic_name || "").trim(),
+        options.prefillPenerimaName === true
+          ? (primaryReq?.pic_name || tx?.pic_name || "").trim()
+          : "",
     },
     summary: {
       sourceType: "transaction",
@@ -507,7 +502,7 @@ export function buildFormBarangDataFromRequest(
       pemohonName: "",
       pengelolaName: "",
       penerimaName:
-        options.prefillPenerimaName === false ? "" : (req?.pic_name || "").trim(),
+        options.prefillPenerimaName === true ? (req?.pic_name || "").trim() : "",
     },
     summary: {
       sourceType: "request",
@@ -528,22 +523,26 @@ export function buildFormBarangDataFromRequest(
 }
 
 function estimateKeluarRowUnits(row: FormBarangKeluarRow): number {
-  const nameLines = Math.max(1, Math.ceil(row.itemName.length / 34));
-  return nameLines > 1 ? 1 + (nameLines - 1) * 0.72 : 1;
+  const nameLines = Math.max(1, Math.ceil(row.itemName.length / 26));
+  const snLines = Math.max(1, Math.ceil((row.snBarang || "").length / 32));
+  const maxLines = Math.max(nameLines, snLines);
+  return maxLines > 1 ? 1 + (maxLines - 1) * 0.72 : 1;
 }
 
 function estimateTerpakaiRowUnits(row: FormBarangTerpakaiRow): number {
-  const nameLines = Math.max(1, Math.ceil(row.itemName.length / 22));
-  const clientLines = Math.max(1, Math.ceil(row.clientName.length / 17));
-  const locLines = Math.max(1, Math.ceil(row.location.length / 14));
-  const maxLines = Math.max(nameLines, clientLines, locLines);
+  const nameLines = Math.max(1, Math.ceil(row.itemName.length / 19));
+  const snLines = Math.max(1, Math.ceil((row.snBarang || "").length / 21));
+  const clientLines = Math.max(1, Math.ceil(row.clientName.length / 15));
+  const locLines = Math.max(1, Math.ceil(row.location.length / 13));
+  const maxLines = Math.max(nameLines, snLines, clientLines, locLines);
   return maxLines > 1 ? 1 + (maxLines - 1) * 0.72 : 1;
 }
 
 function estimateKembaliRowUnits(row: FormBarangKembaliRow): number {
-  const nameLines = Math.max(1, Math.ceil(row.itemName.length / 20));
-  const notesLines = Math.max(1, Math.ceil(row.notes.length / 16));
-  const maxLines = Math.max(nameLines, notesLines);
+  const nameLines = Math.max(1, Math.ceil(row.itemName.length / 18));
+  const snLines = Math.max(1, Math.ceil((row.snBarang || "").length / 20));
+  const notesLines = Math.max(1, Math.ceil(row.notes.length / 15));
+  const maxLines = Math.max(nameLines, snLines, notesLines);
   return maxLines > 1 ? 1 + (maxLines - 1) * 0.72 : 1;
 }
 
@@ -582,14 +581,21 @@ export function padTableRows<T>(rows: T[], minCount = FORM_BARANG_MIN_TABLE_ROWS
   return padded;
 }
 
+export function resolveDynamicTableRows<T>(rows: T[], isBlankTemplate: boolean): Array<T | null> {
+  if (isBlankTemplate) {
+    return padTableRows(rows, FORM_BARANG_MIN_TABLE_ROWS);
+  }
+  // When data exists, match exact count (1 filled item => 1 row); if 0 rows yet, show 1 clean row
+  return rows.length > 0 ? rows : [null];
+}
+
 /**
- * Splits a FormBarangDocumentData into exact A4 printable pages matching the Word template:
- * - Standard case (<= 8 rows per table, normal string lengths): strictly 2 pages
- *   (Page 1 = FORM BARANG [Info Request + A + B], Page 2 = FORM PENGEMBALIAN BARANG [C + Persetujuan + Catatan])
- * - Overflow case (> 8 rows or multi-line heavy rows): spills across clean continuation A4 pages
- *   without clipping or overlapping the footer.
+ * Splits a FormBarangDocumentData into crisp A4 pages where populated tables render
+ * strictly the exact count of items (no trailing blank padding rows) while multi-line SNs
+ * and large lists spill cleanly onto continuation pages without clipping the footer.
  */
 export function paginateFormBarangData(doc: FormBarangDocumentData): FormBarangPageSlice[] {
+  const isBlankTemplate = doc.summary.sourceType === "blank";
   const keluar = doc.barangKeluar || [];
   const terpakai = doc.barangTerpakai || [];
   const kembali = doc.barangKembali || [];
@@ -602,9 +608,8 @@ export function paginateFormBarangData(doc: FormBarangDocumentData): FormBarangP
 
   // Part 1: FORM BARANG (Informasi Request + A. BARANG KELUAR + B. BARANG TERPAKAI)
   if (
-    keluar.length <= 8 &&
-    terpakai.length <= 8 &&
-    totalKeluarUnits + totalTerpakaiUnits <= 22
+    totalKeluarUnits + totalTerpakaiUnits <= 22 &&
+    (!isBlankTemplate || (keluar.length <= 8 && terpakai.length <= 8))
   ) {
     pages.push({
       pageNumber: 1,
@@ -613,10 +618,10 @@ export function paginateFormBarangData(doc: FormBarangDocumentData): FormBarangP
       includeRequestInfo: true,
       keluarHeaderVisible: true,
       keluarContinuation: false,
-      keluarRows: padTableRows(keluar, FORM_BARANG_MIN_TABLE_ROWS),
+      keluarRows: resolveDynamicTableRows(keluar, isBlankTemplate),
       terpakaiHeaderVisible: true,
       terpakaiContinuation: false,
-      terpakaiRows: padTableRows(terpakai, FORM_BARANG_MIN_TABLE_ROWS),
+      terpakaiRows: resolveDynamicTableRows(terpakai, isBlankTemplate),
       kembaliHeaderVisible: false,
       kembaliContinuation: false,
       kembaliRows: [],
@@ -636,10 +641,7 @@ export function paginateFormBarangData(doc: FormBarangDocumentData): FormBarangP
         includeRequestInfo: idx === 0,
         keluarHeaderVisible: true,
         keluarContinuation: idx > 0,
-        keluarRows:
-          idx === 0 && keluarChunks.length === 1
-            ? padTableRows(chunk, FORM_BARANG_MIN_TABLE_ROWS)
-            : chunk,
+        keluarRows: resolveDynamicTableRows(chunk, isBlankTemplate),
         terpakaiHeaderVisible: false,
         terpakaiContinuation: false,
         terpakaiRows: [],
@@ -660,12 +662,12 @@ export function paginateFormBarangData(doc: FormBarangDocumentData): FormBarangP
       (lastPage.includeRequestInfo ? 21 : 29) - lastKeluarCost - 4;
 
     if (
-      terpakai.length <= 8 &&
-      Math.max(8, totalTerpakaiUnits) <= availableAfterKeluar
+      Math.max(1, totalTerpakaiUnits) <= availableAfterKeluar &&
+      (!isBlankTemplate || terpakai.length <= 8)
     ) {
       lastPage.terpakaiHeaderVisible = true;
       lastPage.terpakaiContinuation = false;
-      lastPage.terpakaiRows = padTableRows(terpakai, FORM_BARANG_MIN_TABLE_ROWS);
+      lastPage.terpakaiRows = resolveDynamicTableRows(terpakai, isBlankTemplate);
     } else {
       const terpakaiChunks =
         terpakai.length === 0
@@ -682,10 +684,7 @@ export function paginateFormBarangData(doc: FormBarangDocumentData): FormBarangP
           keluarRows: [],
           terpakaiHeaderVisible: true,
           terpakaiContinuation: idx > 0,
-          terpakaiRows:
-            idx === 0 && terpakaiChunks.length === 1
-              ? padTableRows(chunk, FORM_BARANG_MIN_TABLE_ROWS)
-              : chunk,
+          terpakaiRows: resolveDynamicTableRows(chunk, isBlankTemplate),
           kembaliHeaderVisible: false,
           kembaliContinuation: false,
           kembaliRows: [],
@@ -696,7 +695,7 @@ export function paginateFormBarangData(doc: FormBarangDocumentData): FormBarangP
   }
 
   // Part 2: FORM PENGEMBALIAN BARANG (C. BARANG KEMBALI / SISA + B. PERSETUJUAN DAN SERAH TERIMA + CATATAN)
-  if (kembali.length <= 12 && totalKembaliUnits <= 16) {
+  if (totalKembaliUnits <= 18) {
     pages.push({
       pageNumber: pages.length + 1,
       kind: "FORM_PENGEMBALIAN",
@@ -710,7 +709,7 @@ export function paginateFormBarangData(doc: FormBarangDocumentData): FormBarangP
       terpakaiRows: [],
       kembaliHeaderVisible: true,
       kembaliContinuation: false,
-      kembaliRows: padTableRows(kembali, FORM_BARANG_MIN_TABLE_ROWS),
+      kembaliRows: resolveDynamicTableRows(kembali, isBlankTemplate),
       includeApprovalAndNotes: true,
     });
   } else {
@@ -718,7 +717,7 @@ export function paginateFormBarangData(doc: FormBarangDocumentData): FormBarangP
     kembaliChunks.forEach((chunk, idx) => {
       const isLast = idx === kembaliChunks.length - 1;
       const chunkCost = chunk.reduce((s, r) => s + estimateKembaliRowUnits(r), 0);
-      const fitsApprovalOnSamePage = isLast && chunkCost <= 16;
+      const fitsApprovalOnSamePage = isLast && chunkCost <= 18;
 
       pages.push({
         pageNumber: pages.length + 1,

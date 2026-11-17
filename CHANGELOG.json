@@ -4,6 +4,25 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.26",
+      "date": "2026-11-17T14:38:52+07:00",
+      "title": "Form Barang PDF: Kolom SN Barang Otomatis, Penerima Kosong & Baris Dinamis",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Mengubah kolom Kode Barang pada tabel A, B, dan C menjadi SN Barang dengan pengisian otomatis seluruh Serial Number dalam 1 baris"
+        },
+        {
+          "type": "fix",
+          "text": "Menjaga kolom tanda tangan Penerima (PIC Tim Lapangan) kosong secara default sebelum diedit manual"
+        },
+        {
+          "type": "improve",
+          "text": "Menyesuaikan jumlah baris tabel A, B, dan C secara dinamis mengikuti jumlah item yang terisi tanpa baris kosong berlebih"
+        }
+      ]
+    },
+    {
       "version": "1.2.25",
       "date": "2026-11-17T13:54:46+07:00",
       "title": "Generate Form Barang (PDF) Otomatis dari Alur Inventory",

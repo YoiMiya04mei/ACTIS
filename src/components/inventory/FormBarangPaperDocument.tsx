@@ -483,11 +483,11 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
                 }}
               >
                 <colgroup>
-                  <col style={{ width: "40px" }} />
-                  <col style={{ width: "135px" }} />
-                  <col style={{ width: "235px" }} />
-                  <col style={{ width: "141px" }} />
-                  <col style={{ width: "122px" }} />
+                  <col style={{ width: "34px" }} />
+                  <col style={{ width: "120px" }} />
+                  <col style={{ width: "185px" }} />
+                  <col style={{ width: "234px" }} />
+                  <col style={{ width: "100px" }} />
                 </colgroup>
                 <thead>
                   <tr style={{ height: "24px", backgroundColor: SUBHEADER_BG }}>
@@ -497,6 +497,7 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
                         backgroundColor: SUBHEADER_BG,
                         fontWeight: 700,
                         textAlign: "center",
+                        padding: "2px 3px",
                       }}
                     >
                       No.
@@ -529,7 +530,7 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
                         textAlign: "center",
                       }}
                     >
-                      Kode Barang
+                      SN Barang
                     </th>
                     <th
                       style={{
@@ -545,18 +546,33 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
                 </thead>
                 <tbody>
                   {slice.keluarRows.map((row, rowIdx) => (
-                    <tr key={row ? `k-${row.no}` : `k-empty-${rowIdx}`} style={{ height: "19px" }}>
+                    <tr key={row ? `k-${row.no}` : `k-empty-${rowIdx}`} style={{ height: "20px" }}>
                       <td style={{ ...cellBaseStyle, textAlign: "center" }}>
                         {row ? row.no : ""}
                       </td>
-                      <td style={{ ...cellBaseStyle, textAlign: "center" }}>
+                      <td
+                        style={{
+                          ...cellBaseStyle,
+                          textAlign: "center",
+                          fontSize: "7.2pt",
+                          padding: "3px 4px",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {row ? row.transactionNumber : ""}
                       </td>
                       <td style={{ ...cellBaseStyle, textAlign: "left" }}>
                         {row ? row.itemName : ""}
                       </td>
-                      <td style={{ ...cellBaseStyle, textAlign: "center" }}>
-                        {row ? row.itemCode : ""}
+                      <td
+                        style={{
+                          ...cellBaseStyle,
+                          textAlign: row && row.snBarang !== "-" ? "left" : "center",
+                          fontSize: "7.5pt",
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        {row ? row.snBarang : ""}
                       </td>
                       <td style={{ ...cellBaseStyle, textAlign: "center" }}>
                         {row ? row.quantity : ""}
@@ -608,13 +624,13 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
                 }}
               >
                 <colgroup>
-                  <col style={{ width: "34px" }} />
-                  <col style={{ width: "101px" }} />
-                  <col style={{ width: "155px" }} />
-                  <col style={{ width: "101px" }} />
-                  <col style={{ width: "74px" }} />
-                  <col style={{ width: "114px" }} />
-                  <col style={{ width: "94px" }} />
+                  <col style={{ width: "30px" }} />
+                  <col style={{ width: "108px" }} />
+                  <col style={{ width: "132px" }} />
+                  <col style={{ width: "148px" }} />
+                  <col style={{ width: "68px" }} />
+                  <col style={{ width: "99px" }} />
+                  <col style={{ width: "88px" }} />
                 </colgroup>
                 <thead>
                   <tr style={{ height: "36px", backgroundColor: SUBHEADER_BG }}>
@@ -624,6 +640,7 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
                         backgroundColor: SUBHEADER_BG,
                         fontWeight: 700,
                         textAlign: "center",
+                        padding: "2px 3px",
                       }}
                     >
                       No.
@@ -656,7 +673,7 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
                         textAlign: "center",
                       }}
                     >
-                      Kode Barang
+                      SN Barang
                     </th>
                     <th
                       style={{
@@ -693,18 +710,33 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
                 </thead>
                 <tbody>
                   {slice.terpakaiRows.map((row, rowIdx) => (
-                    <tr key={row ? `t-${row.no}` : `t-empty-${rowIdx}`} style={{ height: "19px" }}>
+                    <tr key={row ? `t-${row.no}` : `t-empty-${rowIdx}`} style={{ height: "20px" }}>
                       <td style={{ ...cellBaseStyle, textAlign: "center" }}>
                         {row ? row.no : ""}
                       </td>
-                      <td style={{ ...cellBaseStyle, textAlign: "center" }}>
+                      <td
+                        style={{
+                          ...cellBaseStyle,
+                          textAlign: "center",
+                          fontSize: "7.2pt",
+                          padding: "3px 4px",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {row ? row.transactionNumber : ""}
                       </td>
                       <td style={{ ...cellBaseStyle, textAlign: "left" }}>
                         {row ? row.itemName : ""}
                       </td>
-                      <td style={{ ...cellBaseStyle, textAlign: "center" }}>
-                        {row ? row.itemCode : ""}
+                      <td
+                        style={{
+                          ...cellBaseStyle,
+                          textAlign: row && row.snBarang !== "-" ? "left" : "center",
+                          fontSize: "7.5pt",
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        {row ? row.snBarang : ""}
                       </td>
                       <td style={{ ...cellBaseStyle, textAlign: "center" }}>
                         {row ? row.quantityUsed : ""}
@@ -762,13 +794,13 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
                 }}
               >
                 <colgroup>
-                  <col style={{ width: "34px" }} />
-                  <col style={{ width: "101px" }} />
-                  <col style={{ width: "141px" }} />
-                  <col style={{ width: "94px" }} />
-                  <col style={{ width: "87px" }} />
+                  <col style={{ width: "30px" }} />
                   <col style={{ width: "108px" }} />
-                  <col style={{ width: "108px" }} />
+                  <col style={{ width: "128px" }} />
+                  <col style={{ width: "144px" }} />
+                  <col style={{ width: "72px" }} />
+                  <col style={{ width: "86px" }} />
+                  <col style={{ width: "105px" }} />
                 </colgroup>
                 <thead>
                   <tr style={{ height: "36px", backgroundColor: SUBHEADER_BG }}>
@@ -778,6 +810,7 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
                         backgroundColor: SUBHEADER_BG,
                         fontWeight: 700,
                         textAlign: "center",
+                        padding: "2px 3px",
                       }}
                     >
                       No.
@@ -810,7 +843,7 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
                         textAlign: "center",
                       }}
                     >
-                      Kode Barang
+                      SN Barang
                     </th>
                     <th
                       style={{
@@ -847,18 +880,33 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
                 </thead>
                 <tbody>
                   {slice.kembaliRows.map((row, rowIdx) => (
-                    <tr key={row ? `c-${row.no}` : `c-empty-${rowIdx}`} style={{ height: "19px" }}>
+                    <tr key={row ? `c-${row.no}` : `c-empty-${rowIdx}`} style={{ height: "20px" }}>
                       <td style={{ ...cellBaseStyle, textAlign: "center" }}>
                         {row ? row.no : ""}
                       </td>
-                      <td style={{ ...cellBaseStyle, textAlign: "center" }}>
+                      <td
+                        style={{
+                          ...cellBaseStyle,
+                          textAlign: "center",
+                          fontSize: "7.2pt",
+                          padding: "3px 4px",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
                         {row ? row.transactionNumber : ""}
                       </td>
                       <td style={{ ...cellBaseStyle, textAlign: "left" }}>
                         {row ? row.itemName : ""}
                       </td>
-                      <td style={{ ...cellBaseStyle, textAlign: "center" }}>
-                        {row ? row.itemCode : ""}
+                      <td
+                        style={{
+                          ...cellBaseStyle,
+                          textAlign: row && row.snBarang !== "-" ? "left" : "center",
+                          fontSize: "7.5pt",
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        {row ? row.snBarang : ""}
                       </td>
                       <td style={{ ...cellBaseStyle, textAlign: "center" }}>
                         {row ? row.quantityReturned : ""}

@@ -106,18 +106,16 @@ export async function GET(request: NextRequest) {
     const idParam = searchParams.get("id")?.trim();
     const sourceTypeParam = searchParams.get("sourceType")?.trim();
 
-    const includeSerialNumbers = parseBoolParam(searchParams.get("includeSerials"), false);
     const includePendingRemaining = parseBoolParam(
       searchParams.get("includePendingRemaining"),
       false
     );
     const prefillPenerimaName = parseBoolParam(
       searchParams.get("prefillPenerima"),
-      true
+      false
     );
 
     const options = {
-      includeSerialNumbers,
       includePendingRemaining,
       prefillPenerimaName,
     };
@@ -272,7 +270,6 @@ export async function GET(request: NextRequest) {
 
     for (const tx of txList) {
       const mapped = buildFormBarangDataFromOutTransaction(tx, {
-        includeSerialNumbers: false,
         includePendingRemaining: false,
       });
       const req = tx.approved_requests?.[0] || null;
