@@ -40,22 +40,12 @@ export interface DeleteReturnInput {
   }>;
 }
 
-export interface ExistingItemUnitState {
-  serial_number: string;
-  item_id: string;
-  status: string;
-}
-
-export interface StockInReversalPlan {
-  stockDecrementsByItem: Map<
-    string,
-    {
-      stockId: string;
-      decrementTotalIn: number;
-      decrementAvailable: number;
-    }
-  >;
-  serialsToDelete: Array<{ itemId: string; serialNumber: string }>;
+export interface StockInHistoryOnlyDeletePlan {
+  transactionId: string;
+  transactionNumber: string;
+  preserveStockAndSerials: true;
+  unaffectedItemIds: string[];
+  preservedSerialNumbers: string[];
 }
 
 export interface StockOutReversalPlan {
@@ -80,58 +70,54 @@ export interface StockOutReversalPlan {
 }
 
 /**
- * Computes and validates stock & SN reversals before deleting an IN transaction.
- * Rejects deletion if available stock is lower than incoming quantity or if any
- * incoming SN unit is currently in-use/consumed/damaged/lost elsewhere.
+ * Computes the next sequential 4-digit code suffix (max existing + 1)
+ * so deleting individual history rows never causes sequence collisions.
  */
-export function computeStockInDeleteReversal(
-  details: DeleteDetailInput[],
-  existingUnitsBySn: Map<string, ExistingItemUnitState>
-): StockInReversalPlan {
-  const stockDecrementsByItem = new Map<
-    string,
-    { stockId: string; decrementTotalIn: number; decrementAvailable: number }
-  >();
-  const serialsToDelete: Array<{ itemId: string; serialNumber: string }> = [];
+export function computeNextTransactionSequence(
+  prefix: string,
+  existingNumbers: string[]
+): string {
+  let maxSeq = 0;
+  for (const num of existingNumbers) {
+    if (!num.startsWith(prefix)) continue;
+    const tail = num.slice(prefix.length);
+    if (!/^\d+$/.test(tail)) continue;
+    const parsed = Number.parseInt(tail, 10);
+    if (Number.isFinite(parsed) && parsed > maxSeq) {
+      maxSeq = parsed;
+    }
+  }
+  return `${prefix}${String(maxSeq + 1).padStart(4, "0")}`;
+}
+
+/**
+ * Builds a history-only delete plan for Stock-In (IN) transactions.
+ * Deleting Stock-In history never decrements InventoryStock balances, never
+ * modifies/deletes InventoryItemUnit serial numbers, and never rejects even when
+ * stock or serial numbers were already used in Stock-Out transactions.
+ */
+export function buildStockInHistoryOnlyDeletePlan(
+  transactionId: string,
+  transactionNumber: string,
+  details: DeleteDetailInput[]
+): StockInHistoryOnlyDeletePlan {
+  const itemIds = new Set<string>();
+  const serialNumbers = new Set<string>();
 
   for (const detail of details) {
-    const qty = Number(detail.quantity || 0);
-    const itemName = detail.item?.name || detail.item_id;
-    const stock = detail.item?.stock;
-
-    if (stock && qty > 0) {
-      const prev = stockDecrementsByItem.get(detail.item_id) || {
-        stockId: stock.id,
-        decrementTotalIn: 0,
-        decrementAvailable: 0,
-      };
-      const nextDec = prev.decrementAvailable + qty;
-      const available = Number(stock.available_stock || 0);
-      if (available < nextDec) {
-        throw new Error(
-          `Transaksi Masuk tidak dapat dihapus karena stok tersedia '${itemName}' (${available} ${detail.unit}) lebih kecil dari kuantitas masuk (${nextDec} ${detail.unit}) — sebagian stok sudah digunakan.`
-        );
-      }
-      stockDecrementsByItem.set(detail.item_id, {
-        stockId: stock.id,
-        decrementTotalIn: prev.decrementTotalIn + qty,
-        decrementAvailable: nextDec,
-      });
-    }
-
-    const sns = parseSerialList(detail.unit_serial_numbers);
-    for (const sn of sns) {
-      const existing = existingUnitsBySn.get(sn);
-      if (existing && existing.item_id === detail.item_id && existing.status !== "AVAILABLE") {
-        throw new Error(
-          `Transaksi Masuk tidak dapat dihapus karena Serial Number '${sn}' pada '${itemName}' sedang berstatus '${existing.status}' (terpakai transaksi lain). Hapus transaksi keluar terkait terlebih dahulu.`
-        );
-      }
-      serialsToDelete.push({ itemId: detail.item_id, serialNumber: sn });
+    if (detail.item_id) itemIds.add(detail.item_id);
+    for (const sn of parseSerialList(detail.unit_serial_numbers)) {
+      serialNumbers.add(sn);
     }
   }
 
-  return { stockDecrementsByItem, serialsToDelete };
+  return {
+    transactionId,
+    transactionNumber,
+    preserveStockAndSerials: true,
+    unaffectedItemIds: Array.from(itemIds),
+    preservedSerialNumbers: Array.from(serialNumbers),
+  };
 }
 
 /**

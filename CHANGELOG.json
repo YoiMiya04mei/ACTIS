@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.22",
+      "date": "2026-11-17T12:02:30+07:00",
+      "title": "Hapus Riwayat Transaksi Barang Masuk Tanpa Mengubah Stok & Serial Number",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Ubah penghapusan Riwayat Transaksi Barang Masuk (satuan, terpilih, dan hapus semua) agar hanya menghapus catatan riwayat tanpa mengurangi saldo Stok Inventory, tanpa menghapus Serial Number, serta tidak menolak penghapusan meski stok atau SN sudah dipakai transaksi keluar."
+        },
+        {
+          "type": "fix",
+          "text": "Perbarui pesan konfirmasi DeleteTransactionDialog dan API penghapusan transaksi Barang Masuk, serta cegah bentrok nomor urut transaksi/retur setelah penghapusan sebagian riwayat."
+        }
+      ]
+    },
+    {
       "version": "1.2.21",
       "date": "2026-11-17T11:42:20+07:00",
       "title": "Fitur Pencarian Langsung pada Dropdown Pilih Barang",

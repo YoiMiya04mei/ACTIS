@@ -110,7 +110,7 @@ export function DeleteTransactionDialog({
     if (target.entity === "IN") {
       return (
         <>
-          Saldo <strong>Stok Inventory</strong> dan Serial Number dari transaksi masuk yang dihapus akan otomatis dikurangi/dibatalkan. Penghapusan ditolak bila stok atau SN sudah terpakai di transaksi keluar.
+          Penghapusan ini <strong>hanya menghapus catatan Riwayat Transaksi Barang Masuk</strong>. Saldo <strong>Stok Inventory</strong> serta data <strong>Serial Number</strong> dari transaksi sebelumnya <strong>tidak akan berubah atau terhapus</strong>.
         </>
       );
     }

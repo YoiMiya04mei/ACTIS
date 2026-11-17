@@ -56,13 +56,19 @@ export async function POST(request: NextRequest) {
       user_agent: userAgent,
     }).catch(() => {});
 
+    const message =
+      type === "IN"
+        ? mode === "all"
+          ? `Seluruh ${result.count} riwayat transaksi Barang Masuk berhasil dihapus tanpa mengubah saldo Stok Inventory dan Serial Number.`
+          : `${result.count} riwayat transaksi Barang Masuk terpilih berhasil dihapus tanpa mengubah saldo Stok Inventory dan Serial Number.`
+        : mode === "all"
+          ? `Seluruh ${result.count} riwayat transaksi Barang Keluar berhasil dihapus dan stok telah disinkronkan.`
+          : `${result.count} transaksi Barang Keluar terpilih berhasil dihapus dan stok telah disinkronkan.`;
+
     return NextResponse.json({
       success: true,
       data: result,
-      message:
-        mode === "all"
-          ? `Seluruh ${result.count} riwayat transaksi ${type === "IN" ? "Barang Masuk" : "Barang Keluar"} berhasil dihapus dan stok telah disinkronkan.`
-          : `${result.count} transaksi ${type === "IN" ? "Barang Masuk" : "Barang Keluar"} terpilih berhasil dihapus dan stok telah disinkronkan.`,
+      message,
     });
   } catch (error: any) {
     const status = error?.statusCode === 404 ? 404 : 400;

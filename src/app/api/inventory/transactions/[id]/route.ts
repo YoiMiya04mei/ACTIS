@@ -72,8 +72,8 @@ export async function GET(
 }
 
 /**
- * Deletes an IN or OUT transaction and reverses stock/SN/return state.
- * Strictly restricted to accounts with the Administrator role (`role === "admin"`).
+ * Deletes an IN (history-only, preserving stock balances & SNs) or OUT transaction
+ * (reversing stock/SN/return state). Strictly restricted to Administrator role (`role === "admin"`).
  */
 export async function DELETE(
   request: NextRequest,
@@ -101,14 +101,22 @@ export async function DELETE(
       ip_address: clientIp,
       tipe: "DELETE_DATA",
       aktifitas: `Menghapus riwayat transaksi ${result.type} (${result.transaction_number})`,
-      detail: `ID: ${result.id}`,
+      detail:
+        result.type === "IN"
+          ? `ID: ${result.id} (tanpa mengubah saldo Stok Inventory & Serial Number)`
+          : `ID: ${result.id}`,
       user_agent: userAgent,
     }).catch(() => {});
+
+    const message =
+      result.type === "IN"
+        ? `Riwayat transaksi Barang Masuk ${result.transaction_number} berhasil dihapus tanpa mengubah saldo Stok Inventory dan Serial Number.`
+        : `Transaksi ${result.transaction_number} berhasil dihapus dan stok telah disinkronkan.`;
 
     return NextResponse.json({
       success: true,
       data: result,
-      message: `Transaksi ${result.transaction_number} berhasil dihapus dan stok telah disinkronkan.`,
+      message,
     });
   } catch (error: any) {
     const status = error?.statusCode === 404 ? 404 : 400;

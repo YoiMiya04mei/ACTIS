@@ -7,9 +7,9 @@ import {
   validateFinishClientAllocations,
 } from "./inventoryClientFinish";
 import {
-  computeStockInDeleteReversal,
+  buildStockInHistoryOnlyDeletePlan,
+  computeNextTransactionSequence,
   computeStockOutDeleteReversal,
-  type ExistingItemUnitState,
 } from "./inventoryTransactionDelete";
 import {
   formatWorkTypeLabel,
@@ -36,16 +36,21 @@ export async function generateTransactionNumber(
   const dateStr = getDateString();
   const prefix = `${type}-${dateStr}-`;
 
-  const count = await client.inventoryTransaction.count({
+  const existing = await client.inventoryTransaction.findMany({
     where: {
       transaction_number: {
         startsWith: prefix,
       },
     },
+    select: {
+      transaction_number: true,
+    },
   });
 
-  const nextSeq = String(count + 1).padStart(4, "0");
-  return `${prefix}${nextSeq}`;
+  return computeNextTransactionSequence(
+    prefix,
+    existing.map((row) => row.transaction_number)
+  );
 }
 
 /**
@@ -58,16 +63,21 @@ export async function generateReturnNumber(
   const dateStr = getDateString();
   const prefix = `RET-${dateStr}-`;
 
-  const count = await client.inventoryReturn.count({
+  const existing = await client.inventoryReturn.findMany({
     where: {
       return_number: {
         startsWith: prefix,
       },
     },
+    select: {
+      return_number: true,
+    },
   });
 
-  const nextSeq = String(count + 1).padStart(4, "0");
-  return `${prefix}${nextSeq}`;
+  return computeNextTransactionSequence(
+    prefix,
+    existing.map((row) => row.return_number)
+  );
 }
 
 /**
@@ -1620,48 +1630,16 @@ async function deleteSingleTransactionInTx(
     );
   }
 
+  let historyOnlyInPlan: ReturnType<typeof buildStockInHistoryOnlyDeletePlan> | null = null;
+
   if (existingTx.type === "IN") {
-    const allSns = existingTx.details.flatMap((d) => parseSerialList(d.unit_serial_numbers));
-    const unitRows =
-      allSns.length > 0
-        ? await tx.inventoryItemUnit.findMany({
-          where: { serial_number: { in: allSns } },
-          select: { serial_number: true, item_id: true, status: true },
-        })
-        : [];
-    const unitMap = new Map<string, ExistingItemUnitState>(
-      unitRows.map((u) => [u.serial_number, u])
+    // History-only removal: Stock balances and Serial Numbers from prior Stock-In
+    // transactions must remain intact and deletion must never be blocked.
+    historyOnlyInPlan = buildStockInHistoryOnlyDeletePlan(
+      existingTx.id,
+      existingTx.transaction_number,
+      existingTx.details
     );
-
-    const plan = computeStockInDeleteReversal(existingTx.details, unitMap);
-
-    for (const [itemId, dec] of plan.stockDecrementsByItem.entries()) {
-      const detailStock = existingTx.details.find((d) => d.item_id === itemId)?.item?.stock;
-      if (!detailStock) continue;
-      await tx.inventoryStock.update({
-        where: { id: dec.stockId },
-        data: {
-          total_in: Prisma.Decimal.max(
-            0,
-            new Prisma.Decimal(detailStock.total_in).minus(dec.decrementTotalIn)
-          ),
-          available_stock: Prisma.Decimal.max(
-            0,
-            new Prisma.Decimal(detailStock.available_stock).minus(dec.decrementAvailable)
-          ),
-        },
-      });
-    }
-
-    for (const snEntry of plan.serialsToDelete) {
-      await tx.inventoryItemUnit.deleteMany({
-        where: {
-          item_id: snEntry.itemId,
-          serial_number: snEntry.serialNumber,
-          status: "AVAILABLE",
-        },
-      });
-    }
   } else {
     const plan = computeStockOutDeleteReversal(existingTx.details, existingTx.returns);
 
@@ -1750,8 +1728,22 @@ async function deleteSingleTransactionInTx(
         action: "DELETE",
         user_id: payload.deleted_by || null,
         user_name: payload.user_name || "Administrator",
-        data_before: JSON.stringify(existingTx),
-        reason: `Penghapusan riwayat transaksi ${existingTx.type} (${existingTx.transaction_number}) oleh Administrator`,
+        data_before: JSON.stringify(
+          historyOnlyInPlan
+            ? {
+                id: existingTx.id,
+                transaction_number: existingTx.transaction_number,
+                type: existingTx.type,
+                preserve_stock_and_serials: historyOnlyInPlan.preserveStockAndSerials,
+                unaffected_item_ids: historyOnlyInPlan.unaffectedItemIds,
+                preserved_serial_numbers: historyOnlyInPlan.preservedSerialNumbers,
+              }
+            : existingTx
+        ),
+        reason:
+          existingTx.type === "IN"
+            ? `Penghapusan riwayat transaksi Barang Masuk (${existingTx.transaction_number}) oleh Administrator (tanpa mengubah saldo Stok Inventory dan Serial Number)`
+            : `Penghapusan riwayat transaksi ${existingTx.type} (${existingTx.transaction_number}) oleh Administrator`,
       },
     });
   }
@@ -1764,9 +1756,9 @@ async function deleteSingleTransactionInTx(
 }
 
 /**
- * Deletes an IN or OUT transaction atomically (Administrator-only via API guard),
- * reversing InventoryStock balances, InventoryItemUnit states, linked returns/client usages,
- * and recording an audit trail snapshot before removal.
+ * Deletes an IN (history-only, keeping InventoryStock & InventoryItemUnit intact)
+ * or OUT (reversing InventoryStock balances, InventoryItemUnit states, linked returns/client usages)
+ * transaction atomically (Administrator-only via API guard), recording an audit snapshot.
  */
 export async function deleteInventoryTransaction(payload: DeleteTransactionPayload) {
   if (!payload.transaction_id) {
@@ -1786,7 +1778,9 @@ export interface BulkDeleteTransactionPayload {
 
 /**
  * Deletes multiple selected transactions or all transactions of type IN/OUT atomically
- * inside a single database transaction (newest-first so stock/SN dependencies unwind cleanly).
+ * inside a single database transaction.
+ * For IN: deletes history only without modifying stock balances or Serial Numbers.
+ * For OUT: reverses stock & SN state newest-first cleanly.
  */
 export async function deleteBulkInventoryTransactions(payload: BulkDeleteTransactionPayload) {
   if (payload.type !== "IN" && payload.type !== "OUT") {
@@ -1821,15 +1815,46 @@ export async function deleteBulkInventoryTransactions(payload: BulkDeleteTransac
       }
 
       const deletedList: Array<{ id: string; transaction_number: string; type: string }> = [];
-      for (const target of targetTxs) {
-        const res = await deleteSingleTransactionInTx(tx, {
-          transaction_id: target.id,
-          deleted_by: payload.deleted_by,
-          user_name: payload.user_name,
-          skipAuditLog: true,
+      if (payload.type === "IN") {
+        const targetIds = targetTxs.map((t) => t.id);
+        await tx.inventoryMovement.deleteMany({
+          where: {
+            OR: [{ transaction_id: { in: targetIds } }, { reference_id: { in: targetIds } }],
+          },
         });
-        deletedList.push(res);
+        await tx.inventoryTransaction.deleteMany({
+          where: {
+            id: { in: targetIds },
+            type: "IN",
+          },
+        });
+        for (const t of targetTxs) {
+          deletedList.push({
+            id: t.id,
+            transaction_number: t.transaction_number,
+            type: "IN",
+          });
+        }
+      } else {
+        for (const target of targetTxs) {
+          const res = await deleteSingleTransactionInTx(tx, {
+            transaction_id: target.id,
+            deleted_by: payload.deleted_by,
+            user_name: payload.user_name,
+            skipAuditLog: true,
+          });
+          deletedList.push(res);
+        }
       }
+
+      const bulkReason =
+        payload.type === "IN"
+          ? payload.mode === "all"
+            ? `Penghapusan keseluruhan riwayat transaksi Barang Masuk (${deletedList.length} transaksi) oleh Administrator (tanpa mengubah saldo Stok Inventory dan Serial Number)`
+            : `Penghapusan massal ${deletedList.length} riwayat transaksi Barang Masuk terpilih oleh Administrator (tanpa mengubah saldo Stok Inventory dan Serial Number)`
+          : payload.mode === "all"
+            ? `Penghapusan keseluruhan riwayat transaksi ${payload.type} (${deletedList.length} transaksi) oleh Administrator`
+            : `Penghapusan massal ${deletedList.length} transaksi ${payload.type} terpilih oleh Administrator`;
 
       await tx.inventoryAuditLog.create({
         data: {
@@ -1842,12 +1867,10 @@ export async function deleteBulkInventoryTransactions(payload: BulkDeleteTransac
             type: payload.type,
             mode: payload.mode,
             count: deletedList.length,
+            preserve_stock_and_serials: payload.type === "IN",
             transactions: deletedList.map((d) => d.transaction_number),
           }),
-          reason:
-            payload.mode === "all"
-              ? `Penghapusan keseluruhan riwayat transaksi ${payload.type} (${deletedList.length} transaksi) oleh Administrator`
-              : `Penghapusan massal ${deletedList.length} transaksi ${payload.type} terpilih oleh Administrator`,
+          reason: bulkReason,
         },
       });
 
