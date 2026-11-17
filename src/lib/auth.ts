@@ -8,13 +8,16 @@ import {
   revokeRememberMeToken,
   verifyPasswordFingerprint,
   getSafeSessionSecret,
+  type RememberPurpose,
   type RememberTokenPayload,
+  type SessionPurpose,
 } from "@/lib/security";
 
 export interface SessionUser {
   id: string;
   nama: string;
   email: string;
+  username?: string | null;
   role: string;
   exp?: number;
   iat?: number;
@@ -66,7 +69,7 @@ export function verifyPassword(
 export function createSessionToken(
   user: SessionUser,
   expiresInSeconds?: number,
-  extra?: { rememberMe?: boolean }
+  extra?: { rememberMe?: boolean; purpose?: SessionPurpose }
 ): string {
   return createSecureSessionToken(user, expiresInSeconds, extra);
 }
@@ -75,14 +78,18 @@ export function createSessionToken(
  * Verify a session token and extract SessionUser.
  * Checks cryptographic signature, expiration, and revocation.
  */
-export function verifySessionToken(token: string | null | undefined): SessionUser | null {
-  const verified = verifySecureSessionToken(token);
+export function verifySessionToken(
+  token: string | null | undefined,
+  expectedPurpose: SessionPurpose = "session"
+): SessionUser | null {
+  const verified = verifySecureSessionToken(token, expectedPurpose);
   if (!verified) return null;
 
   return {
     id: verified.id,
     nama: verified.nama,
     email: verified.email,
+    username: verified.username,
     role: verified.role,
     exp: verified.exp,
     iat: verified.iat,
@@ -94,8 +101,11 @@ export function verifySessionToken(token: string | null | undefined): SessionUse
 /**
  * Invalidate a session token on logout.
  */
-export function invalidateSessionToken(token: string | null | undefined): void {
-  revokeSessionToken(token);
+export function invalidateSessionToken(
+  token: string | null | undefined,
+  expectedPurpose: SessionPurpose = "session"
+): void {
+  revokeSessionToken(token, expectedPurpose);
 }
 
 /**
@@ -104,23 +114,30 @@ export function invalidateSessionToken(token: string | null | undefined): void {
 export function createRememberToken(
   user: { id: string; email: string },
   passwordHash: string | null | undefined,
-  expiresInSeconds?: number
+  expiresInSeconds?: number,
+  purpose: RememberPurpose = "remember_me"
 ): string {
-  return createRememberMeToken(user, passwordHash, expiresInSeconds);
+  return createRememberMeToken(user, passwordHash, expiresInSeconds, purpose);
 }
 
 /**
  * Verify a cryptographic Remember Me token.
  */
-export function verifyRememberToken(token: string | null | undefined): RememberTokenPayload | null {
-  return verifyRememberMeToken(token);
+export function verifyRememberToken(
+  token: string | null | undefined,
+  expectedPurpose: RememberPurpose = "remember_me"
+): RememberTokenPayload | null {
+  return verifyRememberMeToken(token, expectedPurpose);
 }
 
 /**
  * Revoke a Remember Me token.
  */
-export function invalidateRememberToken(token: string | null | undefined): void {
-  revokeRememberMeToken(token);
+export function invalidateRememberToken(
+  token: string | null | undefined,
+  expectedPurpose: RememberPurpose = "remember_me"
+): void {
+  revokeRememberMeToken(token, expectedPurpose);
 }
 
 export { getSafeSessionSecret, verifyPasswordFingerprint };

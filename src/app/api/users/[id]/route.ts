@@ -5,6 +5,11 @@ import { requireAuth, getRequestClientIp } from "@/lib/security";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 import {
   ALL_USER_ROLES,
+  REQUEST_BARANG_ROLE,
+  buildInternalRequestBarangEmail,
+  isInternalPlaceholderEmail,
+  isValidUsername,
+  normalizeUsername,
   resolveDefaultRequestBarangAccess,
 } from "@/lib/requestBarangAuth";
 
@@ -19,7 +24,7 @@ export async function PUT(
   try {
     const { id } = await context.params;
     const body = await request.json().catch(() => ({}));
-    const { nama, email, role, password, request_barang_access } = body;
+    const { nama, email, username, role, password, request_barang_access } = body;
 
     const existingUser = await prisma.user.findUnique({
       where: { id },
@@ -39,14 +44,71 @@ export async function PUT(
       );
     }
 
-    if (!nama || !email) {
+    const targetRole = (ALL_USER_ROLES as readonly string[]).includes(role)
+      ? role
+      : existingUser.role;
+
+    const cleanUsername =
+      username !== undefined ? normalizeUsername(username) : normalizeUsername(existingUser.username);
+
+    if (!nama) {
       return NextResponse.json(
-        { success: false, error: "Nama dan email wajib diisi." },
+        { success: false, error: "Nama lengkap wajib diisi." },
         { status: 400 }
       );
     }
 
-    const cleanEmail = String(email).trim().toLowerCase();
+    if (targetRole === REQUEST_BARANG_ROLE && !cleanUsername) {
+      return NextResponse.json(
+        { success: false, error: "Username wajib diisi untuk akun User Request Barang." },
+        { status: 400 }
+      );
+    }
+
+    if (cleanUsername && !isValidUsername(cleanUsername)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Username harus 3–50 karakter (huruf, angka, titik, underscore _, atau strip -, tanpa @).",
+        },
+        { status: 400 }
+      );
+    }
+
+    const rawEmail = String(email ?? "").trim().toLowerCase();
+    if (
+      targetRole !== REQUEST_BARANG_ROLE &&
+      (!rawEmail || isInternalPlaceholderEmail(rawEmail))
+    ) {
+      return NextResponse.json(
+        { success: false, error: "Email kantor valid wajib diisi untuk role staf ACTIS." },
+        { status: 400 }
+      );
+    }
+
+    const cleanEmail =
+      rawEmail && !isInternalPlaceholderEmail(rawEmail)
+        ? rawEmail
+        : cleanUsername
+          ? buildInternalRequestBarangEmail(cleanUsername)
+          : existingUser.email;
+
+    if (cleanUsername) {
+      const dupUsername = await prisma.user.findFirst({
+        where: {
+          username: cleanUsername,
+          id: { not: id },
+        },
+        select: { id: true },
+      });
+      if (dupUsername) {
+        return NextResponse.json(
+          { success: false, error: `Username '${cleanUsername}' sudah digunakan oleh pengguna lain.` },
+          { status: 400 }
+        );
+      }
+    }
 
     // Check email uniqueness if email changed
     if (cleanEmail !== existingUser.email) {
@@ -65,20 +127,17 @@ export async function PUT(
       }
     }
 
-    // Role validation
-    const targetRole = (ALL_USER_ROLES as readonly string[]).includes(role)
-      ? role
-      : existingUser.role;
-
     const updateData: {
       nama: string;
       email: string;
+      username: string | null;
       role: string;
       request_barang_access?: boolean | null;
       password_hash?: string;
     } = {
       nama: String(nama).trim(),
       email: cleanEmail,
+      username: cleanUsername || null,
       role: targetRole,
     };
 
@@ -106,6 +165,7 @@ export async function PUT(
         id: true,
         nama: true,
         email: true,
+        username: true,
         role: true,
         request_barang_access: true,
         created_at: true,
@@ -362,6 +422,7 @@ export async function PATCH(
         id: true,
         nama: true,
         email: true,
+        username: true,
         role: true,
         request_barang_access: true,
         created_at: true,

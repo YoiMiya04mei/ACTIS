@@ -38,6 +38,7 @@ import {
 } from "@/lib/ticketUtils";
 import {
   hasRequestBarangAccess,
+  isInternalPlaceholderEmail,
   REQUEST_BARANG_LOGIN_SETTING_KEY,
 } from "@/lib/requestBarangAuth";
 
@@ -51,6 +52,7 @@ export default function UserSettingsPage() {
   // Add User Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newNama, setNewNama] = useState("");
+  const [newUsername, setNewUsername] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState("noc_engineer");
@@ -63,6 +65,7 @@ export default function UserSettingsPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editUserId, setEditUserId] = useState("");
   const [editNama, setEditNama] = useState("");
+  const [editUsername, setEditUsername] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editRole, setEditRole] = useState("noc_engineer");
   const [editReqBarangAccess, setEditReqBarangAccess] = useState(false);
@@ -477,6 +480,7 @@ export default function UserSettingsPage() {
     setAddError(null);
     setAddSuccess(null);
     setNewNama("");
+    setNewUsername("");
     setNewEmail("");
     setNewPassword("");
     setNewRole(presetRole);
@@ -559,8 +563,21 @@ export default function UserSettingsPage() {
     setAddError(null);
     setAddSuccess(null);
 
-    if (!newNama || !newEmail || !newPassword) {
-      setAddError("Nama, email, dan password wajib diisi.");
+    const isReqRole = newRole === "request_barang";
+    const cleanUsername = newUsername.trim().toLowerCase();
+
+    if (!newNama.trim() || !newPassword) {
+      setAddError("Nama lengkap dan password wajib diisi.");
+      return;
+    }
+
+    if (isReqRole && !cleanUsername) {
+      setAddError("Username wajib diisi untuk akun User Request Barang.");
+      return;
+    }
+
+    if (!isReqRole && !newEmail.trim()) {
+      setAddError("Email kantor wajib diisi.");
       return;
     }
 
@@ -571,8 +588,9 @@ export default function UserSettingsPage() {
 
     setAddLoading(true);
     const res = await addUser({
-      nama: newNama,
-      email: newEmail,
+      nama: newNama.trim(),
+      email: isReqRole ? undefined : newEmail.trim(),
+      username: cleanUsername || undefined,
       password: newPassword,
       role: newRole,
       request_barang_access: newReqBarangAccess,
@@ -584,6 +602,7 @@ export default function UserSettingsPage() {
     } else {
       setAddSuccess(`Pengguna '${newNama}' berhasil ditambahkan.`);
       setNewNama("");
+      setNewUsername("");
       setNewEmail("");
       setNewPassword("");
       setNewRole("noc_engineer");
@@ -598,7 +617,8 @@ export default function UserSettingsPage() {
   const handleOpenEdit = (user: any) => {
     setEditUserId(user.id);
     setEditNama(user.nama);
-    setEditEmail(user.email);
+    setEditUsername(user.username || "");
+    setEditEmail(isInternalPlaceholderEmail(user.email) ? "" : user.email || "");
     setEditRole(user.role);
     setEditReqBarangAccess(hasRequestBarangAccess(user));
     setEditPassword("");
@@ -612,8 +632,21 @@ export default function UserSettingsPage() {
     setEditError(null);
     setEditSuccess(null);
 
-    if (!editNama || !editEmail) {
-      setEditError("Nama dan email wajib diisi.");
+    const isReqRole = editRole === "request_barang";
+    const cleanUsername = editUsername.trim().toLowerCase();
+
+    if (!editNama.trim()) {
+      setEditError("Nama lengkap wajib diisi.");
+      return;
+    }
+
+    if (isReqRole && !cleanUsername) {
+      setEditError("Username wajib diisi untuk akun User Request Barang.");
+      return;
+    }
+
+    if (!isReqRole && !editEmail.trim()) {
+      setEditError("Email kantor wajib diisi.");
       return;
     }
 
@@ -624,8 +657,9 @@ export default function UserSettingsPage() {
 
     setEditLoading(true);
     const res = await updateUser(editUserId, {
-      nama: editNama,
-      email: editEmail,
+      nama: editNama.trim(),
+      email: isReqRole && !editEmail.trim() ? undefined : editEmail.trim(),
+      username: cleanUsername || undefined,
       role: editRole,
       password: editPassword || undefined,
       request_barang_access: editReqBarangAccess,
@@ -696,6 +730,7 @@ export default function UserSettingsPage() {
     const q = searchTerm.toLowerCase();
     return (
       u.nama.toLowerCase().includes(q) ||
+      (u.username || "").toLowerCase().includes(q) ||
       u.email.toLowerCase().includes(q) ||
       u.role.toLowerCase().includes(q)
     );
@@ -813,7 +848,7 @@ export default function UserSettingsPage() {
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Cari nama, email, role..."
+                placeholder="Cari nama, username, email, role..."
                 className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
               />
             </div>
@@ -824,8 +859,8 @@ export default function UserSettingsPage() {
             <table className="w-full text-left text-xs text-slate-600">
               <thead className="bg-slate-50/80 text-[11px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200/80">
                 <tr>
-                  <th className="px-5 py-3.5">Nama & Pengguna</th>
-                  <th className="px-5 py-3.5">Email Kantor</th>
+                  <th className="px-5 py-3.5">Nama &amp; Pengguna</th>
+                  <th className="px-5 py-3.5">Username &amp; Email</th>
                   <th className="px-5 py-3.5">Level Akses (Role)</th>
                   <th className="px-5 py-3.5">Login /request-barang</th>
                   <th className="px-5 py-3.5">Hak Akses Sistem</th>
@@ -858,7 +893,20 @@ export default function UserSettingsPage() {
                       </td>
 
                       <td className="px-5 py-3.5 font-medium text-slate-600">
-                        {u.email}
+                        <div className="space-y-0.5">
+                          {(u.username || !isInternalPlaceholderEmail(u.email)) && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 font-mono text-[11px] font-bold">
+                              @{u.username || u.email.split("@")[0]}
+                            </span>
+                          )}
+                          {!isInternalPlaceholderEmail(u.email) ? (
+                            <span className="block text-[11px] text-slate-500">{u.email}</span>
+                          ) : (
+                            <span className="block text-[10px] text-sky-700 font-semibold">
+                              Login Username Portal Request
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td className="px-5 py-3.5">
@@ -1533,17 +1581,36 @@ export default function UserSettingsPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Email Kantor
+                  Username {newRole === "request_barang" ? "*" : "(Opsional / Login /request-barang)"}
                 </label>
                 <input
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="joko.susilo@isp-enterprise.net"
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
-                  required
+                  type="text"
+                  value={newUsername}
+                  onChange={(e) => setNewUsername(e.target.value.replace(/\s+/g, "").toLowerCase())}
+                  placeholder="cth: rendi.teknisi (tanpa spasi & @)"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
+                  required={newRole === "request_barang"}
                 />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Minimal 3 karakter (huruf, angka, titik, underscore `_`, atau strip `-`). Digunakan untuk login ke <code>/request-barang</code>.
+                </p>
               </div>
+
+              {newRole !== "request_barang" && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Email Kantor
+                  </label>
+                  <input
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder="joko.susilo@isp-enterprise.net"
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
+                    required
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -1691,17 +1758,33 @@ export default function UserSettingsPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Email Kantor
+                  Username {editRole === "request_barang" ? "*" : "(Opsional / Login /request-barang)"}
                 </label>
                 <input
-                  type="email"
-                  value={editEmail}
-                  onChange={(e) => setEditEmail(e.target.value)}
-                  placeholder="email@isp-enterprise.net"
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
-                  required
+                  type="text"
+                  value={editUsername}
+                  onChange={(e) => setEditUsername(e.target.value.replace(/\s+/g, "").toLowerCase())}
+                  placeholder="cth: rendi.teknisi (tanpa spasi & @)"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
+                  required={editRole === "request_barang"}
                 />
               </div>
+
+              {editRole !== "request_barang" && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Email Kantor
+                  </label>
+                  <input
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    placeholder="email@isp-enterprise.net"
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
+                    required
+                  />
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">

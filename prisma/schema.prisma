@@ -11,6 +11,7 @@ model User {
   id                    String   @id @default(uuid())
   nama                  String
   email                 String   @unique
+  username              String?  @unique
   password_hash         String?
   role                  String   @default("noc_engineer") // admin, noc_engineer, field_engineer, sales_corporate, warehouse_admin, request_barang
   request_barang_access Boolean? // null inherits role default (true for admin/request_barang); explicit boolean overrides

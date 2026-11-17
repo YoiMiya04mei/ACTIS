@@ -6,6 +6,7 @@ export interface AppUser {
   id: string;
   nama: string;
   email: string;
+  username?: string | null;
   role:
     | "admin"
     | "noc_engineer"
@@ -69,7 +70,8 @@ interface UserContextType {
   changePassword: (oldPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   addUser: (data: {
     nama: string;
-    email: string;
+    email?: string;
+    username?: string;
     password: string;
     role: string;
     request_barang_access?: boolean;
@@ -78,7 +80,8 @@ interface UserContextType {
     id: string,
     data: {
       nama: string;
-      email: string;
+      email?: string;
+      username?: string;
       role: string;
       password?: string;
       request_barang_access?: boolean;
@@ -305,7 +308,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const addUser = async (userData: {
     nama: string;
-    email: string;
+    email?: string;
+    username?: string;
     password: string;
     role: string;
     request_barang_access?: boolean;
@@ -335,7 +339,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     id: string,
     userData: {
       nama: string;
-      email: string;
+      email?: string;
+      username?: string;
       role: string;
       password?: string;
       request_barang_access?: boolean;
@@ -362,6 +367,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           ...currentUser,
           nama: data.data.nama,
           email: data.data.email,
+          username: data.data.username,
           role: data.data.role,
           request_barang_access: data.data.request_barang_access,
         };

@@ -104,10 +104,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (user.role === "request_barang") {
+      recordActivity({
+        nama_lengkap: user.nama,
+        email: user.email,
+        ip_address: clientIp,
+        tipe: "LOGIN_FAILED",
+        aktifitas: `Login ke dashboard utama ditolak — akun khusus Web /request-barang harus login di /request-barang — ${userAgent}`,
+        user_agent: userAgent,
+      }).catch(() => {});
+
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Akun ini khusus untuk Web Request Barang. Silakan login menggunakan username di /request-barang.",
+        },
+        { status: 403 }
+      );
+    }
+
     const sessionPayload = {
       id: user.id,
       nama: user.nama,
       email: user.email,
+      username: user.username,
       role: user.role,
     };
 

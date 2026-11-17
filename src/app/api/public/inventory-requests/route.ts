@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkRateLimit, requireAuth, type AuthenticatedUser } from "@/lib/security";
+import { prisma } from "@/lib/prisma";
+import {
+  checkRateLimit,
+  RB_SESSION_COOKIE_NAME,
+  verifySecureSessionToken,
+  type AuthenticatedUser,
+} from "@/lib/security";
 import {
   createPublicInventoryRequest,
   getPublicInventoryCatalog,
@@ -28,16 +34,42 @@ async function guardRequestBarangApiAccess(
   | { ok: false; response: NextResponse }
 > {
   const loginRequired = await isRequestBarangLoginRequired();
-  const auth = await requireAuth(request, { allowRequestBarangOnly: true });
+  const rbToken = request.cookies.get(RB_SESSION_COOKIE_NAME)?.value;
+  const session = verifySecureSessionToken(rbToken, "rb_session");
 
-  if (!auth.ok) {
+  let dbUser: AuthenticatedUser | null = null;
+  if (session) {
+    dbUser = await prisma.user.findUnique({
+      where: { id: session.id },
+      select: {
+        id: true,
+        nama: true,
+        email: true,
+        username: true,
+        role: true,
+        request_barang_access: true,
+      },
+    });
+  }
+
+  if (!dbUser) {
     if (loginRequired) {
-      return { ok: false, response: auth.response };
+      return {
+        ok: false,
+        response: NextResponse.json(
+          {
+            success: false,
+            code: "AUTH_REQUIRED",
+            error: "Silakan login ke portal Web Request Barang terlebih dahulu.",
+          },
+          { status: 401 }
+        ),
+      };
     }
     return { ok: true, user: null };
   }
 
-  if (loginRequired && !hasRequestBarangAccess(auth.user)) {
+  if (loginRequired && !hasRequestBarangAccess(dbUser)) {
     return {
       ok: false,
       response: NextResponse.json(
@@ -52,7 +84,7 @@ async function guardRequestBarangApiAccess(
     };
   }
 
-  return { ok: true, user: auth.user };
+  return { ok: true, user: dbUser };
 }
 
 export async function GET(request: NextRequest) {

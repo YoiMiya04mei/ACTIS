@@ -12,23 +12,29 @@ export type UserRole =
   | "request_barang";
 
 export const REMEMBER_COOKIE_NAME = "actis_remember";
+export const RB_SESSION_COOKIE_NAME = "actis_rb_session";
+export const RB_REMEMBER_COOKIE_NAME = "actis_rb_remember";
 export const REMEMBER_TOKEN_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 export const DEFAULT_SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
+
+export type SessionPurpose = "session" | "rb_session";
+export type RememberPurpose = "remember_me" | "rb_remember";
 
 export interface SessionPayload {
   id: string;
   nama: string;
   email: string;
+  username?: string | null;
   role: string;
   iat: number;
   exp: number;
   jti: string;
-  purpose?: "session";
+  purpose?: SessionPurpose;
   rememberMe?: boolean;
 }
 
 export interface RememberTokenPayload {
-  purpose: "remember_me";
+  purpose: RememberPurpose;
   id: string;
   email: string;
   pwdSig: string;
@@ -41,6 +47,7 @@ export interface AuthenticatedUser {
   id: string;
   nama: string;
   email: string;
+  username?: string | null;
   role: string;
   request_barang_access?: boolean | null;
 }
@@ -113,20 +120,21 @@ export function getSafeSessionSecret(): string {
  * Creates a cryptographically signed, tamper-proof session token with expiration and JTI.
  */
 export function createSecureSessionToken(
-  user: { id: string; nama: string; email: string; role: string },
+  user: { id: string; nama: string; email: string; role: string; username?: string | null },
   expiresInSeconds = DEFAULT_SESSION_MAX_AGE,
-  extra?: { rememberMe?: boolean }
+  extra?: { rememberMe?: boolean; purpose?: SessionPurpose }
 ): string {
   const now = Math.floor(Date.now() / 1000);
   const payload: SessionPayload = {
     id: user.id,
     nama: user.nama,
     email: user.email,
+    ...(user.username !== undefined ? { username: user.username } : {}),
     role: user.role,
     iat: now,
     exp: now + expiresInSeconds,
     jti: crypto.randomBytes(16).toString("hex"),
-    purpose: "session",
+    purpose: extra?.purpose || "session",
     ...(extra?.rememberMe !== undefined ? { rememberMe: extra.rememberMe } : {}),
   };
 
@@ -164,7 +172,10 @@ export function verifyPasswordFingerprint(
 /**
  * Verifies and decodes a session token. Checks signature, expiry, purpose isolation, and revocation.
  */
-export function verifySecureSessionToken(token: string | null | undefined): SessionPayload | null {
+export function verifySecureSessionToken(
+  token: string | null | undefined,
+  expectedPurpose: SessionPurpose = "session"
+): SessionPayload | null {
   if (!token || typeof token !== "string") return null;
   const parts = token.split(".");
   if (parts.length !== 2) return null;
@@ -188,8 +199,9 @@ export function verifySecureSessionToken(token: string | null | undefined): Sess
     const jsonStr = Buffer.from(payloadB64, "base64url").toString("utf8");
     const payload = JSON.parse(jsonStr) as SessionPayload & { purpose?: string };
 
-    // Prevent token-type confusion: remember_me tokens must never act as session tokens
-    if (payload.purpose && payload.purpose !== "session") {
+    // Prevent token-type and cross-portal confusion
+    const actualPurpose = payload.purpose || "session";
+    if (actualPurpose !== expectedPurpose) {
       return null;
     }
 
@@ -213,8 +225,11 @@ export function verifySecureSessionToken(token: string | null | undefined): Sess
 /**
  * Revokes a session token so it cannot be used again.
  */
-export function revokeSessionToken(token: string | null | undefined): void {
-  const session = verifySecureSessionToken(token);
+export function revokeSessionToken(
+  token: string | null | undefined,
+  expectedPurpose: SessionPurpose = "session"
+): void {
+  const session = verifySecureSessionToken(token, expectedPurpose);
   if (session && session.jti) {
     revokedTokens.set(session.jti, session.exp);
   }
@@ -226,11 +241,12 @@ export function revokeSessionToken(token: string | null | undefined): void {
 export function createRememberMeToken(
   user: { id: string; email: string },
   passwordHash: string | null | undefined,
-  expiresInSeconds = REMEMBER_TOKEN_MAX_AGE
+  expiresInSeconds = REMEMBER_TOKEN_MAX_AGE,
+  purpose: RememberPurpose = "remember_me"
 ): string {
   const now = Math.floor(Date.now() / 1000);
   const payload: RememberTokenPayload = {
-    purpose: "remember_me",
+    purpose,
     id: user.id,
     email: user.email,
     pwdSig: computePasswordFingerprint(passwordHash),
@@ -249,7 +265,10 @@ export function createRememberMeToken(
 /**
  * Verifies a Remember Me token signature, purpose, expiration, and revocation list.
  */
-export function verifyRememberMeToken(token: string | null | undefined): RememberTokenPayload | null {
+export function verifyRememberMeToken(
+  token: string | null | undefined,
+  expectedPurpose: RememberPurpose = "remember_me"
+): RememberTokenPayload | null {
   if (!token || typeof token !== "string") return null;
   const parts = token.split(".");
   if (parts.length !== 2) return null;
@@ -273,7 +292,7 @@ export function verifyRememberMeToken(token: string | null | undefined): Remembe
     const jsonStr = Buffer.from(payloadB64, "base64url").toString("utf8");
     const payload = JSON.parse(jsonStr) as RememberTokenPayload;
 
-    if (payload.purpose !== "remember_me" || !payload.id || !payload.email || !payload.pwdSig) {
+    if (payload.purpose !== expectedPurpose || !payload.id || !payload.email || !payload.pwdSig) {
       return null;
     }
 
@@ -295,8 +314,11 @@ export function verifyRememberMeToken(token: string | null | undefined): Remembe
 /**
  * Revokes a Remember Me token so it cannot be replayed again.
  */
-export function revokeRememberMeToken(token: string | null | undefined): void {
-  const remembered = verifyRememberMeToken(token);
+export function revokeRememberMeToken(
+  token: string | null | undefined,
+  expectedPurpose: RememberPurpose = "remember_me"
+): void {
+  const remembered = verifyRememberMeToken(token, expectedPurpose);
   if (remembered && remembered.jti) {
     revokedTokens.set(remembered.jti, remembered.exp);
   }
@@ -333,7 +355,14 @@ export async function requireAuth(
   // Always verify against live database record to ensure role and account are current
   const dbUser = await prisma.user.findUnique({
     where: { id: session.id },
-    select: { id: true, nama: true, email: true, role: true, request_barang_access: true },
+    select: {
+      id: true,
+      nama: true,
+      email: true,
+      username: true,
+      role: true,
+      request_barang_access: true,
+    },
   });
 
   if (!dbUser) {

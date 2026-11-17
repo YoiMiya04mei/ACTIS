@@ -5,6 +5,10 @@ import { requireAuth } from "@/lib/security";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 import {
   ALL_USER_ROLES,
+  REQUEST_BARANG_ROLE,
+  buildInternalRequestBarangEmail,
+  isValidUsername,
+  normalizeUsername,
   resolveDefaultRequestBarangAccess,
 } from "@/lib/requestBarangAuth";
 
@@ -24,6 +28,7 @@ export async function GET(request: NextRequest) {
         id: true,
         nama: true,
         email: true,
+        username: true,
         role: true,
         request_barang_access: true,
         created_at: true,
@@ -47,12 +52,15 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const { nama, email, password, role, request_barang_access } = body;
+    const { nama, email, username, password, role, request_barang_access } = body;
 
-    // Validate inputs
-    if (!nama || !email || !password) {
+    const targetRole = (ALL_USER_ROLES as readonly string[]).includes(role) ? role : "noc_engineer";
+    const cleanUsername = normalizeUsername(username);
+    const rawEmail = String(email || "").trim().toLowerCase();
+
+    if (!nama || !password) {
       return NextResponse.json(
-        { success: false, error: "Nama, email, dan password wajib diisi." },
+        { success: false, error: "Nama lengkap dan password wajib diisi." },
         { status: 400 }
       );
     }
@@ -64,19 +72,58 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const cleanEmail = String(email).trim().toLowerCase();
+    if (targetRole === REQUEST_BARANG_ROLE && !cleanUsername) {
+      return NextResponse.json(
+        { success: false, error: "Username wajib diisi untuk akun User Request Barang." },
+        { status: 400 }
+      );
+    }
+
+    if (cleanUsername && !isValidUsername(cleanUsername)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Username harus 3–50 karakter (huruf, angka, titik, underscore _, atau strip -, tanpa @).",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (targetRole !== REQUEST_BARANG_ROLE && !rawEmail) {
+      return NextResponse.json(
+        { success: false, error: "Email kantor wajib diisi untuk role staf ACTIS." },
+        { status: 400 }
+      );
+    }
+
+    const cleanEmail = rawEmail || buildInternalRequestBarangEmail(cleanUsername);
     if (cleanEmail === "system.archived@actis.internal") {
       return NextResponse.json(
         { success: false, error: "Email ini dicadangkan untuk keperluan arsip sistem internal." },
         { status: 400 }
       );
     }
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(cleanEmail)) {
       return NextResponse.json(
         { success: false, error: "Format email tidak valid." },
         { status: 400 }
       );
+    }
+
+    if (cleanUsername) {
+      const dupUsername = await prisma.user.findUnique({
+        where: { username: cleanUsername },
+        select: { id: true },
+      });
+      if (dupUsername) {
+        return NextResponse.json(
+          { success: false, error: `Username '${cleanUsername}' sudah digunakan oleh pengguna lain.` },
+          { status: 400 }
+        );
+      }
     }
 
     const existing = await prisma.user.findUnique({
@@ -90,7 +137,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const targetRole = (ALL_USER_ROLES as readonly string[]).includes(role) ? role : "noc_engineer";
     const resolvedReqAccess = resolveDefaultRequestBarangAccess(
       targetRole,
       request_barang_access
@@ -101,6 +147,7 @@ export async function POST(request: NextRequest) {
       data: {
         nama: String(nama).trim(),
         email: cleanEmail,
+        username: cleanUsername || null,
         password_hash: hashedPassword,
         role: targetRole,
         request_barang_access: resolvedReqAccess,
@@ -109,6 +156,7 @@ export async function POST(request: NextRequest) {
         id: true,
         nama: true,
         email: true,
+        username: true,
         role: true,
         request_barang_access: true,
         created_at: true,
