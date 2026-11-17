@@ -165,7 +165,7 @@ export function computeStockOutDeleteReversal(
 
   for (const detail of details) {
     const qtyOut = Number(detail.quantity || 0);
-    const isConsumable = detail.item?.type === "CONSUMABLE" || detail.status === "CONSUMED";
+    const isLegacyConsumed = detail.status === "CONSUMED";
     const stock = detail.item?.stock;
 
     let retGood = 0;
@@ -190,13 +190,13 @@ export function computeStockOutDeleteReversal(
           }
         }
       }
-    } else if (!isConsumable && Number(detail.qty_returned || 0) > 0) {
+    } else if (!isLegacyConsumed && Number(detail.qty_returned || 0) > 0) {
       // Legacy fallback when return detail rows aren't present
       retGood = Number(detail.qty_returned || 0);
     }
 
     const usedQty = Number(detail.qty_used || 0);
-    const inUseQty = isConsumable ? 0 : Number(detail.qty_remaining || 0);
+    const inUseQty = isLegacyConsumed ? 0 : Number(detail.qty_remaining || 0);
 
     if (stock && qtyOut > 0) {
       const prev = stockUpdatesByItem.get(detail.item_id) || {
@@ -210,7 +210,7 @@ export function computeStockOutDeleteReversal(
         subTotalLost: 0,
       };
 
-      if (isConsumable) {
+      if (isLegacyConsumed) {
         stockUpdatesByItem.set(detail.item_id, {
           stockId: stock.id,
           addAvailable: prev.addAvailable + qtyOut,

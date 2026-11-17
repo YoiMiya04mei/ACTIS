@@ -408,7 +408,7 @@ export interface StockOutPayload {
 /**
  * Stock Out: Issues stock out of warehouse.
  * Validates available stock atomically.
- * Differentiates Reusable vs Consumable.
+ * All issued inventory items enter tracking cleanly via Barang Sedang Digunakan.
  */
 export async function processStockOut(payload: StockOutPayload) {
   if (!payload.items || payload.items.length === 0) {
@@ -463,8 +463,6 @@ export async function processStockOut(payload: StockOutPayload) {
       },
     });
 
-    let hasReusable = false;
-
     for (const itemInput of payload.items) {
       const qtyNum = new Prisma.Decimal(itemInput.quantity);
       if (qtyNum.lessThanOrEqualTo(0)) {
@@ -497,7 +495,6 @@ export async function processStockOut(payload: StockOutPayload) {
 
       const balanceBefore = currentAvailable;
       const balanceAfter = balanceBefore.minus(qtyNum);
-      const isReusable = item.type === "REUSABLE";
       const isAktif = item.category?.name?.toLowerCase() === "aktif";
       const isPasif = item.category?.name?.toLowerCase() === "pasif";
 
@@ -515,38 +512,19 @@ export async function processStockOut(payload: StockOutPayload) {
         }
       }
 
-      if (isReusable) {
-        hasReusable = true;
-      }
+      // Unified reusable stock accounting: increases total_out and total_in_use, reduces available_stock
+      await tx.inventoryStock.update({
+        where: { id: stock!.id },
+        data: {
+          total_out: new Prisma.Decimal(stock!.total_out).add(qtyNum),
+          total_in_use: new Prisma.Decimal(stock!.total_in_use).add(qtyNum),
+          available_stock: balanceAfter,
+        },
+      });
 
-      // Stock update logic
-      if (isReusable) {
-        // Reusable: increases total_out and total_in_use, reduces available_stock
-        await tx.inventoryStock.update({
-          where: { id: stock!.id },
-          data: {
-            total_out: new Prisma.Decimal(stock!.total_out).add(qtyNum),
-            total_in_use: new Prisma.Decimal(stock!.total_in_use).add(qtyNum),
-            available_stock: balanceAfter,
-          },
-        });
-      } else {
-        // Consumable: increases total_out and total_consumed permanently, reduces available_stock
-        await tx.inventoryStock.update({
-          where: { id: stock!.id },
-          data: {
-            total_out: new Prisma.Decimal(stock!.total_out).add(qtyNum),
-            total_consumed: new Prisma.Decimal(stock!.total_consumed).add(qtyNum),
-            available_stock: balanceAfter,
-          },
-        });
-      }
-
-      // Detail status: REUSABLE -> ACTIVE (with qty_remaining = qtyNum), CONSUMABLE -> CONSUMED
-      const detailStatus = isReusable ? "ACTIVE" : "CONSUMED";
-      const qtyRemaining = isReusable ? qtyNum : new Prisma.Decimal(0);
-
-      const serialNumbersToRecord = isPasif ? [] : (itemInput.serial_numbers || []).map((s) => String(s).trim()).filter(Boolean);
+      const serialNumbersToRecord = isPasif
+        ? []
+        : (itemInput.serial_numbers || []).map((s) => String(s).trim()).filter(Boolean);
 
       await tx.inventoryTransactionDetail.create({
         data: {
@@ -558,14 +536,14 @@ export async function processStockOut(payload: StockOutPayload) {
             ? JSON.stringify(serialNumbersToRecord)
             : null,
           qty_returned: new Prisma.Decimal(0),
-          qty_remaining: qtyRemaining,
-          status: detailStatus,
+          qty_remaining: qtyNum,
+          status: "ACTIVE",
           notes: itemInput.notes || null,
         },
       });
 
       // Update unit serial numbers if applicable
-      if ((isReusable || isAktif) && serialNumbersToRecord.length) {
+      if (serialNumbersToRecord.length) {
         for (const sn of serialNumbersToRecord) {
           const trimmedSn = sn.trim();
           if (!trimmedSn) continue;
@@ -593,7 +571,7 @@ export async function processStockOut(payload: StockOutPayload) {
       await tx.inventoryMovement.create({
         data: {
           item_id: item.id,
-          movement_type: isReusable ? "OUT" : "CONSUMED",
+          movement_type: "OUT",
           quantity: qtyNum.negated(),
           balance_before: balanceBefore,
           balance_after: balanceAfter,
@@ -603,14 +581,6 @@ export async function processStockOut(payload: StockOutPayload) {
           performed_by: payload.user_name || payload.warehouse_officer || "Admin Gudang",
           notes: `Barang Keluar (${txNumber}) kepada ${payload.pic_name}`,
         },
-      });
-    }
-
-    // If transaction had only consumable items, overall status is TERPAKAI
-    if (!hasReusable) {
-      await tx.inventoryTransaction.update({
-        where: { id: transaction.id },
-        data: { status: "TERPAKAI" },
       });
     }
 
@@ -692,10 +662,9 @@ export interface ReturnPayload {
 }
 
 /**
- * Process Return of Reusable Items
+ * Process Return of Inventory Items
  * Supports partial and full returns.
  * Validates condition (only BAIK goes back to available_stock).
- * Consumable items are strictly rejected.
  */
 export async function processReturn(payload: ReturnPayload) {
   if (!payload.details || payload.details.length === 0) {
@@ -749,13 +718,6 @@ export async function processReturn(payload: ReturnPayload) {
       }
 
       const item = txDetail.item;
-
-      // RULE 2: Barang consumable tidak boleh dikembalikan melalui mekanisme reusable!
-      if (item.type !== "REUSABLE") {
-        throw new Error(
-          `Barang '${item.name}' merupakan barang consumable (habis pakai) dan tidak dapat diproses sebagai pengembalian barang reusable.`
-        );
-      }
 
       // RULE 1: Jumlah kembali tidak boleh melebihi sisa barang yang masih keluar!
       const currentRemaining = new Prisma.Decimal(txDetail.qty_remaining);
@@ -1212,7 +1174,6 @@ export async function performStockOpname(params: {
 export async function getInventoryDashboardStats() {
   const [
     totalItems,
-    reusableCount,
     stocks,
     activeInUseTransactions,
     recentIn,
@@ -1221,7 +1182,6 @@ export async function getInventoryDashboardStats() {
     categories,
   ] = await Promise.all([
     prisma.inventoryItem.count({ where: { is_active: true } }),
-    prisma.inventoryItem.count({ where: { is_active: true, type: "REUSABLE" } }),
     prisma.inventoryStock.findMany({
       include: {
         item: {
@@ -1240,7 +1200,6 @@ export async function getInventoryDashboardStats() {
     prisma.inventoryTransactionDetail.findMany({
       where: {
         status: { in: ["ACTIVE", "PARTIAL_RETURN"] },
-        item: { type: "REUSABLE" },
       },
       include: {
         transaction: true,
@@ -1377,7 +1336,6 @@ export async function getInventoryDashboardStats() {
     summary: {
       total_item_types: totalItems,
       total_available_stock: totalAvailableStock,
-      total_reusable_items: reusableCount,
       total_in_use: totalInUse,
       total_pending_return: activeInUseTransactions.length,
       total_consumed: totalConsumed,
@@ -1507,9 +1465,9 @@ export async function processFinishInUse(payload: FinishInUsePayload) {
 
     for (const detail of outTx.details) {
       const allocated = allocatedByDetail.get(detail.id) || 0;
-      const isConsumable = detail.item.type === "CONSUMABLE" || detail.status === "CONSUMED";
+      const isLegacyConsumed = detail.status === "CONSUMED";
 
-      if (isConsumable) {
+      if (isLegacyConsumed) {
         if (allocated > 0) {
           await tx.inventoryTransactionDetail.update({
             where: { id: detail.id },
@@ -1667,9 +1625,9 @@ async function deleteSingleTransactionInTx(
     const unitRows =
       allSns.length > 0
         ? await tx.inventoryItemUnit.findMany({
-            where: { serial_number: { in: allSns } },
-            select: { serial_number: true, item_id: true, status: true },
-          })
+          where: { serial_number: { in: allSns } },
+          select: { serial_number: true, item_id: true, status: true },
+        })
         : [];
     const unitMap = new Map<string, ExistingItemUnitState>(
       unitRows.map((u) => [u.serial_number, u])

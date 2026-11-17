@@ -2,7 +2,7 @@ export interface NormalizedInventoryImportRow {
   code?: string;
   name: string;
   category: string;
-  type: "REUSABLE" | "CONSUMABLE";
+  type: "REUSABLE";
   brand: string | null;
   model: string | null;
   serial_number: string | null;
@@ -292,7 +292,7 @@ export function normalizeInventoryImportRecord(
   }
 
   // Default all newly imported items silently to REUSABLE
-  const type: "REUSABLE" | "CONSUMABLE" = "REUSABLE";
+  const type: "REUSABLE" = "REUSABLE";
 
   const rawCategory = toCleanString(getFieldByAliases(rawRecord, "category"));
   let category = rawCategory;

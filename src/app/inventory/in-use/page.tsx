@@ -118,8 +118,7 @@ export default function BarangSedangDigunakanPage() {
   }, [fetchInUse]);
 
   const getDetailMaxAllocatable = (tx: any, detail: any): number => {
-    const isConsumable = detail.item?.type === "CONSUMABLE" || detail.status === "CONSUMED";
-    if (isConsumable) {
+    if (detail.status === "CONSUMED") {
       return Math.max(0, Number(detail.quantity) - Number(detail.qty_used || 0));
     }
     return Math.max(0, Number(detail.qty_remaining || 0));
@@ -516,7 +515,6 @@ export default function BarangSedangDigunakanPage() {
                   <thead className="bg-slate-50/50 dark:bg-slate-800/30 text-[10px] uppercase text-slate-500 border-b border-slate-100 dark:border-slate-800">
                     <tr>
                       <th className="py-2 px-3">Barang</th>
-                      <th className="py-2 px-3">Jenis</th>
                       <th className="py-2 px-3 text-right">Dapat Dipakai</th>
                       <th className="py-2 px-3 text-right text-purple-600">Dipakai Client</th>
                       <th className="py-2 px-3 text-right text-orange-600">Sisa ke Pengembalian</th>
@@ -524,12 +522,12 @@ export default function BarangSedangDigunakanPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {(finishTx.details || []).map((d: any) => {
-                      const isConsumable = d.item?.type === "CONSUMABLE" || d.status === "CONSUMED";
+                      const isLegacyConsumed = d.status === "CONSUMED";
                       const maxAlloc = getDetailMaxAllocatable(finishTx, d);
                       const allocatedTotal = noClientUsageMode
                         ? 0
                         : finishClients.reduce((sum, c) => sum + Number(c.items[d.id]?.quantity || 0), 0);
-                      const remainingToReturn = isConsumable
+                      const remainingToReturn = isLegacyConsumed
                         ? 0
                         : Math.max(0, Number(d.qty_remaining || 0) - allocatedTotal);
                       return (
@@ -538,17 +536,6 @@ export default function BarangSedangDigunakanPage() {
                             <p className="font-semibold text-slate-800 dark:text-slate-200">{d.item?.name}</p>
                             <span className="font-mono text-[10px] text-slate-400">{d.item?.code}</span>
                           </td>
-                          <td className="py-2 px-3">
-                            <span
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                isConsumable
-                                  ? "bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300"
-                                  : "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
-                              }`}
-                            >
-                              {isConsumable ? "Consumable" : "Reusable"}
-                            </span>
-                          </td>
                           <td className="py-2 px-3 text-right font-mono font-semibold">
                             {maxAlloc} {d.unit}
                           </td>
@@ -556,7 +543,7 @@ export default function BarangSedangDigunakanPage() {
                             {allocatedTotal} {d.unit}
                           </td>
                           <td className="py-2 px-3 text-right font-mono font-bold text-orange-600 dark:text-orange-400">
-                            {isConsumable ? "-" : `${remainingToReturn} ${d.unit}`}
+                            {isLegacyConsumed ? "-" : `${remainingToReturn} ${d.unit}`}
                           </td>
                         </tr>
                       );

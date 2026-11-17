@@ -96,7 +96,7 @@ export function computeOutTransactionSummary(
       barangMasuk += Number(d.item?.stock?.total_in || 0);
     }
 
-    if (d.item?.type === "CONSUMABLE" || d.status === "CONSUMED") {
+    if (d.status === "CONSUMED") {
       consumableOut += qty;
       if (d.id) consumableDetailIds.add(d.id);
     } else {

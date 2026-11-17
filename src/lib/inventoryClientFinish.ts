@@ -129,8 +129,8 @@ export function validateFinishClientAllocations(
 
       const prevAllocated = allocatedByDetail.get(detail.id) || 0;
       const nextAllocated = prevAllocated + qty;
-      const isConsumable = detail.item?.type === "CONSUMABLE" || detail.status === "CONSUMED";
-      const maxAllocatable = isConsumable
+      const isLegacyConsumed = detail.status === "CONSUMED";
+      const maxAllocatable = isLegacyConsumed
         ? Math.max(0, Number(detail.quantity) - Number(detail.qty_used || 0))
         : Number(detail.qty_remaining);
 
@@ -141,7 +141,7 @@ export function validateFinishClientAllocations(
       }
 
       allocatedByDetail.set(detail.id, nextAllocated);
-      if (!isConsumable) {
+      if (!isLegacyConsumed) {
         totalUsedUnits += qty;
       }
 
@@ -192,8 +192,7 @@ export function validateFinishClientAllocations(
 
   let totalPendingReturnUnits = 0;
   for (const detail of details) {
-    const isConsumable = detail.item?.type === "CONSUMABLE" || detail.status === "CONSUMED";
-    if (isConsumable) continue;
+    if (detail.status === "CONSUMED") continue;
     const alloc = allocatedByDetail.get(detail.id) || 0;
     const remainingAfter = Math.max(0, Number(detail.qty_remaining) - alloc);
     totalPendingReturnUnits += remainingAfter;

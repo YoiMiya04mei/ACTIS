@@ -32,7 +32,7 @@ interface Item {
   name: string;
   category_id: string;
   category?: { id: string; name: string };
-  type: "REUSABLE" | "CONSUMABLE";
+  type: "REUSABLE" | string;
   brand?: string | null;
   model?: string | null;
   serial_number?: string | null;
@@ -97,7 +97,7 @@ export default function MasterBarangPage() {
     code: "",
     name: "",
     category_id: "",
-    type: "REUSABLE" as "REUSABLE" | "CONSUMABLE",
+    type: "REUSABLE" as string,
     brand: "",
     model: "",
     serial_number: "",

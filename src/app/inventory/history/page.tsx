@@ -212,10 +212,10 @@ export default function RiwayatTransaksiPage() {
             >
               <option value="">Semua Tipe Mutasi</option>
               <option value="IN">IN (Barang Masuk)</option>
-              <option value="OUT">OUT (Barang Keluar Reusable)</option>
+              <option value="OUT">OUT (Barang Keluar)</option>
               <option value="RETURN_GOOD">RETURN_GOOD (Kembali Baik)</option>
               <option value="RETURN_DAMAGED">RETURN_DAMAGED (Kembali Rusak)</option>
-              <option value="CONSUMED">CONSUMED (Habis Pakai)</option>
+              <option value="CONSUMED">CONSUMED (Terpakai Client)</option>
               <option value="ADJUSTMENT">ADJUSTMENT (Penyesuaian)</option>
             </select>
           </div>

@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.20",
+      "date": "2026-11-17T11:30:35+07:00",
+      "title": "Hapus Seluruh Fungsi & Percabangan Jenis Barang Consumable",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Menghapus seluruh logika percabangan item CONSUMABLE pada proses Barang Keluar (processStockOut), Pengembalian Barang (processReturn), Penyelesaian Multi-Client (finishInUseToClients), Dashboard Stats, serta Ringkasan/Hapus Transaksi."
+        },
+        {
+          "type": "improve",
+          "text": "Menghapus kolom, filter, label, dan rumus Jenis Barang Consumable pada halaman Stok Inventory, Barang Sedang Digunakan, Master Barang, Riwayat Transaksi, Ekspor CSV, serta seed inventory sehingga seluruh item bekerja seragam sebagai reusable."
+        }
+      ]
+    },
+    {
       "version": "1.2.19",
       "date": "2026-11-17T11:07:33+07:00",
       "title": "Jadikan Semua Barang Baru & Impor Bertipe Reusable Secara Otomatis",

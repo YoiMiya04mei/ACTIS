@@ -451,7 +451,7 @@ export function Sidebar({
                         ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
                         : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
                     }`}
-                    title="Master Data Barang Reusable & Consumable"
+                    title="Master Data Barang Inventory"
                   >
                     <div className="flex items-center space-x-3">
                       <Boxes

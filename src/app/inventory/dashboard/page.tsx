@@ -23,7 +23,6 @@ interface DashboardData {
   summary: {
     total_item_types: number;
     total_available_stock: number;
-    total_reusable_items: number;
     total_in_use: number;
     total_pending_return: number;
     total_consumed: number;
@@ -85,7 +84,6 @@ export default function InventoryDashboardPage() {
   const summary = data?.summary || {
     total_item_types: 0,
     total_available_stock: 0,
-    total_reusable_items: 0,
     total_in_use: 0,
     total_pending_return: 0,
     total_consumed: 0,
@@ -116,7 +114,7 @@ export default function InventoryDashboardPage() {
             Dashboard Inventory Management
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
-            Monitoring stok riil barang reusable & consumable, penugasan perangkat ke PIC, pengembalian, dan riwayat mutasi gudang.
+            Monitoring stok riil barang, penugasan perangkat ke PIC, pengembalian, dan riwayat mutasi gudang.
           </p>
         </div>
 
@@ -163,8 +161,8 @@ export default function InventoryDashboardPage() {
         </div>
       )}
 
-      {/* 7 Primary Inventory Metric Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 2xl:gap-3.5">
+      {/* 6 Primary Inventory Metric Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 2xl:gap-3.5">
         {/* Total Jenis Barang */}
         <Link
           href="/inventory/items"
@@ -193,21 +191,6 @@ export default function InventoryDashboardPage() {
             {summary.total_available_stock.toLocaleString("id-ID")}
           </p>
           <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Tersedia di gudang</p>
-        </Link>
-
-        {/* Total Barang Reusable */}
-        <Link
-          href="/inventory/items?type=REUSABLE"
-          className="p-3.5 rounded-2xl border bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500 shadow-sm transition group"
-        >
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-600 dark:text-slate-400">
-            <span>Barang Reusable</span>
-            <RotateCcw className="w-4 h-4 text-indigo-500 group-hover:scale-110 transition" />
-          </div>
-          <p className="text-xl font-black text-indigo-600 dark:text-indigo-400 mt-1.5">
-            {summary.total_reusable_items}
-          </p>
-          <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">Bisa dikembalikan</p>
         </Link>
 
         {/* Total Sedang Digunakan */}

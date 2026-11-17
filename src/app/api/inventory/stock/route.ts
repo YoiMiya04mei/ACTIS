@@ -10,7 +10,6 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const search = searchParams.get("search")?.trim() || "";
   const categoryId = searchParams.get("category_id") || "";
-  const type = searchParams.get("type") || "";
   const lowStock = searchParams.get("low_stock") === "true";
   const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
   const limit = Math.max(1, Math.min(100, parseInt(searchParams.get("limit") || "25", 10)));
@@ -31,10 +30,6 @@ export async function GET(request: NextRequest) {
 
     if (categoryId) {
       whereClause.category_id = categoryId;
-    }
-
-    if (type) {
-      whereClause.type = type;
     }
 
     const [total, items] = await Promise.all([

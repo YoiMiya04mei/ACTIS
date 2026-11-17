@@ -12,7 +12,6 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const search = searchParams.get("search")?.trim() || "";
   const categoryId = searchParams.get("category_id") || "";
-  const type = searchParams.get("type") || "";
   const lowStock = searchParams.get("low_stock") === "true";
   const statusParam = searchParams.get("is_active");
   const fetchAll = searchParams.get("all") === "true";
@@ -38,10 +37,6 @@ export async function GET(request: NextRequest) {
 
     if (categoryId) {
       whereClause.category_id = categoryId;
-    }
-
-    if (type && (type === "REUSABLE" || type === "CONSUMABLE")) {
-      whereClause.type = type;
     }
 
     if (statusParam !== null && statusParam !== "") {

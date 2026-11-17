@@ -546,7 +546,7 @@ model InventoryItem {
   name             String
   category_id      String
   category         InventoryCategory @relation(fields: [category_id], references: [id], onDelete: Restrict)
-  type             String   // "REUSABLE" | "CONSUMABLE"
+  type             String   @default("REUSABLE")
   brand            String?
   model            String?
   serial_number    String?

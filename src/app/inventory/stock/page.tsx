@@ -30,7 +30,6 @@ export default function StokInventoryPage() {
   // Filters
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
-  const [selectedType, setSelectedType] = useState("");
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -59,7 +58,6 @@ export default function StokInventoryPage() {
       const params = new URLSearchParams({
         search,
         category_id: selectedCategory,
-        type: selectedType,
         low_stock: lowStockOnly ? "true" : "false",
         page: String(page),
         limit: "20",
@@ -78,7 +76,7 @@ export default function StokInventoryPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [search, selectedCategory, selectedType, lowStockOnly, page]);
+  }, [search, selectedCategory, lowStockOnly, page]);
 
   useEffect(() => {
     fetchStock();
@@ -183,7 +181,7 @@ export default function StokInventoryPage() {
             Stok Inventory & Mutasi
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
-            Pencatatan saldo fisik real-time dengan penghitungan otomatis untuk perangkat reusable dan material consumable.
+            Pencatatan saldo fisik real-time dengan penghitungan otomatis stok gudang, barang digunakan, dan terpakai client.
           </p>
         </div>
 
@@ -239,18 +237,15 @@ export default function StokInventoryPage() {
           <Info className="w-4 h-4 mr-2 text-blue-600 shrink-0" />
           Rumus Perhitungan Stok Otomatis ACTIS:
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px] pl-6">
+        <div className="text-[11px] pl-6">
           <p>
-            <span className="font-bold">Barang Reusable:</span> Stok Tersedia = Total Masuk &minus; Total Sedang Digunakan (di luar gudang) &minus; Total Terpakai (Client) &minus; Rusak/Hilang.
-          </p>
-          <p>
-            <span className="font-bold">Barang Consumable:</span> Stok Tersedia = Total Masuk &minus; Total Terpakai (Dikeluarkan Permanen).
+            <span className="font-bold">Perhitungan Stok:</span> Stok Tersedia = Total Masuk &minus; Total Sedang Digunakan (di luar gudang) &minus; Total Terpakai (Client) &minus; Rusak/Hilang.
           </p>
         </div>
       </div>
 
       {/* Filter Toolbar */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <div className="relative lg:col-span-2">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
           <input
@@ -263,21 +258,6 @@ export default function StokInventoryPage() {
             }}
             className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 focus:outline-hidden focus:ring-2 focus:ring-blue-500"
           />
-        </div>
-
-        <div>
-          <select
-            value={selectedType}
-            onChange={(e) => {
-              setSelectedType(e.target.value);
-              setPage(1);
-            }}
-            className="w-full py-2 px-3 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
-          >
-            <option value="">Semua Jenis Barang</option>
-            <option value="REUSABLE">Reusable (Dapat Kembali)</option>
-            <option value="CONSUMABLE">Consumable (Habis Pakai)</option>
-          </select>
         </div>
 
         <div className="flex items-center">
@@ -310,7 +290,6 @@ export default function StokInventoryPage() {
             <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 uppercase font-bold text-[10px] border-b border-slate-200 dark:border-slate-800">
               <tr>
                 <th scope="col" className="py-3 px-4">Nama Barang</th>
-                <th scope="col" className="py-3 px-4">Jenis</th>
                 <th scope="col" className="py-3 px-4 text-right">Stok Saat Ini</th>
                 <th scope="col" className="py-3 px-4 text-right text-purple-600 dark:text-purple-400">Terpakai</th>
               </tr>
@@ -318,14 +297,14 @@ export default function StokInventoryPage() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="py-12 text-center text-slate-400">
+                  <td colSpan={3} className="py-12 text-center text-slate-400">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
                     Memuat saldo stok...
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="py-12 text-center text-slate-400">
+                  <td colSpan={3} className="py-12 text-center text-slate-400">
                     Tidak ada data stok yang sesuai filter.
                   </td>
                 </tr>
@@ -359,17 +338,6 @@ export default function StokInventoryPage() {
                           </p>
                         </button>
                       </th>
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        {item.type === "REUSABLE" ? (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800">
-                            Reusable
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800">
-                            Consumable
-                          </span>
-                        )}
-                      </td>
                       <td className="py-3 px-4 text-right whitespace-nowrap">
                         <span
                           className={`font-black text-sm px-2.5 py-1 rounded-xl ${
@@ -566,9 +534,6 @@ export default function StokInventoryPage() {
                     }`}
                   >
                     Kategori: {detailItem.category?.name || "Perangkat"}
-                  </span>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                    {detailItem.type === "REUSABLE" ? "Reusable" : "Consumable"}
                   </span>
                 </div>
                 <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
