@@ -4,6 +4,17 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.29",
+      "date": "2026-11-17T15:21:48+07:00",
+      "title": "Form Barang PDF: Label Jabatan SPV Teknisi",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Memperbarui label jabatan penanda tangan Pemohon pada tabel Persetujuan dan Serah Terima Form Barang menjadi SPV Teknisi"
+        }
+      ]
+    },
+    {
       "version": "1.2.28",
       "date": "2026-11-17T15:06:25+07:00",
       "title": "Form Barang PDF: Pagination Mengalir Otomatis & Kop Surat Seragam",

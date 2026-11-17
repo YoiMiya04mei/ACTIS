@@ -1001,7 +1001,7 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
                           textAlign: "center",
                         }}
                       >
-                        SPV
+                        SPV Teknisi
                       </td>
                       <td
                         style={{
