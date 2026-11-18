@@ -64,6 +64,10 @@ export interface FormBarangApprovalInfo {
   pemohonName: string;
   pengelolaName: string;
   penerimaName: string;
+  accByName?: string;
+  accAtText?: string;
+  accSourceType?: "request" | "transaction";
+  accRequestNumber?: string;
 }
 
 export interface FormBarangWorkflowSummary {
@@ -150,6 +154,22 @@ export function formatFormBarangDate(value: string | Date | null | undefined): s
   }).format(date);
 }
 
+export function formatFormBarangDateTime(value: string | Date | null | undefined): string {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("id-ID", {
+    timeZone: "Asia/Jakarta",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
 export function formatReturnConditionLabel(condition: string | null | undefined): string {
   const normalized = String(condition || "").trim().toUpperCase();
   switch (normalized) {
@@ -216,6 +236,8 @@ export function createEmptyFormBarangData(): FormBarangDocumentData {
       pemohonName: "",
       pengelolaName: "",
       penerimaName: "",
+      accByName: "",
+      accAtText: "",
     },
     summary: {
       sourceType: "blank",
@@ -440,6 +462,14 @@ export function buildFormBarangDataFromOutTransaction(
     ? [...confirmedReturns, ...pendingRemainingRows]
     : confirmedReturns;
 
+  const reqApproverName = (primaryReq?.approved_by_name || "").trim();
+  const fallbackOfficerName = (tx?.warehouse_officer || "").trim();
+  const accByName = reqApproverName || fallbackOfficerName || "";
+  const accAtSource = reqApproverName
+    ? primaryReq?.approved_at || tx?.created_at || tx?.transaction_date
+    : tx?.created_at || tx?.transaction_date;
+  const accAtText = accByName ? formatFormBarangDateTime(accAtSource) : "";
+
   return {
     requestInfo,
     barangKeluar,
@@ -453,6 +483,10 @@ export function buildFormBarangDataFromOutTransaction(
         options.prefillPenerimaName === true
           ? (primaryReq?.pic_name || tx?.pic_name || "").trim()
           : "",
+      accByName,
+      accAtText,
+      accSourceType: reqApproverName ? "request" : accByName ? "transaction" : undefined,
+      accRequestNumber: primaryReq?.request_number || undefined,
     },
     summary: {
       sourceType: "transaction",
@@ -486,6 +520,10 @@ export function buildFormBarangDataFromRequest(
     );
   }
 
+  const isApprovedReq =
+    String(req?.status || "").toUpperCase() === "APPROVED" &&
+    Boolean(req?.approved_by_name?.trim());
+
   return {
     requestInfo: {
       namaTim: (req?.pic_name || "").trim(),
@@ -503,6 +541,10 @@ export function buildFormBarangDataFromRequest(
       pengelolaName: "",
       penerimaName:
         options.prefillPenerimaName === true ? (req?.pic_name || "").trim() : "",
+      accByName: isApprovedReq ? req.approved_by_name.trim() : "",
+      accAtText: isApprovedReq ? formatFormBarangDateTime(req?.approved_at) : "",
+      accSourceType: isApprovedReq ? "request" : undefined,
+      accRequestNumber: isApprovedReq ? req?.request_number || undefined : undefined,
     },
     summary: {
       sourceType: "request",
@@ -746,8 +788,12 @@ export function paginateFormBarangData(doc: FormBarangDocumentData): FormBarangP
     }
   );
 
-  // PERSETUJUAN DAN SERAH TERIMA + CATATAN
-  if (remainingPxRef.current >= APPROVAL_AND_NOTES_HEIGHT_PX) {
+  // PERSETUJUAN DAN SERAH TERIMA (+ ACC BAR) + CATATAN
+  const requiredApprovalHeightPx =
+    doc.approval?.accByName && doc.approval.accByName.trim()
+      ? APPROVAL_AND_NOTES_HEIGHT_PX + 34
+      : APPROVAL_AND_NOTES_HEIGHT_PX;
+  if (remainingPxRef.current >= requiredApprovalHeightPx) {
     pages[pages.length - 1].includeApprovalAndNotes = true;
   } else {
     const approvalPage = createEmptyPageSlice(pages.length + 1);

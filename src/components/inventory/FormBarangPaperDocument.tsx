@@ -1051,6 +1051,45 @@ export const FormBarangPaperDocument: React.FC<FormBarangPaperDocumentProps> = (
                 </table>
               </div>
 
+              {/* ================= ACC BARANG KELUAR (OTOMATIS DARI REQUEST / GUDANG) ================= */}
+              {doc.approval.accByName && doc.approval.accByName.trim() && (
+                <div
+                  data-testid="form-barang-acc-info"
+                  style={{
+                    marginTop: "2px",
+                    marginBottom: "8px",
+                    padding: "5px 10px",
+                    border: "1px solid #BBF7D0",
+                    backgroundColor: "#F0FDF4",
+                    borderRadius: "4px",
+                    fontSize: "8pt",
+                    color: "#166534",
+                    lineHeight: 1.4,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "8px",
+                  }}
+                >
+                  <span>
+                    Di-ACC oleh <strong>{doc.approval.accByName.trim()}</strong>
+                    {doc.approval.accAtText ? ` pada ${doc.approval.accAtText} WIB` : ""}
+                  </span>
+                  {doc.approval.accRequestNumber && (
+                    <span
+                      style={{
+                        fontFamily: '"Courier New", monospace',
+                        fontWeight: 700,
+                        fontSize: "7.5pt",
+                        color: "#15803D",
+                      }}
+                    >
+                      {doc.approval.accRequestNumber}
+                    </span>
+                  )}
+                </div>
+              )}
+
               {/* ================= CATATAN ================= */}
               <div style={{ marginTop: "6px", paddingLeft: "2px" }}>
                 <div

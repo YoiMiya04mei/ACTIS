@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.37",
+      "date": "2026-11-18T15:45:24+07:00",
+      "title": "Otomatis Tampilkan Info ACC Barang Keluar di Atas Catatan Generate Form Barang",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Menampilkan otomatis informasi Di-ACC oleh [Nama] pada [Tanggal & Jam WIB] dari Request Barang Keluar (atau fallback Petugas Gudang) tepat di atas bagian CATATAN pada Generate Form Barang"
+        },
+        {
+          "type": "improve",
+          "text": "Memperhitungkan tinggi blok info ACC pada kalkulasi paginasi otomatis Form Barang agar tata letak PDF A4 tetap presisi"
+        }
+      ]
+    },
+    {
       "version": "1.2.36",
       "date": "2026-11-18T15:26:54+07:00",
       "title": "Kolom Petugas Gudang pada Tabel Riwayat Transaksi Barang Keluar",
