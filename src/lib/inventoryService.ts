@@ -1585,6 +1585,153 @@ export async function processFinishInUse(payload: FinishInUsePayload) {
   });
 }
 
+export interface InUseQueryParams {
+  pic?: string;
+  location?: string;
+  status?: string | null;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
+
+export function parseInUseQueryParams(requestUrl: string): Required<InUseQueryParams> {
+  const { searchParams } = new URL(requestUrl);
+  const pic = searchParams.get("pic")?.trim() || "";
+  const location = searchParams.get("location")?.trim() || "";
+  const status = searchParams.get("status")?.trim() || "";
+  const search = searchParams.get("search")?.trim() || "";
+  const parsedPage = parseInt(searchParams.get("page") || "1", 10);
+  const parsedLimit = parseInt(searchParams.get("limit") || "20", 10);
+  const page = Number.isFinite(parsedPage) ? Math.max(1, parsedPage) : 1;
+  const limit = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(100, parsedLimit)) : 20;
+  return { pic, location, status, search, page, limit };
+}
+
+/**
+ * Shared paginated query for deployed ("Barang Sedang Digunakan") transactions.
+ * Reused by both internal dashboard (`/api/inventory/in-use`) and `/request-barang` portal.
+ */
+export async function queryInventoryInUseTransactions(params: InUseQueryParams) {
+  const page = Math.max(1, params.page || 1);
+  const limit = Math.max(1, Math.min(100, params.limit || 20));
+  const skip = (page - 1) * limit;
+
+  const whereClause: Prisma.InventoryTransactionWhereInput = {
+    type: "OUT",
+  };
+
+  if (params.status) {
+    whereClause.status = params.status;
+  } else {
+    whereClause.status = {
+      in: ["SEDANG_DIGUNAKAN", "SEBAGIAN_KEMBALI", "MENUNGGU_PENGEMBALIAN"],
+    };
+  }
+
+  if (params.pic) {
+    whereClause.pic_name = { contains: params.pic, mode: "insensitive" };
+  }
+
+  if (params.location) {
+    whereClause.location = { contains: params.location, mode: "insensitive" };
+  }
+
+  if (params.search) {
+    whereClause.OR = [
+      { transaction_number: { contains: params.search, mode: "insensitive" } },
+      { pic_name: { contains: params.search, mode: "insensitive" } },
+      { location: { contains: params.search, mode: "insensitive" } },
+      { purpose: { contains: params.search, mode: "insensitive" } },
+      {
+        details: {
+          some: {
+            item: {
+              OR: [
+                { name: { contains: params.search, mode: "insensitive" } },
+                { code: { contains: params.search, mode: "insensitive" } },
+              ],
+            },
+          },
+        },
+      },
+    ];
+  }
+
+  const [total, transactions] = await Promise.all([
+    prisma.inventoryTransaction.count({ where: whereClause }),
+    prisma.inventoryTransaction.findMany({
+      where: whereClause,
+      include: {
+        details: {
+          include: {
+            item: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                unit: true,
+                type: true,
+                brand: true,
+                model: true,
+                storage_location: true,
+              },
+            },
+          },
+        },
+        returns: {
+          select: {
+            id: true,
+            return_number: true,
+            return_date: true,
+            pic_name: true,
+            details: {
+              select: {
+                id: true,
+                transaction_detail_id: true,
+                item_id: true,
+                quantity: true,
+                condition: true,
+                serial_numbers: true,
+              },
+            },
+          },
+        },
+        client_usages: {
+          orderBy: { created_at: "asc" },
+          include: {
+            items: {
+              include: {
+                item: {
+                  select: {
+                    id: true,
+                    name: true,
+                    code: true,
+                    unit: true,
+                    type: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { transaction_date: "desc" },
+      skip,
+      take: limit,
+    }),
+  ]);
+
+  return {
+    data: transactions,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+}
+
 export interface DeleteTransactionPayload {
   transaction_id: string;
   deleted_by?: string;

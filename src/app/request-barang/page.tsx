@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { SearchableItemSelect } from "@/components/inventory/SearchableItemSelect";
+import { InUseMonitorPanel } from "@/components/inventory/InUseMonitorPanel";
 import {
   AlertCircle,
   AlertTriangle,
@@ -163,6 +164,17 @@ export default function PublicRequestBarangPage() {
   const [catalog, setCatalog] = useState<PublicCatalogItem[]>([]);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"request" | "in-use">("request");
+  const [inUseActiveCount, setInUseActiveCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const tabParam = new URLSearchParams(window.location.search).get("tab");
+      if (tabParam === "in-use") {
+        setActiveTab("in-use");
+      }
+    }
+  }, []);
 
   // Form fields matching INFORMASI REQUEST specification
   const [picName, setPicName] = useState("");
@@ -208,6 +220,17 @@ export default function PublicRequestBarangPage() {
     }
   }, []);
 
+  const loadInUseBadgeCount = useCallback(async () => {
+    try {
+      const res = await fetch("/api/public/inventory-in-use?limit=1", { cache: "no-store" });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json?.success && typeof json?.pagination?.total === "number") {
+        setInUseActiveCount(json.pagination.total);
+      }
+    } catch {}
+  }, []);
+
   const checkPortalAuth = useCallback(async () => {
     setPortalAuth((prev) => ({ ...prev, loading: true }));
     try {
@@ -240,6 +263,7 @@ export default function PublicRequestBarangPage() {
           setPicName((prev) => prev || nextState.user?.nama || "");
         }
         loadCatalog();
+        loadInUseBadgeCount();
       } else {
         setLoadingCatalog(false);
       }
@@ -255,7 +279,7 @@ export default function PublicRequestBarangPage() {
       });
       setLoadingCatalog(false);
     }
-  }, [loadCatalog]);
+  }, [loadCatalog, loadInUseBadgeCount]);
 
   useEffect(() => {
     checkPortalAuth();
@@ -279,6 +303,7 @@ export default function PublicRequestBarangPage() {
       } catch {}
 
       setCatalog([]);
+      setInUseActiveCount(null);
       setReceipt(null);
       setPicName("");
       setLoginPassword("");
@@ -949,25 +974,41 @@ export default function PublicRequestBarangPage() {
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div
+        className={`${activeTab === "in-use" ? "max-w-7xl" : "max-w-4xl"} mx-auto space-y-6 transition-all`}
+      >
         {/* Top Title Header */}
         <header className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 text-white text-xs font-bold tracking-wider uppercase">
-            <ClipboardList className="w-3.5 h-3.5 text-sky-300" />
+            {activeTab === "in-use" ? (
+              <Clock className="w-3.5 h-3.5 text-amber-300" />
+            ) : (
+              <ClipboardList className="w-3.5 h-3.5 text-sky-300" />
+            )}
             {portalAuth.loginRequired
               ? "Portal Terautentikasi • Request Barang"
-              : "Formulir Request Barang (Tanpa Login)"}
+              : "Portal Request Barang (Tanpa Login)"}
           </div>
           <h1
             id={formHeadingId}
             className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-slate-100 uppercase"
           >
-            Form Request Barang Keluar
+            {activeTab === "in-use"
+              ? "Barang Sedang Digunakan"
+              : "Form Request Barang Keluar"}
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
-            Isi informasi request dan kebutuhan barang di bawah ini. Pengajuan akan masuk ke antrean{" "}
-            <strong className="text-slate-800 dark:text-slate-200">Barang Keluar</strong> untuk
-            di-ACC oleh petugas gudang.
+            {activeTab === "in-use" ? (
+              <>
+                Pantau keberadaan perangkat aktif (router, switch, OTB, laptop) di luar gudang dan input penyelesaian pemakaian barang oleh client.
+              </>
+            ) : (
+              <>
+                Isi informasi request dan kebutuhan barang di bawah ini. Pengajuan akan masuk ke antrean{" "}
+                <strong className="text-slate-800 dark:text-slate-200">Barang Keluar</strong> untuk
+                di-ACC oleh petugas gudang.
+              </>
+            )}
           </p>
         </header>
 
@@ -1017,7 +1058,60 @@ export default function PublicRequestBarangPage() {
           </div>
         )}
 
-        {receipt ? (
+        {/* Portal Menu Switcher: Form Request Barang & Barang Sedang Digunakan */}
+        <nav
+          aria-label="Menu Portal Request Barang"
+          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-1.5 shadow-xs flex flex-wrap items-center gap-1.5"
+        >
+          <button
+            type="button"
+            onClick={() => setActiveTab("request")}
+            className={`flex-1 min-w-[180px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+              activeTab === "request"
+                ? "bg-blue-600 text-white shadow-xs"
+                : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            <ClipboardList className="w-4 h-4 shrink-0" />
+            <span>Form Request Barang Keluar</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("in-use")}
+            className={`flex-1 min-w-[180px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+              activeTab === "in-use"
+                ? "bg-amber-600 text-white shadow-xs"
+                : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+            }`}
+          >
+            <Clock className="w-4 h-4 shrink-0" />
+            <span>Barang Sedang Digunakan</span>
+            {inUseActiveCount !== null && (
+              <span
+                className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  activeTab === "in-use"
+                    ? "bg-white/20 text-white"
+                    : "bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300"
+                }`}
+              >
+                {inUseActiveCount}
+              </span>
+            )}
+          </button>
+        </nav>
+
+        {activeTab === "in-use" ? (
+          <InUseMonitorPanel
+            apiBasePath="/api/public/inventory-in-use"
+            finishEndpoint="/api/public/inventory-in-use/finish"
+            canEditPicLocation={false}
+            showInternalLinks={false}
+            showHeader={false}
+            onAuthExpired={() => checkPortalAuth()}
+            onTotalActiveCountChange={setInUseActiveCount}
+          />
+        ) : receipt ? (
           <section
             role="status"
             aria-live="polite"

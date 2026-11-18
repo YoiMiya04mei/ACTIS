@@ -1,140 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/security";
-import { prisma } from "@/lib/prisma";
-import { updateInUseAssignment } from "@/lib/inventoryService";
+import {
+  parseInUseQueryParams,
+  queryInventoryInUseTransactions,
+  updateInUseAssignment,
+} from "@/lib/inventoryService";
 import { getInventoryPermissions } from "@/lib/inventoryAuth";
 import { triggerInventoryMirrorSync } from "@/lib/inventoryMirrorService";
-import { Prisma } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (!auth.ok) return auth.response;
 
-  const { searchParams } = new URL(request.url);
-  const pic = searchParams.get("pic")?.trim();
-  const location = searchParams.get("location")?.trim();
-  const status = searchParams.get("status"); // "SEDANG_DIGUNAKAN", "SEBAGIAN_KEMBALI", "SUDAH_KEMBALI"
-  const search = searchParams.get("search")?.trim();
-  const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
-  const limit = Math.max(1, Math.min(100, parseInt(searchParams.get("limit") || "20", 10)));
-  const skip = (page - 1) * limit;
-
   try {
-    const whereClause: Prisma.InventoryTransactionWhereInput = {
-      type: "OUT",
-    };
-
-    if (status) {
-      whereClause.status = status;
-    } else {
-      // Default: show items currently deployed outside warehouse or awaiting return confirmation
-      whereClause.status = {
-        in: ["SEDANG_DIGUNAKAN", "SEBAGIAN_KEMBALI", "MENUNGGU_PENGEMBALIAN"],
-      };
-    }
-
-    if (pic) {
-      whereClause.pic_name = { contains: pic, mode: "insensitive" };
-    }
-
-    if (location) {
-      whereClause.location = { contains: location, mode: "insensitive" };
-    }
-
-    if (search) {
-      whereClause.OR = [
-        { transaction_number: { contains: search, mode: "insensitive" } },
-        { pic_name: { contains: search, mode: "insensitive" } },
-        { location: { contains: search, mode: "insensitive" } },
-        { purpose: { contains: search, mode: "insensitive" } },
-        {
-          details: {
-            some: {
-              item: {
-                OR: [
-                  { name: { contains: search, mode: "insensitive" } },
-                  { code: { contains: search, mode: "insensitive" } },
-                ],
-              },
-            },
-          },
-        },
-      ];
-    }
-
-    const [total, transactions] = await Promise.all([
-      prisma.inventoryTransaction.count({ where: whereClause }),
-      prisma.inventoryTransaction.findMany({
-        where: whereClause,
-        include: {
-          details: {
-            include: {
-              item: {
-                select: {
-                  id: true,
-                  name: true,
-                  code: true,
-                  unit: true,
-                  type: true,
-                  brand: true,
-                  model: true,
-                  storage_location: true,
-                },
-              },
-            },
-          },
-          returns: {
-            select: {
-              id: true,
-              return_number: true,
-              return_date: true,
-              pic_name: true,
-              details: {
-                select: {
-                  id: true,
-                  transaction_detail_id: true,
-                  item_id: true,
-                  quantity: true,
-                  condition: true,
-                  serial_numbers: true,
-                },
-              },
-            },
-          },
-          client_usages: {
-            orderBy: { created_at: "asc" },
-            include: {
-              items: {
-                include: {
-                  item: {
-                    select: {
-                      id: true,
-                      name: true,
-                      code: true,
-                      unit: true,
-                      type: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-        orderBy: { transaction_date: "desc" },
-        skip,
-        take: limit,
-      }),
-    ]);
+    const query = parseInUseQueryParams(request.url);
+    const result = await queryInventoryInUseTransactions(query);
 
     return NextResponse.json({
       success: true,
-      data: transactions,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      data: result.data,
+      pagination: result.pagination,
     });
   } catch (error: any) {
     console.error("Error in GET /api/inventory/in-use:", error);
