@@ -1,6 +1,11 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
+import {
+  getDefaultPermissionsForRole,
+  isMenuLockedForRole,
+  type MenuAccessKey,
+} from "@/lib/accessLevels";
 
 export interface AppUser {
   id: string;
@@ -58,6 +63,10 @@ interface UserContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   users: AppUser[];
+  allowedMenus: MenuAccessKey[];
+  accessLevelsLoaded: boolean;
+  hasMenuAccess: (menuKey: MenuAccessKey) => boolean;
+  refreshAccessLevels: (opts?: { broadcast?: boolean }) => Promise<void>;
   login: (
     email: string,
     password: string,
@@ -101,6 +110,31 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [users, setUsers] = useState<AppUser[]>([]);
+  const [allowedMenus, setAllowedMenus] = useState<MenuAccessKey[]>([]);
+  const [accessLevelsLoaded, setAccessLevelsLoaded] = useState<boolean>(false);
+
+  const refreshAccessLevels = useCallback(async (opts?: { broadcast?: boolean }) => {
+    try {
+      const res = await fetch("/api/access-levels", { cache: "no-store" });
+      if (!res.ok) return;
+      const json = await res.json();
+      if (json?.success && Array.isArray(json.myAllowedMenus)) {
+        setAllowedMenus(json.myAllowedMenus as MenuAccessKey[]);
+        setAccessLevelsLoaded(true);
+      }
+      if (opts?.broadcast && typeof BroadcastChannel !== "undefined") {
+        try {
+          const ch = new BroadcastChannel("actis_access_levels_sync");
+          ch.postMessage({ ts: Date.now() });
+          ch.close();
+        } catch {
+          // ignore
+        }
+      }
+    } catch {
+      // keep existing state cleanly
+    }
+  }, []);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -127,6 +161,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             localStorage.setItem("actis_active_user", JSON.stringify(meJson.user));
             if (meJson.user.role !== "request_barang") {
               fetchUsers();
+              refreshAccessLevels();
+            } else {
+              setAllowedMenus([]);
+              setAccessLevelsLoaded(true);
             }
             return;
           }
@@ -146,7 +184,49 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     };
 
     initAuth();
-  }, [fetchUsers]);
+  }, [fetchUsers, refreshAccessLevels]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !currentUser?.role || currentUser.role === "request_barang") {
+      return;
+    }
+
+    const syncNow = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      refreshAccessLevels();
+    };
+
+    const onFocus = () => syncNow();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") syncNow();
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+
+    let bc: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== "undefined") {
+      try {
+        bc = new BroadcastChannel("actis_access_levels_sync");
+        bc.onmessage = () => refreshAccessLevels();
+      } catch {
+        bc = null;
+      }
+    }
+
+    const intervalId = setInterval(syncNow, 10000);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+      clearInterval(intervalId);
+      try {
+        bc?.close();
+      } catch {
+        // ignore
+      }
+    };
+  }, [isAuthenticated, currentUser?.role, refreshAccessLevels]);
 
   const handleSetUser = (user: AppUser) => {
     const prev = currentUser;
@@ -208,7 +288,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
       handleSetUser(data.user);
       if (data.user?.role !== "request_barang") {
-        await fetchUsers();
+        await Promise.all([fetchUsers(), refreshAccessLevels()]);
       }
 
       return {
@@ -255,7 +335,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       setCurrentUserState(data.user);
       setIsAuthenticated(true);
       if (data.user?.role !== "request_barang") {
-        await fetchUsers();
+        await Promise.all([fetchUsers(), refreshAccessLevels()]);
       }
 
       return { success: true, rememberMe: keepRememberMe, user: data.user };
@@ -278,6 +358,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("actis_active_user");
       setCurrentUserState(EMPTY_USER);
       setIsAuthenticated(false);
+      setAllowedMenus([]);
+      setAccessLevelsLoaded(false);
     }
   };
 
@@ -388,6 +470,26 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const allowedMenuSet = useMemo(() => {
+    const base = accessLevelsLoaded
+      ? allowedMenus
+      : getDefaultPermissionsForRole(currentUser?.role || "");
+    return new Set<MenuAccessKey>(base);
+  }, [accessLevelsLoaded, allowedMenus, currentUser?.role]);
+
+  const hasMenuAccess = useCallback(
+    (menuKey: MenuAccessKey): boolean => {
+      if (!isAuthenticated || !currentUser?.role || currentUser.role === "request_barang") {
+        return false;
+      }
+      if (isMenuLockedForRole(currentUser.role, menuKey)) {
+        return true;
+      }
+      return allowedMenuSet.has(menuKey);
+    },
+    [isAuthenticated, currentUser?.role, allowedMenuSet]
+  );
+
   return (
     <UserContext.Provider
       value={{
@@ -396,6 +498,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated,
         isLoading,
         users,
+        allowedMenus,
+        accessLevelsLoaded,
+        hasMenuAccess,
+        refreshAccessLevels,
         login,
         loginWithRememberMe,
         logout,

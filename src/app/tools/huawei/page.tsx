@@ -9,7 +9,7 @@ import { useCurrentUser } from "@/context/UserContext";
 
 export default function HuaweiActivationRoute() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const { currentUser } = useCurrentUser();
+  const { currentUser, hasMenuAccess } = useCurrentUser();
 
   const addToast = (type: ToastMessage["type"], title: string, message?: string) => {
     const id = Date.now().toString() + Math.random().toString(36).substring(2, 6);
@@ -20,8 +20,8 @@ export default function HuaweiActivationRoute() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Role Guard: Only Super Admin (admin)
-  if (currentUser && currentUser.role !== "admin") {
+  // Level Akses / Role Guard
+  if (currentUser && !hasMenuAccess("tools_huawei")) {
     return (
       <div className="max-w-xl mx-auto my-12 p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm text-center space-y-4 animate-fadeIn">
         <div className="w-14 h-14 mx-auto rounded-2xl bg-rose-100 dark:bg-rose-950/70 text-rose-600 dark:text-rose-400 flex items-center justify-center shadow-xs">

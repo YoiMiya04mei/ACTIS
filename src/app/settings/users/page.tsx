@@ -904,6 +904,13 @@ export default function UserSettingsPage() {
 
         {isAdmin && (
           <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/settings/access-levels"
+              className="inline-flex items-center justify-center px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 shadow-2xs transition"
+            >
+              <Lock className="w-4 h-4 mr-1.5 text-blue-600" />
+              Level Akses Menu
+            </Link>
             <button
               type="button"
               onClick={handleOpenAddModal}

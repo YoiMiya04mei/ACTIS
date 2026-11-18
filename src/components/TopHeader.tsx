@@ -40,7 +40,7 @@ function formatWibDateTime(date: Date): string {
 export function TopHeader({ onOpenMobileSidebar }: TopHeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { currentUser, logout } = useCurrentUser();
+  const { currentUser, logout, hasMenuAccess } = useCurrentUser();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
 
@@ -143,14 +143,16 @@ export function TopHeader({ onOpenMobileSidebar }: TopHeaderProps) {
                 </div>
 
                 <div className="py-1 space-y-0.5">
-                  <Link
-                    href="/settings/users"
-                    onClick={() => setIsUserMenuOpen(false)}
-                    className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
-                  >
-                    <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    <span>Pengaturan User Akses</span>
-                  </Link>
+                  {hasMenuAccess("settings_users") && (
+                    <Link
+                      href="/settings/users"
+                      onClick={() => setIsUserMenuOpen(false)}
+                      className="w-full flex items-center space-x-2 px-3 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      <span>Pengaturan User Akses</span>
+                    </Link>
+                  )}
 
                   <button
                     type="button"

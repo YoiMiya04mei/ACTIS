@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCurrentUser } from "@/context/UserContext";
+import type { MenuAccessKey } from "@/lib/accessLevels";
 import {
   Layers,
   Building2,
@@ -37,6 +38,7 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   RefreshCw,
+  Lock,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -49,10 +51,50 @@ export function Sidebar({
   onCloseMobile,
 }: SidebarProps) {
   const pathname = usePathname();
-  const { currentUser } = useCurrentUser();
-  const isSuperAdmin = currentUser?.role === "admin";
-  const isBackupAllowed =
-    currentUser?.role === "admin" || currentUser?.role === "noc_engineer";
+  const { hasMenuAccess } = useCurrentUser();
+
+  const canAny = (keys: MenuAccessKey[]) => keys.some((k) => hasMenuAccess(k));
+  const showLayananSection = canAny([
+    "queue",
+    "pop_sites",
+    "enterprise",
+    "ipam",
+    "vlan",
+    "monitoring",
+    "dcim_racks",
+    "dcim_otbs",
+  ]);
+  const showInventorySection = canAny([
+    "inv_dashboard",
+    "inv_items",
+    "inv_stock",
+    "inv_in",
+    "inv_out",
+    "inv_in_use",
+    "inv_returns",
+    "inv_form_barang",
+    "inv_history",
+    "inv_reports",
+    "inv_settings",
+    "inv_mirror",
+  ]);
+  const showToolsSection = canAny([
+    "tools_mikrotik",
+    "tools_traffic_qos",
+    "tools_huawei",
+    "tools_documents",
+    "tools_templates",
+    "tools_history",
+  ]);
+  const showBackupSection = hasMenuAccess("backups");
+  const showIntegrasiSection = canAny([
+    "tacacs",
+    "admin_sync",
+    "settings_users",
+    "settings_access_levels",
+    "logs",
+    "admin_updates",
+  ]);
 
   const isLayananActive =
     pathname === "/queue" ||
@@ -177,7 +219,8 @@ export function Sidebar({
             </div>
 
             {/* SECTION 1: LAYANAN & INVENTARIS */}
-            <div className="space-y-1">
+            {showLayananSection && (
+              <div className="space-y-1">
               <button
                 type="button"
                 onClick={() => toggleSection("layanan")}
@@ -208,6 +251,7 @@ export function Sidebar({
               {/* Submenu: Layanan & Inventaris */}
               {activeSection === "layanan" && (
                 <div className="pl-2 ml-2 border-l border-slate-200/80 dark:border-slate-800/80 space-y-1 mt-0.5 transition-all duration-200">
+                  {hasMenuAccess("queue") && (
                   <Link
                     href="/queue"
                     onClick={onCloseMobile}
@@ -229,7 +273,9 @@ export function Sidebar({
                       <span>List Antrean</span>
                     </div>
                   </Link>
+                  )}
 
+                  {hasMenuAccess("pop_sites") && (
                   <Link
                     href="/pop-sites"
                     onClick={onCloseMobile}
@@ -251,7 +297,9 @@ export function Sidebar({
                       <span>List POP Site</span>
                     </div>
                   </Link>
+                  )}
 
+                  {hasMenuAccess("enterprise") && (
                   <Link
                     href="/enterprise"
                     onClick={onCloseMobile}
@@ -273,7 +321,9 @@ export function Sidebar({
                       <span>List Enterprise</span>
                     </div>
                   </Link>
+                  )}
 
+                  {hasMenuAccess("ipam") && (
                   <Link
                     href="/ipam"
                     onClick={onCloseMobile}
@@ -295,7 +345,9 @@ export function Sidebar({
                       <span>Prefix IP Public</span>
                     </div>
                   </Link>
+                  )}
 
+                  {hasMenuAccess("vlan") && (
                   <Link
                     href="/vlan"
                     onClick={onCloseMobile}
@@ -317,7 +369,9 @@ export function Sidebar({
                       <span>VLAN Management</span>
                     </div>
                   </Link>
+                  )}
 
+                  {hasMenuAccess("monitoring") && (
                   <Link
                     href="/monitoring"
                     onClick={onCloseMobile}
@@ -339,7 +393,9 @@ export function Sidebar({
                       <span>ICMP Ping Monitor</span>
                     </div>
                   </Link>
+                  )}
 
+                  {hasMenuAccess("dcim_racks") && (
                   <Link
                     href="/dcim/racks"
                     onClick={onCloseMobile}
@@ -361,7 +417,9 @@ export function Sidebar({
                       <span>Database Rack 3D</span>
                     </div>
                   </Link>
+                  )}
 
+                  {hasMenuAccess("dcim_otbs") && (
                   <Link
                     href="/dcim/otbs"
                     onClick={onCloseMobile}
@@ -383,12 +441,15 @@ export function Sidebar({
                       <span>Database OTB 3D</span>
                     </div>
                   </Link>
+                  )}
                 </div>
               )}
-            </div>
+              </div>
+            )}
 
             {/* SECTION: INVENTORY MANAGEMENT */}
-            <div className="space-y-1">
+            {showInventorySection && (
+              <div className="space-y-1">
               <button
                 type="button"
                 onClick={() => toggleSection("inventory")}
@@ -420,6 +481,7 @@ export function Sidebar({
               {activeSection === "inventory" && (
                 <div className="pl-2 ml-2 border-l border-slate-200/80 dark:border-slate-800/80 space-y-1 mt-0.5 transition-all duration-200">
                   {/* 1. Dashboard Inventory */}
+                  {hasMenuAccess("inv_dashboard") && (
                   <Link
                     href="/inventory/dashboard"
                     onClick={onCloseMobile}
@@ -441,8 +503,10 @@ export function Sidebar({
                       <span className="truncate">Dashboard Inventory</span>
                     </div>
                   </Link>
+                  )}
 
                   {/* 2. Master Barang */}
+                  {hasMenuAccess("inv_items") && (
                   <Link
                     href="/inventory/items"
                     onClick={onCloseMobile}
@@ -464,8 +528,10 @@ export function Sidebar({
                       <span className="truncate">Master Barang</span>
                     </div>
                   </Link>
+                  )}
 
                   {/* 3. Stok Inventory */}
+                  {hasMenuAccess("inv_stock") && (
                   <Link
                     href="/inventory/stock"
                     onClick={onCloseMobile}
@@ -487,8 +553,10 @@ export function Sidebar({
                       <span className="truncate">Stok Inventory</span>
                     </div>
                   </Link>
+                  )}
 
                   {/* 5. Barang Masuk */}
+                  {hasMenuAccess("inv_in") && (
                   <Link
                     href="/inventory/transactions/in"
                     onClick={onCloseMobile}
@@ -510,8 +578,10 @@ export function Sidebar({
                       <span className="truncate">Barang Masuk</span>
                     </div>
                   </Link>
+                  )}
 
                   {/* 6. Barang Keluar */}
+                  {hasMenuAccess("inv_out") && (
                   <Link
                     href="/inventory/transactions/out"
                     onClick={onCloseMobile}
@@ -533,8 +603,10 @@ export function Sidebar({
                       <span className="truncate">Barang Keluar</span>
                     </div>
                   </Link>
+                  )}
 
                   {/* 7. Barang Sedang Digunakan */}
+                  {hasMenuAccess("inv_in_use") && (
                   <Link
                     href="/inventory/in-use"
                     onClick={onCloseMobile}
@@ -556,8 +628,10 @@ export function Sidebar({
                       <span className="truncate">Barang Sedang Digunakan</span>
                     </div>
                   </Link>
+                  )}
 
                   {/* 8. Pengembalian Barang */}
+                  {hasMenuAccess("inv_returns") && (
                   <Link
                     href="/inventory/returns"
                     onClick={onCloseMobile}
@@ -579,8 +653,10 @@ export function Sidebar({
                       <span className="truncate">Pengembalian Barang</span>
                     </div>
                   </Link>
+                  )}
 
                   {/* 9. Generate Form Barang */}
+                  {hasMenuAccess("inv_form_barang") && (
                   <Link
                     href="/inventory/form-barang"
                     onClick={onCloseMobile}
@@ -602,8 +678,10 @@ export function Sidebar({
                       <span className="truncate">Generate Form Barang</span>
                     </div>
                   </Link>
+                  )}
 
                   {/* 9. Riwayat Transaksi */}
+                  {hasMenuAccess("inv_history") && (
                   <Link
                     href="/inventory/history"
                     onClick={onCloseMobile}
@@ -625,8 +703,10 @@ export function Sidebar({
                       <span className="truncate">Riwayat Transaksi</span>
                     </div>
                   </Link>
+                  )}
 
                   {/* 11. Laporan Inventory */}
+                  {hasMenuAccess("inv_reports") && (
                   <Link
                     href="/inventory/reports"
                     onClick={onCloseMobile}
@@ -648,9 +728,10 @@ export function Sidebar({
                       <span className="truncate">Laporan Inventory</span>
                     </div>
                   </Link>
+                  )}
 
                   {/* 12. Pengaturan Inventory */}
-                  {isSuperAdmin && (
+                  {hasMenuAccess("inv_settings") && (
                     <Link
                       href="/inventory/settings"
                       onClick={onCloseMobile}
@@ -675,7 +756,7 @@ export function Sidebar({
                   )}
 
                   {/* 13. Mirror Google Drive / Sheets */}
-                  {(isSuperAdmin || currentUser?.role === "warehouse_admin") && (
+                  {hasMenuAccess("inv_mirror") && (
                     <Link
                       href="/inventory/mirror"
                       onClick={onCloseMobile}
@@ -700,10 +781,12 @@ export function Sidebar({
                   )}
                 </div>
               )}
-            </div>
+              </div>
+            )}
 
             {/* SECTION 2: TOOLS & GENERATOR */}
-            <div className="space-y-1">
+            {showToolsSection && (
+              <div className="space-y-1">
               <button
                 type="button"
                 onClick={() => toggleSection("tools")}
@@ -734,6 +817,7 @@ export function Sidebar({
               {/* Submenu: Tools & Generator */}
               {activeSection === "tools" && (
                 <div className="pl-2 ml-2 border-l border-slate-200/80 dark:border-slate-800/80 space-y-1 mt-0.5 transition-all duration-200">
+                  {hasMenuAccess("tools_mikrotik") && (
                   <Link
                     href="/tools/mikrotik"
                     onClick={onCloseMobile}
@@ -755,7 +839,9 @@ export function Sidebar({
                       <span>MikroTik Tools</span>
                     </div>
                   </Link>
+                  )}
 
+                  {hasMenuAccess("tools_traffic_qos") && (
                   <Link
                     href="/tools/traffic-qos"
                     onClick={onCloseMobile}
@@ -777,8 +863,9 @@ export function Sidebar({
                       <span>Traffic QoS</span>
                     </div>
                   </Link>
+                  )}
 
-                  {isSuperAdmin && (
+                  {hasMenuAccess("tools_huawei") && (
                     <Link
                       href="/tools/huawei"
                       onClick={onCloseMobile}
@@ -802,6 +889,7 @@ export function Sidebar({
                     </Link>
                   )}
 
+                  {hasMenuAccess("tools_documents") && (
                   <Link
                     href="/tools/documents"
                     onClick={onCloseMobile}
@@ -823,8 +911,9 @@ export function Sidebar({
                       <span>Dokumen & Surat</span>
                     </div>
                   </Link>
+                  )}
 
-                  {isSuperAdmin && (
+                  {hasMenuAccess("tools_templates") && (
                     <Link
                       href="/tools/templates"
                       onClick={onCloseMobile}
@@ -848,6 +937,7 @@ export function Sidebar({
                     </Link>
                   )}
 
+                  {hasMenuAccess("tools_history") && (
                   <Link
                     href="/tools/documents/history"
                     onClick={onCloseMobile}
@@ -869,12 +959,14 @@ export function Sidebar({
                       <span>Arsip Dokumen</span>
                     </div>
                   </Link>
+                  )}
                 </div>
               )}
-            </div>
+              </div>
+            )}
 
             {/* SECTION 3: BACKUP CONFIG (MENU TERSENDIRI) */}
-            {isBackupAllowed && (
+            {showBackupSection && (
               <div className="space-y-1">
                 <button
                   type="button"
@@ -932,7 +1024,8 @@ export function Sidebar({
             )}
 
             {/* SECTION 4: INTEGRASI & SISTEM */}
-            <div className="space-y-1">
+            {showIntegrasiSection && (
+              <div className="space-y-1">
               <button
                 type="button"
                 onClick={() => toggleSection("integrasi")}
@@ -963,7 +1056,7 @@ export function Sidebar({
               {/* Submenu: Integrasi & Sistem */}
               {activeSection === "integrasi" && (
                 <div className="pl-2 ml-2 border-l border-slate-200/80 dark:border-slate-800/80 space-y-1 mt-0.5 transition-all duration-200">
-                  {isBackupAllowed && (
+                  {hasMenuAccess("tacacs") && (
                     <Link
                       href="/tacacs"
                       onClick={onCloseMobile}
@@ -987,6 +1080,7 @@ export function Sidebar({
                     </Link>
                   )}
 
+                  {hasMenuAccess("admin_sync") && (
                   <Link
                     href="/admin/sync"
                     onClick={onCloseMobile}
@@ -1008,7 +1102,9 @@ export function Sidebar({
                       <span>Sheets Sync & Admin</span>
                     </div>
                   </Link>
+                  )}
 
+                  {hasMenuAccess("settings_users") && (
                   <Link
                     href="/settings/users"
                     onClick={onCloseMobile}
@@ -1030,7 +1126,33 @@ export function Sidebar({
                       <span>Pengaturan User Akses</span>
                     </div>
                   </Link>
+                  )}
 
+                  {hasMenuAccess("settings_access_levels") && (
+                  <Link
+                    href="/settings/access-levels"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/settings/access-levels"
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Konfigurasi Hak Akses Menu per Level User"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Lock
+                        className={`w-5 h-5 shrink-0 ${
+                          pathname === "/settings/access-levels"
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                        }`}
+                      />
+                      <span>Level Akses</span>
+                    </div>
+                  </Link>
+                  )}
+
+                  {hasMenuAccess("logs") && (
                   <Link
                     href="/logs"
                     onClick={onCloseMobile}
@@ -1052,7 +1174,9 @@ export function Sidebar({
                       <span>Log Aplikasi</span>
                     </div>
                   </Link>
+                  )}
 
+                  {hasMenuAccess("admin_updates") && (
                   <Link
                     href="/admin/updates"
                     onClick={onCloseMobile}
@@ -1074,9 +1198,11 @@ export function Sidebar({
                       <span>Update & Changelog</span>
                     </div>
                   </Link>
+                  )}
                 </div>
               )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </aside>

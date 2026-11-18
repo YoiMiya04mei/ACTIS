@@ -4,6 +4,25 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.38",
+      "date": "2026-11-18T16:03:21+07:00",
+      "title": "Fitur Manajemen Level Akses Menu per Role User ACTIS",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Menambahkan halaman Level Akses (/settings/access-levels) untuk mengatur menu aktif per level pengguna (Administrator, NOC Engineer, Field Engineer, Sales Corporate, Admin Gudang) lengkap dengan progress bar menu aktif, Centang semua, Kosongkan, Reset Default, dan modal Lihat Ringkasan"
+        },
+        {
+          "type": "feat",
+          "text": "Menambahkan endpoint PostgreSQL /api/access-levels (GET & PUT/POST) serta penegakan izin menu real-time pada Sidebar, TopHeader, AppShell route guard, dan /tools/huawei"
+        },
+        {
+          "type": "improve",
+          "text": "Menjaga menu kritikal seperti Dashboard (semua role) serta Pengaturan User Akses dan Level Akses (Administrator) berstatus Selalu aktif agar terhindar dari lockout"
+        }
+      ]
+    },
+    {
       "version": "1.2.37",
       "date": "2026-11-18T15:45:24+07:00",
       "title": "Otomatis Tampilkan Info ACC Barang Keluar di Atas Catatan Generate Form Barang",
