@@ -36,50 +36,79 @@ import {
   DEFAULT_INFRASTRUCTURE_OPTIONS,
   DEFAULT_MEDIA_OPTIONS,
 } from "@/lib/ticketUtils";
-import {
-  hasRequestBarangAccess,
-  isInternalPlaceholderEmail,
-  REQUEST_BARANG_LOGIN_SETTING_KEY,
-} from "@/lib/requestBarangAuth";
+import { REQUEST_BARANG_LOGIN_SETTING_KEY } from "@/lib/requestBarangAuth";
+
+interface RequestBarangAccountItem {
+  id: string;
+  nama: string;
+  username: string;
+  is_active: boolean;
+  created_at: string;
+}
 
 export default function UserSettingsPage() {
   const { currentUser, users, addUser, updateUser, deleteUser, changePassword, fetchUsers } = useCurrentUser();
   const { confirm: confirmDialog } = useDialog();
 
-  // Search & Filter
+  // Search & Filter (ACTIS Dashboard Accounts)
   const [searchTerm, setSearchTerm] = useState("");
 
-  // Add User Modal State
+  // Add ACTIS User Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [newNama, setNewNama] = useState("");
-  const [newUsername, setNewUsername] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState("noc_engineer");
-  const [newReqBarangAccess, setNewReqBarangAccess] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [addSuccess, setAddSuccess] = useState<string | null>(null);
 
-  // Edit User Modal State
+  // Edit ACTIS User Modal State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editUserId, setEditUserId] = useState("");
   const [editNama, setEditNama] = useState("");
-  const [editUsername, setEditUsername] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editRole, setEditRole] = useState("noc_engineer");
-  const [editReqBarangAccess, setEditReqBarangAccess] = useState(false);
   const [editPassword, setEditPassword] = useState("");
   const [editLoading, setEditLoading] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
   const [editSuccess, setEditSuccess] = useState<string | null>(null);
 
-  // Request-Barang Portal Access Controls (Admin Only)
+  // Request-Barang Portal Accounts & Controls (Isolated from ACTIS accounts)
+  const [rbAccounts, setRbAccounts] = useState<RequestBarangAccountItem[]>([]);
+  const [rbLoading, setRbLoading] = useState(false);
+  const [rbSearchTerm, setRbSearchTerm] = useState("");
   const [reqBarangLoginRequired, setReqBarangLoginRequired] = useState(true);
   const [reqBarangPolicyLoading, setReqBarangPolicyLoading] = useState(false);
   const [reqBarangPolicySuccess, setReqBarangPolicySuccess] = useState<string | null>(null);
   const [reqBarangPolicyError, setReqBarangPolicyError] = useState<string | null>(null);
-  const [togglingReqUserId, setTogglingReqUserId] = useState<string | null>(null);
+  const [togglingRbAccountId, setTogglingRbAccountId] = useState<string | null>(null);
+
+  // Add /request-barang Account Modal
+  const [isRbAddOpen, setIsRbAddOpen] = useState(false);
+  const [rbAddNama, setRbAddNama] = useState("");
+  const [rbAddUsername, setRbAddUsername] = useState("");
+  const [rbAddPassword, setRbAddPassword] = useState("");
+  const [rbAddActive, setRbAddActive] = useState(true);
+  const [rbAddLoading, setRbAddLoading] = useState(false);
+  const [rbAddError, setRbAddError] = useState<string | null>(null);
+  const [rbAddSuccess, setRbAddSuccess] = useState<string | null>(null);
+
+  // Edit /request-barang Account Modal
+  const [isRbEditOpen, setIsRbEditOpen] = useState(false);
+  const [rbEditId, setRbEditId] = useState("");
+  const [rbEditNama, setRbEditNama] = useState("");
+  const [rbEditUsername, setRbEditUsername] = useState("");
+  const [rbEditPassword, setRbEditPassword] = useState("");
+  const [rbEditActive, setRbEditActive] = useState(true);
+  const [rbEditLoading, setRbEditLoading] = useState(false);
+  const [rbEditError, setRbEditError] = useState<string | null>(null);
+  const [rbEditSuccess, setRbEditSuccess] = useState<string | null>(null);
+
+  // Delete /request-barang Account Modal
+  const [rbDeleteTarget, setRbDeleteTarget] = useState<RequestBarangAccountItem | null>(null);
+  const [rbDeleteLoading, setRbDeleteLoading] = useState(false);
+  const [rbDeleteError, setRbDeleteError] = useState<string | null>(null);
 
   // Delete User Confirmation State
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
@@ -101,6 +130,28 @@ export default function UserSettingsPage() {
   }, [fetchUsers]);
 
   const isAdmin = currentUser?.role === "admin";
+
+  const fetchRbAccounts = React.useCallback(async () => {
+    if (!isAdmin) return;
+    setRbLoading(true);
+    try {
+      const res = await fetch("/api/request-barang/accounts", { cache: "no-store" });
+      const json = await res.json();
+      if (res.ok && json.success && Array.isArray(json.data)) {
+        setRbAccounts(json.data);
+      }
+    } catch (err) {
+      console.error("Failed loading /request-barang accounts:", err);
+    } finally {
+      setRbLoading(false);
+    }
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchRbAccounts();
+    }
+  }, [isAdmin, fetchRbAccounts]);
 
   // Server Management State (Admin only)
   const [serverList, setServerList] = useState<string[]>(DEFAULT_SERVER_OPTIONS);
@@ -453,39 +504,171 @@ export default function UserSettingsPage() {
     }
   };
 
-  const handleToggleUserReqAccess = async (targetUser: any) => {
-    if (!isAdmin || togglingReqUserId) return;
-    const nextAllowed = !hasRequestBarangAccess(targetUser);
-    setTogglingReqUserId(targetUser.id);
+  const handleToggleRbAccountStatus = async (account: RequestBarangAccountItem) => {
+    if (!isAdmin || togglingRbAccountId) return;
+    const nextActive = !account.is_active;
+    setTogglingRbAccountId(account.id);
+    setReqBarangPolicyError(null);
     try {
-      const res = await fetch(`/api/users/${targetUser.id}`, {
+      const res = await fetch(`/api/request-barang/accounts/${account.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ request_barang_access: nextAllowed }),
+        body: JSON.stringify({ is_active: nextActive }),
       });
       const json = await res.json();
       if (res.ok && json.success) {
-        await fetchUsers();
+        await fetchRbAccounts();
       } else {
-        setReqBarangPolicyError(json.error || "Gagal mengubah akses /request-barang pengguna.");
+        setReqBarangPolicyError(json.error || "Gagal mengubah status akun /request-barang.");
       }
     } catch (err: any) {
-      setReqBarangPolicyError(err?.message || "Gagal menghubungi server saat mengubah akses.");
+      setReqBarangPolicyError(err?.message || "Gagal menghubungi server saat mengubah status akun.");
     } finally {
-      setTogglingReqUserId(null);
+      setTogglingRbAccountId(null);
     }
   };
 
-  const handleOpenAddModal = (presetRole = "noc_engineer") => {
+  const handleOpenAddModal = () => {
     setAddError(null);
     setAddSuccess(null);
     setNewNama("");
-    setNewUsername("");
     setNewEmail("");
     setNewPassword("");
-    setNewRole(presetRole);
-    setNewReqBarangAccess(presetRole === "admin" || presetRole === "request_barang");
+    setNewRole("noc_engineer");
     setIsAddModalOpen(true);
+  };
+
+  const handleOpenRbAddModal = () => {
+    setRbAddError(null);
+    setRbAddSuccess(null);
+    setRbAddNama("");
+    setRbAddUsername("");
+    setRbAddPassword("");
+    setRbAddActive(true);
+    setIsRbAddOpen(true);
+  };
+
+  const handleAddRbAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRbAddError(null);
+    setRbAddSuccess(null);
+
+    const cleanUsername = rbAddUsername.trim().toLowerCase();
+    if (!rbAddNama.trim() || !cleanUsername || !rbAddPassword) {
+      setRbAddError("Nama lengkap, username, dan password wajib diisi.");
+      return;
+    }
+    if (rbAddPassword.length < 8) {
+      setRbAddError("Password minimal 8 karakter.");
+      return;
+    }
+
+    setRbAddLoading(true);
+    try {
+      const res = await fetch("/api/request-barang/accounts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nama: rbAddNama.trim(),
+          username: cleanUsername,
+          password: rbAddPassword,
+          is_active: rbAddActive,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setRbAddError(json.error || "Gagal menambahkan akun /request-barang.");
+      } else {
+        setRbAddSuccess(`Akun @${cleanUsername} berhasil ditambahkan.`);
+        await fetchRbAccounts();
+        setTimeout(() => {
+          setIsRbAddOpen(false);
+          setRbAddSuccess(null);
+        }, 1000);
+      }
+    } catch (err: any) {
+      setRbAddError(err?.message || "Gagal menghubungi server.");
+    } finally {
+      setRbAddLoading(false);
+    }
+  };
+
+  const handleOpenRbEdit = (acc: RequestBarangAccountItem) => {
+    setRbEditId(acc.id);
+    setRbEditNama(acc.nama);
+    setRbEditUsername(acc.username);
+    setRbEditPassword("");
+    setRbEditActive(acc.is_active);
+    setRbEditError(null);
+    setRbEditSuccess(null);
+    setIsRbEditOpen(true);
+  };
+
+  const handleSaveRbEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRbEditError(null);
+    setRbEditSuccess(null);
+
+    const cleanUsername = rbEditUsername.trim().toLowerCase();
+    if (!rbEditNama.trim() || !cleanUsername) {
+      setRbEditError("Nama lengkap dan username wajib diisi.");
+      return;
+    }
+    if (rbEditPassword && rbEditPassword.length < 8) {
+      setRbEditError("Password baru minimal 8 karakter (atau kosongkan jika tidak diubah).");
+      return;
+    }
+
+    setRbEditLoading(true);
+    try {
+      const res = await fetch(`/api/request-barang/accounts/${rbEditId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nama: rbEditNama.trim(),
+          username: cleanUsername,
+          password: rbEditPassword || undefined,
+          is_active: rbEditActive,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setRbEditError(json.error || "Gagal memperbarui akun /request-barang.");
+      } else {
+        setRbEditSuccess(`Akun @${cleanUsername} berhasil diperbarui.`);
+        await fetchRbAccounts();
+        setTimeout(() => {
+          setIsRbEditOpen(false);
+          setRbEditSuccess(null);
+        }, 900);
+      }
+    } catch (err: any) {
+      setRbEditError(err?.message || "Gagal menghubungi server.");
+    } finally {
+      setRbEditLoading(false);
+    }
+  };
+
+  const handleDeleteRbAccount = async () => {
+    if (!rbDeleteTarget) return;
+    setRbDeleteError(null);
+    setRbDeleteLoading(true);
+    try {
+      const res = await fetch(`/api/request-barang/accounts/${rbDeleteTarget.id}`, {
+        method: "DELETE",
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setRbDeleteError(json.error || "Gagal menghapus akun /request-barang.");
+      } else {
+        setRbDeleteTarget(null);
+        await fetchRbAccounts();
+      }
+    } catch (err: any) {
+      setRbDeleteError(err?.message || "Gagal menghapus akun.");
+    } finally {
+      setRbDeleteLoading(false);
+    }
   };
 
   const handleSaveIdleTimeout = async (e: React.FormEvent) => {
@@ -532,8 +715,6 @@ export default function UserSettingsPage() {
         return "Sales Corporate";
       case "warehouse_admin":
         return "Admin Gudang";
-      case "request_barang":
-        return "User Request Barang";
       default:
         return role;
     }
@@ -551,8 +732,6 @@ export default function UserSettingsPage() {
         return "bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800";
       case "warehouse_admin":
         return "bg-indigo-100 dark:bg-indigo-950/70 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800";
-      case "request_barang":
-        return "bg-sky-100 dark:bg-sky-950/70 text-sky-800 dark:text-sky-300 border-sky-200 dark:border-sky-800";
       default:
         return "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700";
     }
@@ -563,21 +742,8 @@ export default function UserSettingsPage() {
     setAddError(null);
     setAddSuccess(null);
 
-    const isReqRole = newRole === "request_barang";
-    const cleanUsername = newUsername.trim().toLowerCase();
-
-    if (!newNama.trim() || !newPassword) {
-      setAddError("Nama lengkap dan password wajib diisi.");
-      return;
-    }
-
-    if (isReqRole && !cleanUsername) {
-      setAddError("Username wajib diisi untuk akun User Request Barang.");
-      return;
-    }
-
-    if (!isReqRole && !newEmail.trim()) {
-      setAddError("Email kantor wajib diisi.");
+    if (!newNama.trim() || !newEmail.trim() || !newPassword) {
+      setAddError("Nama lengkap, email kantor, dan password wajib diisi.");
       return;
     }
 
@@ -589,24 +755,20 @@ export default function UserSettingsPage() {
     setAddLoading(true);
     const res = await addUser({
       nama: newNama.trim(),
-      email: isReqRole ? undefined : newEmail.trim(),
-      username: cleanUsername || undefined,
+      email: newEmail.trim(),
       password: newPassword,
       role: newRole,
-      request_barang_access: newReqBarangAccess,
     });
     setAddLoading(false);
 
     if (!res.success) {
       setAddError(res.error || "Gagal menambah user.");
     } else {
-      setAddSuccess(`Pengguna '${newNama}' berhasil ditambahkan.`);
+      setAddSuccess(`Akun ACTIS '${newNama}' berhasil ditambahkan.`);
       setNewNama("");
-      setNewUsername("");
       setNewEmail("");
       setNewPassword("");
       setNewRole("noc_engineer");
-      setNewReqBarangAccess(false);
       setTimeout(() => {
         setIsAddModalOpen(false);
         setAddSuccess(null);
@@ -617,10 +779,8 @@ export default function UserSettingsPage() {
   const handleOpenEdit = (user: any) => {
     setEditUserId(user.id);
     setEditNama(user.nama);
-    setEditUsername(user.username || "");
-    setEditEmail(isInternalPlaceholderEmail(user.email) ? "" : user.email || "");
+    setEditEmail(user.email || "");
     setEditRole(user.role);
-    setEditReqBarangAccess(hasRequestBarangAccess(user));
     setEditPassword("");
     setEditError(null);
     setEditSuccess(null);
@@ -632,21 +792,8 @@ export default function UserSettingsPage() {
     setEditError(null);
     setEditSuccess(null);
 
-    const isReqRole = editRole === "request_barang";
-    const cleanUsername = editUsername.trim().toLowerCase();
-
-    if (!editNama.trim()) {
-      setEditError("Nama lengkap wajib diisi.");
-      return;
-    }
-
-    if (isReqRole && !cleanUsername) {
-      setEditError("Username wajib diisi untuk akun User Request Barang.");
-      return;
-    }
-
-    if (!isReqRole && !editEmail.trim()) {
-      setEditError("Email kantor wajib diisi.");
+    if (!editNama.trim() || !editEmail.trim()) {
+      setEditError("Nama lengkap dan email kantor wajib diisi.");
       return;
     }
 
@@ -658,11 +805,9 @@ export default function UserSettingsPage() {
     setEditLoading(true);
     const res = await updateUser(editUserId, {
       nama: editNama.trim(),
-      email: isReqRole && !editEmail.trim() ? undefined : editEmail.trim(),
-      username: cleanUsername || undefined,
+      email: editEmail.trim(),
       role: editRole,
       password: editPassword || undefined,
-      request_barang_access: editReqBarangAccess,
     });
     setEditLoading(false);
 
@@ -730,10 +875,14 @@ export default function UserSettingsPage() {
     const q = searchTerm.toLowerCase();
     return (
       u.nama.toLowerCase().includes(q) ||
-      (u.username || "").toLowerCase().includes(q) ||
       u.email.toLowerCase().includes(q) ||
       u.role.toLowerCase().includes(q)
     );
+  });
+
+  const filteredRbAccounts = rbAccounts.filter((acc) => {
+    const q = rbSearchTerm.toLowerCase();
+    return acc.nama.toLowerCase().includes(q) || acc.username.toLowerCase().includes(q);
   });
 
   return (
@@ -749,7 +898,7 @@ export default function UserSettingsPage() {
             Pengaturan User Akses
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Manajemen pengguna sistem, verifikasi kredensial, dan kontrol hak akses peran (RBAC).
+            Manajemen terpisah akun login <strong>actis.jembatandata.com</strong> dan akun login portal <strong>/request-barang</strong>.
           </p>
         </div>
 
@@ -757,20 +906,11 @@ export default function UserSettingsPage() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => handleOpenAddModal("request_barang")}
-              className="inline-flex items-center justify-center px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 transition cursor-pointer"
-              title="Buat akun teknisi/lapangan khusus untuk login ke https://actis.jembatandata.com/request-barang"
-            >
-              <ClipboardList className="w-4 h-4 mr-1.5" />
-              + Akun /request-barang
-            </button>
-            <button
-              type="button"
-              onClick={() => handleOpenAddModal("noc_engineer")}
+              onClick={handleOpenAddModal}
               className="inline-flex items-center justify-center px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-md shadow-blue-500/25 transition cursor-pointer"
             >
               <UserPlus className="w-4 h-4 mr-2" />
-              + Tambah Pengguna Baru
+              + Tambah Akun ACTIS
             </button>
           </div>
         )}
@@ -823,206 +963,180 @@ export default function UserSettingsPage() {
         </div>
       </div>
 
-      {/* ADMIN ONLY SECTION: User List Table & Management */}
+      {/* ADMIN ONLY SECTION: Separated ACTIS Accounts Card & /request-barang Accounts Card */}
       {isAdmin ? (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h3 className="text-base font-bold text-slate-900 flex items-center space-x-2">
-                <span>Daftar Pengguna Sistem</span>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                  {filteredUsers.length} Akun
-                </span>
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Kelola hak akses dan staf operasional ISP ACTIS.
-              </p>
-            </div>
-
-            {/* Search Input */}
-            <div className="relative w-full sm:w-72">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                <Search className="w-3.5 h-3.5" />
+        <div className="space-y-6">
+          {/* CARD 1: AKUN LOGIN DASHBOARD ACTIS (actis.jembatandata.com) */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex flex-wrap items-center gap-2">
+                  <span>Akun Login Dashboard ACTIS</span>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                    actis.jembatandata.com
+                  </span>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                    {filteredUsers.length} Akun
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Akun staf internal untuk login ke dashboard utama ACTIS menggunakan <strong>Email Kantor &amp; Password</strong>.
+                </p>
               </div>
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Cari nama, username, email, role..."
-                className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
-              />
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative w-full sm:w-64">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <Search className="w-3.5 h-3.5" />
+                  </div>
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Cari nama, email, role..."
+                    className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenAddModal}
+                  className="inline-flex items-center justify-center px-3.5 py-1.5 rounded-xl font-bold text-xs text-white bg-blue-600 hover:bg-blue-700 shadow-xs transition cursor-pointer shrink-0"
+                >
+                  <UserPlus className="w-3.5 h-3.5 mr-1.5" />
+                  + Tambah Akun ACTIS
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* Users Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-600">
-              <thead className="bg-slate-50/80 text-[11px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200/80">
-                <tr>
-                  <th className="px-5 py-3.5">Nama &amp; Pengguna</th>
-                  <th className="px-5 py-3.5">Username &amp; Email</th>
-                  <th className="px-5 py-3.5">Level Akses (Role)</th>
-                  <th className="px-5 py-3.5">Login /request-barang</th>
-                  <th className="px-5 py-3.5">Hak Akses Sistem</th>
-                  <th className="px-5 py-3.5 text-right">Aksi</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredUsers.map((u) => {
-                  const isSelf = u.id === currentUser?.id;
-                  const isUserAdmin = u.role === "admin";
-                  const isReqBarangOnly = u.role === "request_barang";
-                  const canLoginReqBarang = hasRequestBarangAccess(u);
-                  const isToggling = togglingReqUserId === u.id;
-                  return (
-                    <tr key={u.id} className="hover:bg-slate-50/60 transition">
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-xs text-slate-700">
-                            {u.nama.charAt(0)}
+            {/* ACTIS Users Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-600">
+                <thead className="bg-slate-50/80 text-[11px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200/80">
+                  <tr>
+                    <th className="px-5 py-3.5">Nama &amp; Pengguna</th>
+                    <th className="px-5 py-3.5">Email Kantor</th>
+                    <th className="px-5 py-3.5">Level Akses (Role)</th>
+                    <th className="px-5 py-3.5">Hak Akses Sistem</th>
+                    <th className="px-5 py-3.5 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredUsers.map((u) => {
+                    const isSelf = u.id === currentUser?.id;
+                    const isUserAdmin = u.role === "admin";
+                    const isWarehouseAdmin = u.role === "warehouse_admin";
+                    return (
+                      <tr key={u.id} className="hover:bg-slate-50/60 transition">
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-xs text-slate-700">
+                              {u.nama.charAt(0)}
+                            </div>
+                            <div>
+                              <span className="font-bold text-slate-900 block">{u.nama}</span>
+                              {isSelf && (
+                                <span className="text-[10px] font-extrabold text-blue-600">
+                                  (Akun Anda Saat Ini)
+                                </span>
+                              )}
+                            </div>
                           </div>
-                          <div>
-                            <span className="font-bold text-slate-900 block">{u.nama}</span>
-                            {isSelf && (
-                              <span className="text-[10px] font-extrabold text-blue-600">
-                                (Akun Anda Saat Ini)
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      <td className="px-5 py-3.5 font-medium text-slate-600">
-                        <div className="space-y-0.5">
-                          {(u.username || !isInternalPlaceholderEmail(u.email)) && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 font-mono text-[11px] font-bold">
-                              @{u.username || u.email.split("@")[0]}
-                            </span>
-                          )}
-                          {!isInternalPlaceholderEmail(u.email) ? (
-                            <span className="block text-[11px] text-slate-500">{u.email}</span>
-                          ) : (
-                            <span className="block text-[10px] text-sky-700 font-semibold">
-                              Login Username Portal Request
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="px-5 py-3.5">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${getRoleBadge(
-                            u.role
-                          )}`}
-                        >
-                          {getRoleLabel(u.role)}
-                        </span>
-                      </td>
-
-                      <td className="px-5 py-3.5">
-                        <button
-                          type="button"
-                          disabled={isToggling}
-                          onClick={() => handleToggleUserReqAccess(u)}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition cursor-pointer disabled:opacity-50 ${
-                            canLoginReqBarang
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                              : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
-                          }`}
-                          title={
-                            canLoginReqBarang
-                              ? "Klik untuk menonaktifkan login akun ini di /request-barang"
-                              : "Klik untuk mengizinkan akun ini login di /request-barang"
-                          }
-                        >
-                          {canLoginReqBarang ? (
-                            <>
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                              <span>{isToggling ? "..." : "Diizinkan"}</span>
-                            </>
-                          ) : (
-                            <>
-                              <Lock className="w-3.5 h-3.5 text-slate-400" />
-                              <span>{isToggling ? "..." : "Ditolak"}</span>
-                            </>
-                          )}
-                        </button>
-                      </td>
-
-                      <td className="px-5 py-3.5">
-                        {isUserAdmin ? (
-                          <span className="inline-flex items-center text-[11px] font-bold text-emerald-700">
-                            <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-500" />
-                            Penuh (Tambah, Edit & Hapus)
+                        <td className="px-5 py-3.5 font-medium text-slate-600">
+                          <span className="inline-flex items-center gap-1.5 text-xs text-slate-700">
+                            <Mail className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{u.email}</span>
                           </span>
-                        ) : isReqBarangOnly ? (
-                          <span className="inline-flex items-center text-[11px] font-bold text-sky-700">
-                            <ClipboardList className="w-3.5 h-3.5 mr-1 text-sky-600" />
-                            Khusus Portal /request-barang
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center text-[11px] font-semibold text-slate-400">
-                            <Lock className="w-3.5 h-3.5 mr-1 text-slate-400" />
-                            Hanya Ganti Password
-                          </span>
-                        )}
-                      </td>
+                        </td>
 
-                      <td className="px-5 py-3.5 text-right">
-                        <div className="flex items-center justify-end space-x-1.5">
-                          {/* EDIT BUTTON (ADMINISTRATOR CAN EDIT ANY USER) */}
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEdit(u)}
-                            className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition cursor-pointer"
-                            title="Edit Data Pengguna"
+                        <td className="px-5 py-3.5">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${getRoleBadge(
+                              u.role
+                            )}`}
                           >
-                            <Pencil className="w-3.5 h-3.5 mr-1" />
-                            Edit
-                          </button>
+                            {getRoleLabel(u.role)}
+                          </span>
+                        </td>
 
-                          {isSelf ? (
-                            <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-100 text-slate-400 border border-slate-200">
-                              (Anda)
+                        <td className="px-5 py-3.5">
+                          {isUserAdmin ? (
+                            <span className="inline-flex items-center text-[11px] font-bold text-emerald-700">
+                              <CheckCircle2 className="w-3.5 h-3.5 mr-1 text-emerald-500" />
+                              Penuh (Tambah, Edit &amp; Hapus)
+                            </span>
+                          ) : isWarehouseAdmin ? (
+                            <span className="inline-flex items-center text-[11px] font-semibold text-indigo-700">
+                              <UserCheck className="w-3.5 h-3.5 mr-1 text-indigo-500" />
+                              Manajemen Inventory
                             </span>
                           ) : (
+                            <span className="inline-flex items-center text-[11px] font-semibold text-slate-400">
+                              <Lock className="w-3.5 h-3.5 mr-1 text-slate-400" />
+                              Hanya Ganti Password
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="px-5 py-3.5 text-right">
+                          <div className="flex items-center justify-end space-x-1.5">
                             <button
                               type="button"
-                              onClick={() => {
-                                setDeleteError(null);
-                                setDeleteTarget(u);
-                              }}
-                              className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition cursor-pointer"
-                              title="Hapus Akun Pengguna"
+                              onClick={() => handleOpenEdit(u)}
+                              className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition cursor-pointer"
+                              title="Edit Akun ACTIS"
                             >
-                              <Trash2 className="w-3.5 h-3.5 mr-1" />
-                              Hapus
+                              <Pencil className="w-3.5 h-3.5 mr-1" />
+                              Edit
                             </button>
-                          )}
-                        </div>
+
+                            {isSelf ? (
+                              <span className="text-[10px] font-bold px-2 py-1 rounded-lg bg-slate-100 text-slate-400 border border-slate-200">
+                                (Anda)
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDeleteError(null);
+                                  setDeleteTarget(u);
+                                }}
+                                className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition cursor-pointer"
+                                title="Hapus Akun ACTIS"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 mr-1" />
+                                Hapus
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {filteredUsers.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-5 py-8 text-center text-slate-400">
+                        Tidak ada akun ACTIS yang cocok dengan pencarian "{searchTerm}".
                       </td>
                     </tr>
-                  );
-                })}
-
-                {filteredUsers.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-5 py-8 text-center text-slate-400">
-                      Tidak ada pengguna yang cocok dengan pencarian "{searchTerm}".
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
-          {/* Request-Barang Web Portal Login Control (Admin Only) */}
-          <div className="p-4 sm:p-5 border-t border-slate-100 bg-sky-50/40">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          {/* CARD 2: AKUN LOGIN WEB FORM REQUEST BARANG (actis.jembatandata.com/request-barang) */}
+          <div className="bg-white rounded-2xl border border-sky-200 shadow-xs overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-sky-100 bg-sky-50/50 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div className="space-y-1">
-                <h4 className="text-sm font-bold text-slate-900 flex flex-wrap items-center gap-2">
+                <h3 className="text-base font-bold text-slate-900 flex flex-wrap items-center gap-2">
                   <ClipboardList className="w-4 h-4 text-sky-600" />
-                  <span>Kontrol Login Web Form Request Barang (/request-barang)</span>
+                  <span>Akun Login Web Request Barang</span>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-white text-sky-700 border border-sky-200">
+                    /request-barang
+                  </span>
                   <span
                     className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
                       reqBarangLoginRequired
@@ -1033,33 +1147,36 @@ export default function UserSettingsPage() {
                     {reqBarangLoginRequired ? "Wajib Login Aktif" : "Mode Tanpa Login"}
                   </span>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800">
-                    {users.filter((u) => hasRequestBarangAccess(u)).length} Akun Diizinkan
+                    {rbAccounts.length} Akun
                   </span>
-                </h4>
-                <p className="text-[11px] text-slate-600 leading-relaxed max-w-3xl">
-                  Atur akun yang diperbolehkan masuk ke portal{" "}
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed max-w-3xl">
+                  Akun login terpisah khusus untuk portal{" "}
                   <Link
                     href="/request-barang"
                     target="_blank"
                     className="inline-flex items-center gap-0.5 font-bold text-sky-700 hover:underline"
                   >
-                    <span>/request-barang</span>
+                    <span>actis.jembatandata.com/request-barang</span>
                     <ExternalLink className="w-3 h-3" />
                   </Link>{" "}
-                  melalui kolom <strong>Login /request-barang</strong> di tabel atas, atau buat akun khusus dengan role{" "}
-                  <strong>User Request Barang</strong> (otomatis hanya bisa mengakses portal pengajuan barang).
+                  menggunakan <strong>Username &amp; Password</strong> (terpisah penuh dari akun ACTIS di atas).
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => handleOpenAddModal("request_barang")}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition cursor-pointer"
-                >
-                  <UserPlus className="w-3.5 h-3.5" />
-                  <span>+ Tambah Akun Request Barang</span>
-                </button>
+                <div className="relative w-full sm:w-52">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                    <Search className="w-3.5 h-3.5" />
+                  </div>
+                  <input
+                    type="text"
+                    value={rbSearchTerm}
+                    onChange={(e) => setRbSearchTerm(e.target.value)}
+                    placeholder="Cari nama atau username..."
+                    className="w-full pl-9 pr-3 py-1.5 bg-white border border-sky-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-sky-600 transition"
+                  />
+                </div>
                 <button
                   type="button"
                   disabled={reqBarangPolicyLoading}
@@ -1075,28 +1192,161 @@ export default function UserSettingsPage() {
                     {reqBarangPolicyLoading
                       ? "Menyimpan..."
                       : reqBarangLoginRequired
-                        ? "Wajib Login: ON (Klik Matikan)"
-                        : "Wajib Login: OFF (Klik Aktifkan)"}
+                        ? "Wajib Login: ON"
+                        : "Wajib Login: OFF"}
                   </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenRbAddModal}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold shadow-xs transition cursor-pointer"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>+ Tambah Akun /request-barang</span>
                 </button>
               </div>
             </div>
 
             {reqBarangPolicyError && (
-              <div className="mt-3 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center space-x-2">
+              <div className="mx-4 mt-4 p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center space-x-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{reqBarangPolicyError}</span>
               </div>
             )}
 
             {reqBarangPolicySuccess && (
-              <div className="mt-3 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center space-x-2">
+              <div className="mx-4 mt-4 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center space-x-2">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>{reqBarangPolicySuccess}</span>
               </div>
             )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-600">
+                <thead className="bg-slate-50/80 text-[11px] font-black uppercase tracking-wider text-slate-500 border-b border-slate-200/80">
+                  <tr>
+                    <th className="px-5 py-3.5">Nama Lengkap</th>
+                    <th className="px-5 py-3.5">Username Login</th>
+                    <th className="px-5 py-3.5">Status Akun</th>
+                    <th className="px-5 py-3.5">Dibuat</th>
+                    <th className="px-5 py-3.5 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {rbLoading && rbAccounts.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-5 py-8 text-center text-slate-400">
+                        Memuat daftar akun portal /request-barang...
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredRbAccounts.map((acc) => {
+                      const isToggling = togglingRbAccountId === acc.id;
+                      return (
+                        <tr key={acc.id} className="hover:bg-sky-50/30 transition">
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-xs">
+                                {acc.nama.charAt(0).toUpperCase()}
+                              </div>
+                              <span className="font-bold text-slate-900">{acc.nama}</span>
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-3.5">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-800 font-mono text-xs font-bold">
+                              <User className="w-3 h-3 text-slate-500" />
+                              @{acc.username}
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-3.5">
+                            <button
+                              type="button"
+                              disabled={isToggling}
+                              onClick={() => handleToggleRbAccountStatus(acc)}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition cursor-pointer disabled:opacity-50 ${
+                                acc.is_active
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
+                                  : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
+                              }`}
+                              title={
+                                acc.is_active
+                                  ? "Klik untuk menonaktifkan akun ini"
+                                  : "Klik untuk mengaktifkan kembali akun ini"
+                              }
+                            >
+                              {acc.is_active ? (
+                                <>
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>{isToggling ? "..." : "Aktif"}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Lock className="w-3.5 h-3.5 text-slate-400" />
+                                  <span>{isToggling ? "..." : "Nonaktif"}</span>
+                                </>
+                              )}
+                            </button>
+                          </td>
+
+                          <td className="px-5 py-3.5 text-slate-500">
+                            <span className="inline-flex items-center gap-1 text-[11px]">
+                              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                              {new Date(acc.created_at).toLocaleDateString("id-ID", {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              })}
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-3.5 text-right">
+                            <div className="flex items-center justify-end space-x-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenRbEdit(acc)}
+                                className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-200 transition cursor-pointer"
+                                title="Edit Akun /request-barang"
+                              >
+                                <Pencil className="w-3.5 h-3.5 mr-1" />
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRbDeleteError(null);
+                                  setRbDeleteTarget(acc);
+                                }}
+                                className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition cursor-pointer"
+                                title="Hapus Akun /request-barang"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 mr-1" />
+                                Hapus
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+
+                  {!rbLoading && filteredRbAccounts.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-5 py-8 text-center text-slate-400">
+                        {rbAccounts.length === 0
+                          ? "Belum ada akun Web /request-barang. Klik + Tambah Akun /request-barang untuk membuat akun login portal request barang."
+                          : `Tidak ada akun /request-barang yang cocok dengan pencarian "${rbSearchTerm}".`}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
 
+          {/* CARD 3: SERVER, INFRASTRUKTUR, MEDIA KONEKSI & SESSION TIMEOUT */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
           {/* Server Management Section (Admin Only) */}
           <div className="p-4 sm:p-5 border-t border-slate-100 bg-slate-50/50">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -1384,6 +1634,7 @@ export default function UserSettingsPage() {
               </div>
             )}
           </div>
+          </div>
         </div>
       ) : (
         /* NON-ADMIN NOTICE: Explaining clearly why user cannot add or delete */
@@ -1523,7 +1774,7 @@ export default function UserSettingsPage() {
         </form>
       </div>
 
-      {/* MODAL: TAMBAH PENGGUNA BARU (ADMIN ONLY) */}
+      {/* MODAL: TAMBAH AKUN ACTIS (actis.jembatandata.com) */}
       {isAdmin && isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl border border-slate-100 animate-scaleUp">
@@ -1534,10 +1785,10 @@ export default function UserSettingsPage() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
-                    Tambah Pengguna Baru
+                    Tambah Akun ACTIS
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    Akses Administrator ACTIS
+                    Login dashboard https://actis.jembatandata.com
                   </p>
                 </div>
               </div>
@@ -1581,36 +1832,17 @@ export default function UserSettingsPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Username {newRole === "request_barang" ? "*" : "(Opsional / Login /request-barang)"}
+                  Email Kantor
                 </label>
                 <input
-                  type="text"
-                  value={newUsername}
-                  onChange={(e) => setNewUsername(e.target.value.replace(/\s+/g, "").toLowerCase())}
-                  placeholder="cth: rendi.teknisi (tanpa spasi & @)"
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
-                  required={newRole === "request_barang"}
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="joko.susilo@isp-enterprise.net"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
+                  required
                 />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Minimal 3 karakter (huruf, angka, titik, underscore `_`, atau strip `-`). Digunakan untuk login ke <code>/request-barang</code>.
-                </p>
               </div>
-
-              {newRole !== "request_barang" && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Email Kantor
-                  </label>
-                  <input
-                    type="email"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    placeholder="joko.susilo@isp-enterprise.net"
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
-                    required
-                  />
-                </div>
-              )}
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -1632,16 +1864,9 @@ export default function UserSettingsPage() {
                 </label>
                 <select
                   value={newRole}
-                  onChange={(e) => {
-                    const roleVal = e.target.value;
-                    setNewRole(roleVal);
-                    if (roleVal === "request_barang" || roleVal === "admin") {
-                      setNewReqBarangAccess(true);
-                    }
-                  }}
+                  onChange={(e) => setNewRole(e.target.value)}
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
                 >
-                  <option value="request_barang">User Request Barang (Khusus Web /request-barang)</option>
                   <option value="field_engineer">Field Engineer (Hanya Ganti Password)</option>
                   <option value="noc_engineer">NOC Engineer (Hanya Ganti Password)</option>
                   <option value="sales_corporate">Sales Corporate (Hanya Ganti Password)</option>
@@ -1651,26 +1876,9 @@ export default function UserSettingsPage() {
                 <p className="text-[10px] text-slate-400 mt-1">
                   {newRole === "admin"
                     ? "Akun Administrator memiliki hak penuh untuk menambah, mengedit & menghapus user."
-                    : newRole === "request_barang"
-                      ? "Akun ini khusus untuk login dan mengirim pengajuan barang di https://actis.jembatandata.com/request-barang (tanpa akses dashboard admin/NOC)."
-                      : "Akun staf non-admin tidak dapat mengelola pengguna lain."}
+                    : "Akun staf non-admin tidak dapat mengelola pengguna lain."}
                 </p>
               </div>
-
-              <label className="flex items-start gap-2.5 p-3 rounded-xl bg-sky-50/70 border border-sky-200 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={newReqBarangAccess}
-                  onChange={(e) => setNewReqBarangAccess(e.target.checked)}
-                  className="mt-0.5 rounded border-slate-300 text-sky-600"
-                />
-                <span className="text-xs text-slate-700 leading-snug">
-                  <strong className="block text-slate-900">Izinkan Login ke Web /request-barang</strong>
-                  <span className="text-[11px] text-slate-500">
-                    Jika dicentang, akun ini dapat login pada portal pengajuan barang keluar.
-                  </span>
-                </span>
-              </label>
 
               <div className="pt-3 flex items-center justify-end space-x-2 border-t border-slate-100">
                 <button
@@ -1691,7 +1899,7 @@ export default function UserSettingsPage() {
                       <span>Menambahkan...</span>
                     </>
                   ) : (
-                    <span>+ Simpan Pengguna</span>
+                    <span>+ Simpan Akun ACTIS</span>
                   )}
                 </button>
               </div>
@@ -1700,7 +1908,7 @@ export default function UserSettingsPage() {
         </div>
       )}
 
-      {/* MODAL: EDIT PENGGUNA (ADMIN ONLY) */}
+      {/* MODAL: EDIT AKUN ACTIS (actis.jembatandata.com) */}
       {isAdmin && isEditModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl border border-slate-100 animate-scaleUp">
@@ -1711,10 +1919,10 @@ export default function UserSettingsPage() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900">
-                    Edit Data Pengguna
+                    Edit Akun ACTIS
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    Akses Administrator ACTIS
+                    Login dashboard https://actis.jembatandata.com
                   </p>
                 </div>
               </div>
@@ -1758,33 +1966,17 @@ export default function UserSettingsPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Username {editRole === "request_barang" ? "*" : "(Opsional / Login /request-barang)"}
+                  Email Kantor
                 </label>
                 <input
-                  type="text"
-                  value={editUsername}
-                  onChange={(e) => setEditUsername(e.target.value.replace(/\s+/g, "").toLowerCase())}
-                  placeholder="cth: rendi.teknisi (tanpa spasi & @)"
-                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
-                  required={editRole === "request_barang"}
+                  type="email"
+                  value={editEmail}
+                  onChange={(e) => setEditEmail(e.target.value)}
+                  placeholder="email@isp-enterprise.net"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
+                  required
                 />
               </div>
-
-              {editRole !== "request_barang" && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                    Email Kantor
-                  </label>
-                  <input
-                    type="email"
-                    value={editEmail}
-                    onChange={(e) => setEditEmail(e.target.value)}
-                    placeholder="email@isp-enterprise.net"
-                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
-                    required
-                  />
-                </div>
-              )}
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -1792,16 +1984,9 @@ export default function UserSettingsPage() {
                 </label>
                 <select
                   value={editRole}
-                  onChange={(e) => {
-                    const roleVal = e.target.value;
-                    setEditRole(roleVal);
-                    if (roleVal === "request_barang") {
-                      setEditReqBarangAccess(true);
-                    }
-                  }}
+                  onChange={(e) => setEditRole(e.target.value)}
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
                 >
-                  <option value="request_barang">User Request Barang (Khusus Web /request-barang)</option>
                   <option value="field_engineer">Field Engineer (Hanya Ganti Password)</option>
                   <option value="noc_engineer">NOC Engineer (Hanya Ganti Password)</option>
                   <option value="sales_corporate">Sales Corporate (Hanya Ganti Password)</option>
@@ -1811,26 +1996,9 @@ export default function UserSettingsPage() {
                 <p className="text-[10px] text-slate-400 mt-1">
                   {editRole === "admin"
                     ? "Akun Administrator memiliki hak penuh untuk menambah, mengedit & menghapus user."
-                    : editRole === "request_barang"
-                      ? "Akun ini khusus untuk login dan mengajukan barang di Web /request-barang."
-                      : "Akun staf non-admin tidak dapat mengelola pengguna lain."}
+                    : "Akun staf non-admin tidak dapat mengelola pengguna lain."}
                 </p>
               </div>
-
-              <label className="flex items-start gap-2.5 p-3 rounded-xl bg-sky-50/70 border border-sky-200 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={editReqBarangAccess}
-                  onChange={(e) => setEditReqBarangAccess(e.target.checked)}
-                  className="mt-0.5 rounded border-slate-300 text-sky-600"
-                />
-                <span className="text-xs text-slate-700 leading-snug">
-                  <strong className="block text-slate-900">Izinkan Login ke Web /request-barang</strong>
-                  <span className="text-[11px] text-slate-500">
-                    Mengatur apakah akun ini boleh login di https://actis.jembatandata.com/request-barang.
-                  </span>
-                </span>
-              </label>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
@@ -1876,7 +2044,7 @@ export default function UserSettingsPage() {
         </div>
       )}
 
-      {/* MODAL: KONFIRMASI HAPUS PENGGUNA (ADMIN ONLY) */}
+      {/* MODAL: KONFIRMASI HAPUS AKUN ACTIS */}
       {isAdmin && deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl border border-slate-100 animate-scaleUp text-center">
@@ -1885,10 +2053,10 @@ export default function UserSettingsPage() {
             </div>
 
             <h3 className="text-base font-bold text-slate-900">
-              Hapus Pengguna?
+              Hapus Akun ACTIS?
             </h3>
             <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-              Apakah Anda yakin ingin menghapus akun <strong>{deleteTarget.nama}</strong> ({deleteTarget.email})? Akses login akun ini akan dicabut permanen, dan seluruh data riwayat tiket serta log aktivitas akan tetap tersimpan aman di sistem.
+              Apakah Anda yakin ingin menghapus akun <strong>{deleteTarget.nama}</strong> ({deleteTarget.email})? Akses login akun ini ke dashboard ACTIS akan dicabut permanen, sedangkan riwayat tiket &amp; log aktivitas tetap tersimpan aman.
             </p>
 
             {deleteError && (
@@ -1917,7 +2085,315 @@ export default function UserSettingsPage() {
                     <span>Menghapus...</span>
                   </>
                 ) : (
-                  <span>Ya, Hapus Pengguna</span>
+                  <span>Ya, Hapus Akun ACTIS</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: TAMBAH AKUN WEB /request-barang (TERPISAH DARI ACTIS) */}
+      {isAdmin && isRbAddOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl border border-sky-100 animate-scaleUp">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
+                  <ClipboardList className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Tambah Akun /request-barang
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Portal pengajuan https://actis.jembatandata.com/request-barang
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRbAddOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {rbAddError && (
+              <div className="mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{rbAddError}</span>
+              </div>
+            )}
+
+            {rbAddSuccess && (
+              <div className="mt-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center space-x-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{rbAddSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleAddRbAccount} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Nama Lengkap
+                </label>
+                <input
+                  type="text"
+                  value={rbAddNama}
+                  onChange={(e) => setRbAddNama(e.target.value)}
+                  placeholder="Cth: Rendi Yana Muhammad"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-sky-600 focus:bg-white transition"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Username Login *
+                </label>
+                <input
+                  type="text"
+                  value={rbAddUsername}
+                  onChange={(e) => setRbAddUsername(e.target.value.replace(/\s+/g, "").toLowerCase())}
+                  placeholder="cth: rendi.teknisi (tanpa spasi & @)"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-600 focus:bg-white transition"
+                  required
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Minimal 3 karakter (huruf, angka, titik, underscore `_`, atau strip `-`). Akun ini khusus portal /request-barang.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Password Awal *
+                </label>
+                <input
+                  type="text"
+                  value={rbAddPassword}
+                  onChange={(e) => setRbAddPassword(e.target.value)}
+                  placeholder="Minimal 8 karakter (cth: req12345)"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-sky-600 focus:bg-white transition"
+                  required
+                />
+              </div>
+
+              <label className="flex items-start gap-2.5 p-3 rounded-xl bg-sky-50/70 border border-sky-200 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={rbAddActive}
+                  onChange={(e) => setRbAddActive(e.target.checked)}
+                  className="mt-0.5 rounded border-slate-300 text-sky-600"
+                />
+                <span className="text-xs text-slate-700 leading-snug">
+                  <strong className="block text-slate-900">Aktifkan Akun Sekarang</strong>
+                  <span className="text-[11px] text-slate-500">
+                    Jika dicentang, username ini dapat langsung login di /request-barang (tanpa akses dashboard ACTIS).
+                  </span>
+                </span>
+              </label>
+
+              <div className="pt-3 flex items-center justify-end space-x-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsRbAddOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={rbAddLoading}
+                  className="px-4 py-2 rounded-xl font-bold text-xs text-white bg-sky-600 hover:bg-sky-700 transition shadow-md shadow-sky-500/25 disabled:opacity-50 flex items-center space-x-1.5"
+                >
+                  {rbAddLoading ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <span>+ Simpan Akun /request-barang</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: EDIT AKUN WEB /request-barang */}
+      {isAdmin && isRbEditOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl border border-sky-100 animate-scaleUp">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">
+                  <Pencil className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Edit Akun /request-barang
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Portal pengajuan https://actis.jembatandata.com/request-barang
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRbEditOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {rbEditError && (
+              <div className="mt-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{rbEditError}</span>
+              </div>
+            )}
+
+            {rbEditSuccess && (
+              <div className="mt-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center space-x-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{rbEditSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveRbEdit} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Nama Lengkap
+                </label>
+                <input
+                  type="text"
+                  value={rbEditNama}
+                  onChange={(e) => setRbEditNama(e.target.value)}
+                  placeholder="Nama Lengkap"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-sky-600 focus:bg-white transition"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Username Login *
+                </label>
+                <input
+                  type="text"
+                  value={rbEditUsername}
+                  onChange={(e) => setRbEditUsername(e.target.value.replace(/\s+/g, "").toLowerCase())}
+                  placeholder="cth: rendi.teknisi (tanpa spasi & @)"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-mono focus:outline-none focus:ring-2 focus:ring-sky-600 focus:bg-white transition"
+                  required
+                />
+              </div>
+
+              <label className="flex items-start gap-2.5 p-3 rounded-xl bg-sky-50/70 border border-sky-200 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={rbEditActive}
+                  onChange={(e) => setRbEditActive(e.target.checked)}
+                  className="mt-0.5 rounded border-slate-300 text-sky-600"
+                />
+                <span className="text-xs text-slate-700 leading-snug">
+                  <strong className="block text-slate-900">Status Akun Aktif</strong>
+                  <span className="text-[11px] text-slate-500">
+                    Matikan centang jika ingin membekukan login akun ini di Web /request-barang.
+                  </span>
+                </span>
+              </label>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Reset Password Baru (Opsional)
+                </label>
+                <input
+                  type="text"
+                  value={rbEditPassword}
+                  onChange={(e) => setRbEditPassword(e.target.value)}
+                  placeholder="Kosongkan jika tidak ingin mengubah password"
+                  className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-sky-600 focus:bg-white transition"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Isi minimal 8 karakter jika ingin mereset password. Biarkan kosong untuk tetap memakai password saat ini.
+                </p>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end space-x-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsRbEditOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={rbEditLoading}
+                  className="px-4 py-2 rounded-xl font-bold text-xs text-white bg-sky-600 hover:bg-sky-700 transition shadow-md shadow-sky-500/25 disabled:opacity-50 flex items-center space-x-1.5"
+                >
+                  {rbEditLoading ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <span>Simpan Perubahan</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: KONFIRMASI HAPUS AKUN WEB /request-barang */}
+      {isAdmin && rbDeleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl border border-slate-100 animate-scaleUp text-center">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 mx-auto flex items-center justify-center mb-3">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <h3 className="text-base font-bold text-slate-900">
+              Hapus Akun /request-barang?
+            </h3>
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+              Apakah Anda yakin ingin menghapus akun portal <strong>{rbDeleteTarget.nama}</strong> (<span className="font-mono">@{rbDeleteTarget.username}</span>)? Akun tidak akan memengaruhi pengguna dashboard ACTIS maupun riwayat pengajuan barang.
+            </p>
+
+            {rbDeleteError && (
+              <div className="mt-3 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs text-left">
+                {rbDeleteError}
+              </div>
+            )}
+
+            <div className="mt-5 flex items-center justify-center space-x-3">
+              <button
+                type="button"
+                onClick={() => setRbDeleteTarget(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteRbAccount}
+                disabled={rbDeleteLoading}
+                className="px-4 py-2 rounded-xl font-bold text-xs text-white bg-rose-600 hover:bg-rose-700 transition shadow-md shadow-rose-500/25 disabled:opacity-50 flex items-center space-x-1.5"
+              >
+                {rbDeleteLoading ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Menghapus...</span>
+                  </>
+                ) : (
+                  <span>Ya, Hapus Akun</span>
                 )}
               </button>
             </div>

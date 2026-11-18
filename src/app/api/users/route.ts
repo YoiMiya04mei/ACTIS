@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth";
-import { requireAuth } from "@/lib/security";
+import { requireAuth, getRequestClientIp } from "@/lib/security";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 import {
-  ALL_USER_ROLES,
+  ACTIS_DASHBOARD_ROLES,
   REQUEST_BARANG_ROLE,
-  buildInternalRequestBarangEmail,
-  isValidUsername,
-  normalizeUsername,
-  resolveDefaultRequestBarangAccess,
 } from "@/lib/requestBarangAuth";
 
 export const dynamic = "force-dynamic";
@@ -21,16 +17,17 @@ export async function GET(request: NextRequest) {
   try {
     const users = await prisma.user.findMany({
       where: {
-        email: { not: "system.archived@actis.internal" },
+        AND: [
+          { email: { not: "system.archived@actis.internal" } },
+          { role: { not: REQUEST_BARANG_ROLE } },
+        ],
       },
       orderBy: { nama: "asc" },
       select: {
         id: true,
         nama: true,
         email: true,
-        username: true,
         role: true,
-        request_barang_access: true,
         created_at: true,
       },
     });
@@ -39,28 +36,40 @@ export async function GET(request: NextRequest) {
   } catch (err: any) {
     console.error("GET /api/users error:", err);
     return NextResponse.json(
-      { success: false, error: "Gagal memuat daftar pengguna." },
+      { success: false, error: "Gagal memuat daftar pengguna ACTIS." },
       { status: 500 }
     );
   }
 }
 
 export async function POST(request: NextRequest) {
-  // Strict authorization: ONLY Administrator can create users
+  // Strict authorization: ONLY Administrator can create ACTIS dashboard users
   const auth = await requireAuth(request, { requireAdmin: true });
   if (!auth.ok) return auth.response;
 
   try {
     const body = await request.json().catch(() => ({}));
-    const { nama, email, username, password, role, request_barang_access } = body;
+    const { nama, email, password, role } = body;
 
-    const targetRole = (ALL_USER_ROLES as readonly string[]).includes(role) ? role : "noc_engineer";
-    const cleanUsername = normalizeUsername(username);
-    const rawEmail = String(email || "").trim().toLowerCase();
-
-    if (!nama || !password) {
+    if (role === REQUEST_BARANG_ROLE) {
       return NextResponse.json(
-        { success: false, error: "Nama lengkap dan password wajib diisi." },
+        {
+          success: false,
+          error:
+            "Pembuatan akun portal /request-barang dipisahkan. Gunakan panel Akun Login Web Request Barang.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const targetRole = (ACTIS_DASHBOARD_ROLES as readonly string[]).includes(role)
+      ? role
+      : "noc_engineer";
+    const cleanEmail = String(email || "").trim().toLowerCase();
+
+    if (!nama || !cleanEmail || !password) {
+      return NextResponse.json(
+        { success: false, error: "Nama lengkap, email kantor, dan password wajib diisi." },
         { status: 400 }
       );
     }
@@ -72,32 +81,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (targetRole === REQUEST_BARANG_ROLE && !cleanUsername) {
-      return NextResponse.json(
-        { success: false, error: "Username wajib diisi untuk akun User Request Barang." },
-        { status: 400 }
-      );
-    }
-
-    if (cleanUsername && !isValidUsername(cleanUsername)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            "Username harus 3–50 karakter (huruf, angka, titik, underscore _, atau strip -, tanpa @).",
-        },
-        { status: 400 }
-      );
-    }
-
-    if (targetRole !== REQUEST_BARANG_ROLE && !rawEmail) {
-      return NextResponse.json(
-        { success: false, error: "Email kantor wajib diisi untuk role staf ACTIS." },
-        { status: 400 }
-      );
-    }
-
-    const cleanEmail = rawEmail || buildInternalRequestBarangEmail(cleanUsername);
     if (cleanEmail === "system.archived@actis.internal") {
       return NextResponse.json(
         { success: false, error: "Email ini dicadangkan untuk keperluan arsip sistem internal." },
@@ -113,76 +96,54 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (cleanUsername) {
-      const dupUsername = await prisma.user.findUnique({
-        where: { username: cleanUsername },
-        select: { id: true },
-      });
-      if (dupUsername) {
-        return NextResponse.json(
-          { success: false, error: `Username '${cleanUsername}' sudah digunakan oleh pengguna lain.` },
-          { status: 400 }
-        );
-      }
-    }
-
     const existing = await prisma.user.findUnique({
       where: { email: cleanEmail },
     });
 
     if (existing) {
       return NextResponse.json(
-        { success: false, error: `Email '${cleanEmail}' sudah terdaftar dalam sistem.` },
+        { success: false, error: `Email '${cleanEmail}' sudah terdaftar di ACTIS.` },
         { status: 400 }
       );
     }
-
-    const resolvedReqAccess = resolveDefaultRequestBarangAccess(
-      targetRole,
-      request_barang_access
-    );
 
     const hashedPassword = hashPassword(String(password));
     const newUser = await prisma.user.create({
       data: {
         nama: String(nama).trim(),
         email: cleanEmail,
-        username: cleanUsername || null,
         password_hash: hashedPassword,
         role: targetRole,
-        request_barang_access: resolvedReqAccess,
       },
       select: {
         id: true,
         nama: true,
         email: true,
-        username: true,
         role: true,
-        request_barang_access: true,
         created_at: true,
       },
     });
 
-    const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
+    const clientIp = getRequestClientIp(request);
     const userAgent = parseUserAgent(request.headers.get("user-agent"));
     recordActivity({
       nama_lengkap: auth.user.nama,
       email: auth.user.email,
       ip_address: clientIp,
       tipe: "CREATE_USER",
-      aktifitas: `Menambahkan pengguna baru: ${newUser.nama} (${newUser.email}) - Role: ${newUser.role}`,
+      aktifitas: `Menambahkan pengguna ACTIS: ${newUser.nama} (${newUser.email}) - Role: ${newUser.role}`,
       user_agent: userAgent,
     }).catch(() => {});
 
     return NextResponse.json({
       success: true,
-      message: `Pengguna '${newUser.nama}' berhasil ditambahkan.`,
+      message: `Pengguna ACTIS '${newUser.nama}' berhasil ditambahkan.`,
       data: newUser,
     });
   } catch (err: any) {
     console.error("POST /api/users error:", err);
     return NextResponse.json(
-      { success: false, error: "Gagal menambahkan pengguna baru." },
+      { success: false, error: "Gagal menambahkan pengguna ACTIS baru." },
       { status: 500 }
     );
   }

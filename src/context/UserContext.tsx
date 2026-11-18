@@ -70,21 +70,17 @@ interface UserContextType {
   changePassword: (oldPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   addUser: (data: {
     nama: string;
-    email?: string;
-    username?: string;
+    email: string;
     password: string;
     role: string;
-    request_barang_access?: boolean;
   }) => Promise<{ success: boolean; error?: string; data?: any }>;
   updateUser: (
     id: string,
     data: {
       nama: string;
-      email?: string;
-      username?: string;
+      email: string;
       role: string;
       password?: string;
-      request_barang_access?: boolean;
     }
   ) => Promise<{ success: boolean; error?: string; data?: any; message?: string }>;
   deleteUser: (id: string) => Promise<{ success: boolean; error?: string; message?: string }>;
@@ -308,11 +304,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const addUser = async (userData: {
     nama: string;
-    email?: string;
-    username?: string;
+    email: string;
     password: string;
     role: string;
-    request_barang_access?: boolean;
   }) => {
     try {
       const res = await fetch("/api/users", {
@@ -339,11 +333,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     id: string,
     userData: {
       nama: string;
-      email?: string;
-      username?: string;
+      email: string;
       role: string;
       password?: string;
-      request_barang_access?: boolean;
     }
   ) => {
     try {
@@ -367,9 +359,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           ...currentUser,
           nama: data.data.nama,
           email: data.data.email,
-          username: data.data.username,
           role: data.data.role,
-          request_barang_access: data.data.request_barang_access,
         };
         setCurrentUserState(updated);
         localStorage.setItem("actis_active_user", JSON.stringify(updated));

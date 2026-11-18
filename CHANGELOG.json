@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.32",
+      "date": "2026-11-18T07:29:34+07:00",
+      "title": "Pemisahan Penuh Pembuatan & Pengelolaan Akun ACTIS vs Web Request Barang",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Memisahkan tabel database (request_barang_accounts), API (/api/request-barang/accounts), serta panel & modal CRUD akun khusus portal /request-barang menggunakan Username secara terpisah dari akun staf dashboard ACTIS (Email & Role)"
+        },
+        {
+          "type": "improve",
+          "text": "Membersihkan form Tambah/Edit dan tabel Akun ACTIS agar hanya mengelola pengguna dashboard actis.jembatandata.com tanpa mencampur kolom username atau hak akses portal /request-barang"
+        }
+      ]
+    },
+    {
       "version": "1.2.31",
       "date": "2026-11-17T17:13:30+07:00",
       "title": "Login Username Web Request Barang, Halaman Login Terisolasi & Sinkronisasi Skema Docker",

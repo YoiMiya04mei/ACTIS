@@ -11,10 +11,10 @@ model User {
   id                    String   @id @default(uuid())
   nama                  String
   email                 String   @unique
-  username              String?  @unique
+  username              String?  @unique // Legacy optional column preserved for non-destructive DB compatibility
   password_hash         String?
-  role                  String   @default("noc_engineer") // admin, noc_engineer, field_engineer, sales_corporate, warehouse_admin, request_barang
-  request_barang_access Boolean? // null inherits role default (true for admin/request_barang); explicit boolean overrides
+  role                  String   @default("noc_engineer") // admin, noc_engineer, field_engineer, sales_corporate, warehouse_admin
+  request_barang_access Boolean? // Legacy optional column preserved for non-destructive DB compatibility
   created_at            DateTime @default(now())
 
   orders_created   PopSiteOrder[]      @relation("OrderCreator")
@@ -23,6 +23,23 @@ model User {
   data_change_logs SiteDataChangeLog[]
 
   @@map("users")
+}
+
+// ============================================================================
+// STANDALONE PORTAL ACCOUNTS FOR /request-barang (SEPARATED FROM ACTIS USERS)
+// ============================================================================
+
+model RequestBarangAccount {
+  id            String   @id @default(uuid())
+  nama          String
+  username      String   @unique
+  password_hash String
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @default(now()) @updatedAt
+
+  @@index([is_active])
+  @@map("request_barang_accounts")
 }
 
 model PopSiteOrder {

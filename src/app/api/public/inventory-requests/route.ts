@@ -4,7 +4,6 @@ import {
   checkRateLimit,
   RB_SESSION_COOKIE_NAME,
   verifySecureSessionToken,
-  type AuthenticatedUser,
 } from "@/lib/security";
 import {
   createPublicInventoryRequest,
@@ -12,10 +11,17 @@ import {
 } from "@/lib/inventoryService";
 import { triggerInventoryMirrorSync } from "@/lib/inventoryMirrorService";
 import {
-  hasRequestBarangAccess,
+  buildPortalSyntheticEmail,
   isRequestBarangLoginRequired,
 } from "@/lib/requestBarangAuth";
 import { parseUserAgent, recordActivity } from "@/lib/activityLogService";
+
+interface PortalSessionActor {
+  id: string;
+  nama: string;
+  username: string;
+  email: string;
+}
 
 function extractRequestIp(request: NextRequest): string {
   const forwarded = request.headers.get("x-forwarded-for");
@@ -30,29 +36,33 @@ function extractRequestIp(request: NextRequest): string {
 async function guardRequestBarangApiAccess(
   request: NextRequest
 ): Promise<
-  | { ok: true; user: AuthenticatedUser | null }
+  | { ok: true; user: PortalSessionActor | null }
   | { ok: false; response: NextResponse }
 > {
   const loginRequired = await isRequestBarangLoginRequired();
   const rbToken = request.cookies.get(RB_SESSION_COOKIE_NAME)?.value;
   const session = verifySecureSessionToken(rbToken, "rb_session");
 
-  let dbUser: AuthenticatedUser | null = null;
+  let dbAccount: {
+    id: string;
+    nama: string;
+    username: string;
+    is_active: boolean;
+  } | null = null;
+
   if (session) {
-    dbUser = await prisma.user.findUnique({
+    dbAccount = await prisma.requestBarangAccount.findUnique({
       where: { id: session.id },
       select: {
         id: true,
         nama: true,
-        email: true,
         username: true,
-        role: true,
-        request_barang_access: true,
+        is_active: true,
       },
     });
   }
 
-  if (!dbUser) {
+  if (!dbAccount) {
     if (loginRequired) {
       return {
         ok: false,
@@ -69,7 +79,7 @@ async function guardRequestBarangApiAccess(
     return { ok: true, user: null };
   }
 
-  if (loginRequired && !hasRequestBarangAccess(dbUser)) {
+  if (loginRequired && !dbAccount.is_active) {
     return {
       ok: false,
       response: NextResponse.json(
@@ -77,14 +87,22 @@ async function guardRequestBarangApiAccess(
           success: false,
           code: "NO_PERMISSION",
           error:
-            "Akun Anda tidak diizinkan mengakses Web /request-barang. Hubungi Administrator di menu Pengaturan User Akses.",
+            "Akun Web /request-barang ini sedang dinonaktifkan oleh Administrator di menu Pengaturan User Akses.",
         },
         { status: 403 }
       ),
     };
   }
 
-  return { ok: true, user: dbUser };
+  return {
+    ok: true,
+    user: {
+      id: dbAccount.id,
+      nama: dbAccount.nama,
+      username: dbAccount.username,
+      email: buildPortalSyntheticEmail(dbAccount.username),
+    },
+  };
 }
 
 export async function GET(request: NextRequest) {

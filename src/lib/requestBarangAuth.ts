@@ -2,23 +2,21 @@ import { prisma } from "@/lib/prisma";
 
 export const REQUEST_BARANG_ROLE = "request_barang" as const;
 export const REQUEST_BARANG_LOGIN_SETTING_KEY = "request_barang_require_login" as const;
-export const INTERNAL_REQUEST_BARANG_EMAIL_DOMAIN = "@request-barang.actis.local";
+export const PORTAL_INTERNAL_EMAIL_DOMAIN = "@request-barang.portal";
 
-export const ALL_USER_ROLES = [
+/**
+ * Roles valid exclusively for the main ACTIS dashboard (`actis.jembatandata.com`).
+ * Portal `/request-barang` accounts live separately in `request_barang_accounts`.
+ */
+export const ACTIS_DASHBOARD_ROLES = [
   "admin",
   "noc_engineer",
   "field_engineer",
   "sales_corporate",
   "warehouse_admin",
-  "request_barang",
 ] as const;
 
-export type AppUserRole = (typeof ALL_USER_ROLES)[number];
-
-export interface RequestBarangAccessSubject {
-  role?: string | null;
-  request_barang_access?: boolean | null;
-}
+export type ActisDashboardRole = (typeof ACTIS_DASHBOARD_ROLES)[number];
 
 const USERNAME_PATTERN = /^[a-z0-9._-]{3,50}$/;
 
@@ -30,95 +28,77 @@ export function isValidUsername(username: string): boolean {
   return USERNAME_PATTERN.test(normalizeUsername(username));
 }
 
-export function buildInternalRequestBarangEmail(username: string): string {
-  const clean = normalizeUsername(username);
-  return `${clean}${INTERNAL_REQUEST_BARANG_EMAIL_DOMAIN}`;
-}
-
-export function isInternalPlaceholderEmail(email: string | null | undefined): boolean {
-  return Boolean(
-    email && String(email).toLowerCase().endsWith(INTERNAL_REQUEST_BARANG_EMAIL_DOMAIN)
-  );
+export function buildPortalSyntheticEmail(username: string): string {
+  return `${normalizeUsername(username)}${PORTAL_INTERNAL_EMAIL_DOMAIN}`;
 }
 
 /**
- * Resolves whether a user is allowed to log in and submit forms at `/request-barang`.
- * Explicit boolean (`true`/`false`) overrides the default; otherwise `admin` and `request_barang`
- * default to enabled while dashboard-only staff roles remain restricted unless explicitly granted.
+ * Migrates any legacy `users` rows created with `role = 'request_barang'` into the dedicated
+ * `request_barang_accounts` table so main ACTIS accounts and `/request-barang` accounts stay separated.
  */
-export function hasRequestBarangAccess(
-  user: RequestBarangAccessSubject | null | undefined
-): boolean {
-  if (!user) return false;
-  if (typeof user.request_barang_access === "boolean") {
-    return user.request_barang_access;
+export async function syncLegacyRequestBarangUsersIfAny(): Promise<void> {
+  try {
+    const legacyUsers = await prisma.user.findMany({
+      where: { role: REQUEST_BARANG_ROLE },
+      select: {
+        id: true,
+        nama: true,
+        email: true,
+        username: true,
+        password_hash: true,
+        request_barang_access: true,
+      },
+    });
+    if (legacyUsers.length === 0) return;
+
+    for (const u of legacyUsers) {
+      const cleanUsername = normalizeUsername(u.username || u.email.split("@")[0] || "");
+      if (cleanUsername && isValidUsername(cleanUsername) && u.password_hash) {
+        const existing = await prisma.requestBarangAccount.findUnique({
+          where: { username: cleanUsername },
+          select: { id: true },
+        });
+        if (!existing) {
+          await prisma.requestBarangAccount.create({
+            data: {
+              id: u.id,
+              nama: u.nama,
+              username: cleanUsername,
+              password_hash: u.password_hash,
+              is_active: u.request_barang_access !== false,
+            },
+          });
+        }
+      }
+
+      // Remove cleanly from ACTIS `users` only when no relational dashboard history exists
+      await prisma.user.delete({ where: { id: u.id } }).catch(() => null);
+    }
+  } catch (err) {
+    console.error("Failed syncing legacy request_barang users:", err);
   }
-  return user.role === "admin" || user.role === REQUEST_BARANG_ROLE;
 }
 
 /**
- * Resolves the explicit or inherited boolean value to store when creating/updating a user.
+ * Looks up an isolated portal account for `/request-barang` strictly by username.
+ * Rejects email addresses (`@`) so login remains username-only.
  */
-export function resolveDefaultRequestBarangAccess(
-  role: string,
-  explicitValue?: unknown
-): boolean {
-  if (typeof explicitValue === "boolean") {
-    return explicitValue;
-  }
-  return role === "admin" || role === REQUEST_BARANG_ROLE;
-}
-
-/**
- * Looks up a user for `/request-barang` username login.
- * Rejects email addresses (`@`) so login uses username strictly; also resolves unambiguous
- * email local-parts for legacy accounts created before the `username` column existed.
- */
-export async function findUserByLoginUsername(rawUsername: string) {
+export async function findRequestBarangAccountByUsername(rawUsername: string) {
   const clean = normalizeUsername(rawUsername);
   if (!clean || clean.includes("@")) {
     return null;
   }
 
-  const byUsername = await prisma.user.findUnique({
+  return prisma.requestBarangAccount.findUnique({
     where: { username: clean },
     select: {
       id: true,
       nama: true,
-      email: true,
       username: true,
-      role: true,
-      request_barang_access: true,
       password_hash: true,
+      is_active: true,
     },
   });
-
-  if (byUsername) {
-    return byUsername;
-  }
-
-  // Fallback for legacy ACTIS users created without explicit `username`
-  const prefixMatches = await prisma.user.findMany({
-    where: {
-      email: { startsWith: `${clean}@` },
-    },
-    take: 2,
-    select: {
-      id: true,
-      nama: true,
-      email: true,
-      username: true,
-      role: true,
-      request_barang_access: true,
-      password_hash: true,
-    },
-  });
-
-  if (prefixMatches.length === 1) {
-    return prefixMatches[0];
-  }
-
-  return null;
 }
 
 /**

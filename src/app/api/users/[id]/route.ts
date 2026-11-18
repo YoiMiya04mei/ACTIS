@@ -4,27 +4,22 @@ import { hashPassword } from "@/lib/auth";
 import { requireAuth, getRequestClientIp } from "@/lib/security";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 import {
-  ALL_USER_ROLES,
+  ACTIS_DASHBOARD_ROLES,
   REQUEST_BARANG_ROLE,
-  buildInternalRequestBarangEmail,
-  isInternalPlaceholderEmail,
-  isValidUsername,
-  normalizeUsername,
-  resolveDefaultRequestBarangAccess,
 } from "@/lib/requestBarangAuth";
 
 export async function PUT(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
-  // Strict authorization: ONLY Administrator can edit users
+  // Strict authorization: ONLY Administrator can edit ACTIS dashboard users
   const auth = await requireAuth(request, { requireAdmin: true });
   if (!auth.ok) return auth.response;
 
   try {
     const { id } = await context.params;
     const body = await request.json().catch(() => ({}));
-    const { nama, email, username, role, password, request_barang_access } = body;
+    const { nama, email, role, password } = body;
 
     const existingUser = await prisma.user.findUnique({
       where: { id },
@@ -44,70 +39,35 @@ export async function PUT(
       );
     }
 
-    const targetRole = (ALL_USER_ROLES as readonly string[]).includes(role)
-      ? role
-      : existingUser.role;
-
-    const cleanUsername =
-      username !== undefined ? normalizeUsername(username) : normalizeUsername(existingUser.username);
-
-    if (!nama) {
-      return NextResponse.json(
-        { success: false, error: "Nama lengkap wajib diisi." },
-        { status: 400 }
-      );
-    }
-
-    if (targetRole === REQUEST_BARANG_ROLE && !cleanUsername) {
-      return NextResponse.json(
-        { success: false, error: "Username wajib diisi untuk akun User Request Barang." },
-        { status: 400 }
-      );
-    }
-
-    if (cleanUsername && !isValidUsername(cleanUsername)) {
+    if (role === REQUEST_BARANG_ROLE) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Username harus 3–50 karakter (huruf, angka, titik, underscore _, atau strip -, tanpa @).",
+          error: "Akun portal /request-barang dikelola terpisah di panel Akun Web Request Barang.",
         },
         { status: 400 }
       );
     }
 
-    const rawEmail = String(email ?? "").trim().toLowerCase();
-    if (
-      targetRole !== REQUEST_BARANG_ROLE &&
-      (!rawEmail || isInternalPlaceholderEmail(rawEmail))
-    ) {
+    const targetRole = (ACTIS_DASHBOARD_ROLES as readonly string[]).includes(role)
+      ? role
+      : existingUser.role;
+
+    const cleanEmail = String(email ?? "").trim().toLowerCase();
+
+    if (!nama || !cleanEmail) {
       return NextResponse.json(
-        { success: false, error: "Email kantor valid wajib diisi untuk role staf ACTIS." },
+        { success: false, error: "Nama lengkap dan email kantor wajib diisi." },
         { status: 400 }
       );
     }
 
-    const cleanEmail =
-      rawEmail && !isInternalPlaceholderEmail(rawEmail)
-        ? rawEmail
-        : cleanUsername
-          ? buildInternalRequestBarangEmail(cleanUsername)
-          : existingUser.email;
-
-    if (cleanUsername) {
-      const dupUsername = await prisma.user.findFirst({
-        where: {
-          username: cleanUsername,
-          id: { not: id },
-        },
-        select: { id: true },
-      });
-      if (dupUsername) {
-        return NextResponse.json(
-          { success: false, error: `Username '${cleanUsername}' sudah digunakan oleh pengguna lain.` },
-          { status: 400 }
-        );
-      }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      return NextResponse.json(
+        { success: false, error: "Format email tidak valid." },
+        { status: 400 }
+      );
     }
 
     // Check email uniqueness if email changed
@@ -130,22 +90,13 @@ export async function PUT(
     const updateData: {
       nama: string;
       email: string;
-      username: string | null;
       role: string;
-      request_barang_access?: boolean | null;
       password_hash?: string;
     } = {
       nama: String(nama).trim(),
       email: cleanEmail,
-      username: cleanUsername || null,
       role: targetRole,
     };
-
-    if (typeof request_barang_access === "boolean") {
-      updateData.request_barang_access = request_barang_access;
-    } else if (role && role !== existingUser.role && existingUser.request_barang_access === null) {
-      updateData.request_barang_access = resolveDefaultRequestBarangAccess(targetRole);
-    }
 
     if (password && String(password).trim().length > 0) {
       const cleanPass = String(password).trim();
@@ -165,34 +116,32 @@ export async function PUT(
         id: true,
         nama: true,
         email: true,
-        username: true,
         role: true,
-        request_barang_access: true,
         created_at: true,
       },
     });
 
-    const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || "103.155.196.63";
+    const clientIp = getRequestClientIp(request);
     const userAgent = parseUserAgent(request.headers.get("user-agent"));
     recordActivity({
       nama_lengkap: auth.user.nama,
       email: auth.user.email,
       ip_address: clientIp,
       tipe: "UPDATE_USER",
-      aktifitas: `Memperbarui data pengguna: ${updatedUser.nama} (${updatedUser.email}) - Role: ${updatedUser.role}`,
+      aktifitas: `Memperbarui data pengguna ACTIS: ${updatedUser.nama} (${updatedUser.email}) - Role: ${updatedUser.role}`,
       detail: password ? "Data profil & kata sandi diperbarui oleh Administrator" : "Data profil diperbarui",
       user_agent: userAgent,
     }).catch(() => {});
 
     return NextResponse.json({
       success: true,
-      message: `Data pengguna '${updatedUser.nama}' berhasil diperbarui.`,
+      message: `Data pengguna ACTIS '${updatedUser.nama}' berhasil diperbarui.`,
       data: updatedUser,
     });
   } catch (err: any) {
     console.error("PUT /api/users/[id] error:", err);
     return NextResponse.json(
-      { success: false, error: "Gagal mengedit pengguna" },
+      { success: false, error: "Gagal mengedit pengguna ACTIS" },
       { status: 500 }
     );
   }
@@ -369,88 +318,6 @@ export async function DELETE(
     console.error("DELETE /api/users/[id] error:", err);
     return NextResponse.json(
       { success: false, error: "Gagal menghapus pengguna" },
-      { status: 500 }
-    );
-  }
-}
-
-export async function PATCH(
-  request: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
-  const auth = await requireAuth(request, { requireAdmin: true });
-  if (!auth.ok) return auth.response;
-
-  try {
-    const { id } = await context.params;
-    const body = await request.json().catch(() => ({}));
-    const { request_barang_access } = body;
-
-    if (typeof request_barang_access !== "boolean") {
-      return NextResponse.json(
-        { success: false, error: "Nilai request_barang_access harus berupa boolean." },
-        { status: 400 }
-      );
-    }
-
-    const existingUser = await prisma.user.findUnique({
-      where: { id },
-      select: { id: true, nama: true, email: true, role: true },
-    });
-
-    if (!existingUser) {
-      return NextResponse.json(
-        { success: false, error: "Pengguna tidak ditemukan." },
-        { status: 404 }
-      );
-    }
-
-    if (
-      existingUser.email === "system.archived@actis.internal" ||
-      existingUser.id === "usr-system-archived"
-    ) {
-      return NextResponse.json(
-        { success: false, error: "Akun arsip sistem dilindungi dan tidak dapat diubah." },
-        { status: 400 }
-      );
-    }
-
-    const updated = await prisma.user.update({
-      where: { id },
-      data: { request_barang_access },
-      select: {
-        id: true,
-        nama: true,
-        email: true,
-        username: true,
-        role: true,
-        request_barang_access: true,
-        created_at: true,
-      },
-    });
-
-    const clientIp = getRequestClientIp(request);
-    const userAgent = parseUserAgent(request.headers.get("user-agent"));
-    recordActivity({
-      nama_lengkap: auth.user.nama,
-      email: auth.user.email,
-      ip_address: clientIp,
-      tipe: "UPDATE_USER",
-      aktifitas: `${request_barang_access ? "Mengizinkan" : "Mencabut"} akses login Web /request-barang untuk ${updated.nama} (${updated.email})`,
-      user_agent: userAgent,
-    }).catch(() => {});
-
-    return NextResponse.json({
-      success: true,
-      message: `Akses login /request-barang untuk '${updated.nama}' ${
-        request_barang_access ? "diaktifkan" : "dinonaktifkan"
-      }.`,
-      data: updated,
-    });
-  } catch (err: any) {
-    console.error("PATCH /api/users/[id] error:", err);
-    return NextResponse.json(
-      { success: false, error: "Gagal mengubah akses /request-barang pengguna." },
       { status: 500 }
     );
   }

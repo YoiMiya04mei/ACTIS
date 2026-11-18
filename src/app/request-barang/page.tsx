@@ -38,10 +38,9 @@ import {
 interface PortalAuthUser {
   id: string;
   nama: string;
-  email: string;
-  username?: string | null;
+  username: string;
   role: string;
-  request_barang_access?: boolean | null;
+  is_active?: boolean;
 }
 
 interface RememberedPortalUser {
@@ -644,11 +643,11 @@ export default function PublicRequestBarangPage() {
                 </div>
                 <div className="space-y-1.5">
                   <h2 className="text-lg font-extrabold text-slate-900 dark:text-white">
-                    Akses Portal Ditolak
+                    Akun Portal Dinonaktifkan
                   </h2>
                   <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
                     Akun <strong>{portalAuth.user?.nama}</strong> (
-                    <span className="font-mono">@{portalAuth.user?.username}</span>) belum memiliki izin untuk mengakses Web Form Request Barang.
+                    <span className="font-mono">@{portalAuth.user?.username}</span>) saat ini berstatus nonaktif untuk mengakses Web Form Request Barang.
                   </p>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     Hubungi Administrator untuk mengaktifkan akses akun ini di menu{" "}
@@ -990,7 +989,7 @@ export default function PublicRequestBarangPage() {
                   </span>
                 </div>
                 <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">
-                  @{portalAuth.user.username || portalAuth.user.email.split("@")[0]}
+                  @{portalAuth.user.username}
                 </p>
               </div>
             </div>
