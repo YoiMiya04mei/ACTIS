@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.36",
+      "date": "2026-11-18T15:26:54+07:00",
+      "title": "Kolom Petugas Gudang pada Tabel Riwayat Transaksi Barang Keluar",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Menambahkan kolom Petugas Gudang di samping kanan kolom Nama PIC pada tabel Riwayat Transaksi Barang Keluar (/inventory/transactions/out)"
+        },
+        {
+          "type": "fix",
+          "text": "Memperbarui colSpan baris kosong tabel Riwayat Transaksi Barang Keluar agar selaras dengan jumlah kolom baru"
+        }
+      ]
+    },
+    {
       "version": "1.2.35",
       "date": "2026-11-18T13:31:25+07:00",
       "title": "Sinkronisasi Real-Time Dokumen, Template Surat, dan Arsip Antar Akun di PostgreSQL",

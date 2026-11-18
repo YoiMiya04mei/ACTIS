@@ -1081,6 +1081,7 @@ export default function BarangKeluarPage() {
                 )}
                 <th scope="col" className="py-2.5 px-3">No. Transaksi</th>
                 <th scope="col" className="py-2.5 px-3">Nama PIC</th>
+                <th scope="col" className="py-2.5 px-3">Petugas Gudang</th>
                 <th scope="col" className="py-2.5 px-3">Departemen</th>
                 <th scope="col" className="py-2.5 px-3 text-right">Barang Masuk</th>
                 <th scope="col" className="py-2.5 px-3 text-right">Barang Keluar</th>
@@ -1098,7 +1099,7 @@ export default function BarangKeluarPage() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {recentTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdministrator ? 11 : 9} className="py-8 text-center text-slate-400">
+                  <td colSpan={isAdministrator ? 12 : 10} className="py-8 text-center text-slate-400">
                     Belum ada riwayat transaksi barang keluar.
                   </td>
                 </tr>
@@ -1139,6 +1140,9 @@ export default function BarangKeluarPage() {
                       </td>
                       <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-slate-200">
                         {tx.pic_name}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300">
+                        {tx.warehouse_officer || "-"}
                       </td>
                       <td className="py-2.5 px-3 text-slate-600 dark:text-slate-400">
                         {tx.department || "-"}
