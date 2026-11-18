@@ -47,7 +47,17 @@ interface RequestBarangAccountItem {
 }
 
 export default function UserSettingsPage() {
-  const { currentUser, users, addUser, updateUser, deleteUser, changePassword, fetchUsers } = useCurrentUser();
+  const {
+    currentUser,
+    users,
+    roleLevels,
+    getRoleDefinition,
+    addUser,
+    updateUser,
+    deleteUser,
+    changePassword,
+    fetchUsers,
+  } = useCurrentUser();
   const { confirm: confirmDialog } = useDialog();
 
   // Search & Filter (ACTIS Dashboard Accounts)
@@ -704,6 +714,8 @@ export default function UserSettingsPage() {
   };
 
   const getRoleLabel = (role: string) => {
+    const customDef = getRoleDefinition(role);
+    if (customDef) return customDef.label;
     switch (role) {
       case "admin":
         return "Administrator";
@@ -721,6 +733,8 @@ export default function UserSettingsPage() {
   };
 
   const getRoleBadge = (role: string) => {
+    const customDef = getRoleDefinition(role);
+    if (customDef && !customDef.isDefault) return customDef.badgeClass;
     switch (role) {
       case "admin":
         return "bg-purple-100 dark:bg-purple-950/70 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-800";
@@ -733,7 +747,7 @@ export default function UserSettingsPage() {
       case "warehouse_admin":
         return "bg-indigo-100 dark:bg-indigo-950/70 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800";
       default:
-        return "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700";
+        return "bg-cyan-100 dark:bg-cyan-950/70 text-cyan-800 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800";
     }
   };
 
@@ -1874,11 +1888,18 @@ export default function UserSettingsPage() {
                   onChange={(e) => setNewRole(e.target.value)}
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
                 >
-                  <option value="field_engineer">Field Engineer (Hanya Ganti Password)</option>
-                  <option value="noc_engineer">NOC Engineer (Hanya Ganti Password)</option>
-                  <option value="sales_corporate">Sales Corporate (Hanya Ganti Password)</option>
-                  <option value="warehouse_admin">Admin Gudang (Manajemen Inventory)</option>
-                  <option value="admin">Administrator (Bisa Tambah, Edit & Hapus User)</option>
+                  {roleLevels.map((r) => (
+                    <option key={r.key} value={r.key}>
+                      {r.label}
+                      {r.key === "admin"
+                        ? " (Bisa Tambah, Edit & Hapus User)"
+                        : r.key === "warehouse_admin"
+                          ? " (Manajemen Inventory)"
+                          : !r.isDefault
+                            ? " (Level Kustom)"
+                            : ""}
+                    </option>
+                  ))}
                 </select>
                 <p className="text-[10px] text-slate-400 mt-1">
                   {newRole === "admin"
@@ -1994,11 +2015,21 @@ export default function UserSettingsPage() {
                   onChange={(e) => setEditRole(e.target.value)}
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
                 >
-                  <option value="field_engineer">Field Engineer (Hanya Ganti Password)</option>
-                  <option value="noc_engineer">NOC Engineer (Hanya Ganti Password)</option>
-                  <option value="sales_corporate">Sales Corporate (Hanya Ganti Password)</option>
-                  <option value="warehouse_admin">Admin Gudang (Manajemen Inventory)</option>
-                  <option value="admin">Administrator (Bisa Tambah, Edit & Hapus User)</option>
+                  {roleLevels.map((r) => (
+                    <option key={r.key} value={r.key}>
+                      {r.label}
+                      {r.key === "admin"
+                        ? " (Bisa Tambah, Edit & Hapus User)"
+                        : r.key === "warehouse_admin"
+                          ? " (Manajemen Inventory)"
+                          : !r.isDefault
+                            ? " (Level Kustom)"
+                            : ""}
+                    </option>
+                  ))}
+                  {!roleLevels.some((r) => r.key === editRole) && (
+                    <option value={editRole}>{editRole} (Level Tersimpan)</option>
+                  )}
                 </select>
                 <p className="text-[10px] text-slate-400 mt-1">
                   {editRole === "admin"

@@ -4,9 +4,9 @@ import { hashPassword } from "@/lib/auth";
 import { requireAuth, getRequestClientIp } from "@/lib/security";
 import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 import {
-  ACTIS_DASHBOARD_ROLES,
   REQUEST_BARANG_ROLE,
 } from "@/lib/requestBarangAuth";
+import { isValidDashboardRole } from "@/lib/accessLevelsStore";
 
 export async function PUT(
   request: NextRequest,
@@ -49,9 +49,21 @@ export async function PUT(
       );
     }
 
-    const targetRole = (ACTIS_DASHBOARD_ROLES as readonly string[]).includes(role)
-      ? role
-      : existingUser.role;
+    let targetRole = existingUser.role;
+    if (role !== undefined && role !== null && String(role).trim() !== "") {
+      const cleanRole = String(role).trim().toLowerCase();
+      const roleAllowed = await isValidDashboardRole(cleanRole);
+      if (!roleAllowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Level akses '${role}' tidak valid atau tidak terdaftar di Level Akses.`,
+          },
+          { status: 400 }
+        );
+      }
+      targetRole = cleanRole;
+    }
 
     const cleanEmail = String(email ?? "").trim().toLowerCase();
 

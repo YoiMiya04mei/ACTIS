@@ -2,8 +2,11 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 import {
+  DEFAULT_ACTIS_ROLE_LEVELS,
+  findRoleDefinition,
   getDefaultPermissionsForRole,
   isMenuLockedForRole,
+  type ActisRoleDefinition,
   type MenuAccessKey,
 } from "@/lib/accessLevels";
 
@@ -63,6 +66,8 @@ interface UserContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   users: AppUser[];
+  roleLevels: ActisRoleDefinition[];
+  getRoleDefinition: (roleKey: string) => ActisRoleDefinition | undefined;
   allowedMenus: MenuAccessKey[];
   accessLevelsLoaded: boolean;
   hasMenuAccess: (menuKey: MenuAccessKey) => boolean;
@@ -110,6 +115,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [users, setUsers] = useState<AppUser[]>([]);
+  const [roleLevels, setRoleLevels] = useState<ActisRoleDefinition[]>([
+    ...DEFAULT_ACTIS_ROLE_LEVELS,
+  ]);
   const [allowedMenus, setAllowedMenus] = useState<MenuAccessKey[]>([]);
   const [accessLevelsLoaded, setAccessLevelsLoaded] = useState<boolean>(false);
 
@@ -120,6 +128,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       const json = await res.json();
       if (json?.success && Array.isArray(json.myAllowedMenus)) {
         setAllowedMenus(json.myAllowedMenus as MenuAccessKey[]);
+        if (Array.isArray(json.rolesList) && json.rolesList.length > 0) {
+          setRoleLevels(json.rolesList as ActisRoleDefinition[]);
+        }
         setAccessLevelsLoaded(true);
       }
       if (opts?.broadcast && typeof BroadcastChannel !== "undefined") {
@@ -490,6 +501,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     [isAuthenticated, currentUser?.role, allowedMenuSet]
   );
 
+  const getRoleDefinition = useCallback(
+    (roleKey: string) => findRoleDefinition(roleKey, roleLevels),
+    [roleLevels]
+  );
+
   return (
     <UserContext.Provider
       value={{
@@ -498,6 +514,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated,
         isLoading,
         users,
+        roleLevels,
+        getRoleDefinition,
         allowedMenus,
         accessLevelsLoaded,
         hasMenuAccess,

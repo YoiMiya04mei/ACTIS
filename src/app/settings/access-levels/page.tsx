@@ -15,22 +15,27 @@ import {
   AlertTriangle,
   ArrowLeft,
   Users,
+  Plus,
+  Trash2,
+  Info,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
 import { useDialog } from "@/context/DialogContext";
 import {
   ACTIS_ACCESS_CATEGORIES,
-  ACTIS_ROLE_LEVELS,
   ALL_ACTIS_MENU_ITEMS,
+  DEFAULT_ACTIS_ROLE_LEVELS,
   DEFAULT_ROLE_MENU_PERMISSIONS,
+  isDefaultRoleKey,
   isMenuLockedForRole,
   normalizeAllRolesPermissions,
   normalizeRoleMenuPermissions,
+  type ActisRoleDefinition,
   type ActisRoleKey,
   type MenuAccessKey,
 } from "@/lib/accessLevels";
 
-type RolesMap = Record<ActisRoleKey, MenuAccessKey[]>;
+type RolesMap = Record<string, MenuAccessKey[]>;
 
 export default function AccessLevelsPage() {
   const { currentUser, users, refreshAccessLevels } = useCurrentUser();
@@ -38,13 +43,23 @@ export default function AccessLevelsPage() {
 
   const isAdmin = currentUser?.role === "admin";
 
+  const [rolesList, setRolesList] = useState<ActisRoleDefinition[]>([
+    ...DEFAULT_ACTIS_ROLE_LEVELS,
+  ]);
   const [selectedRole, setSelectedRole] = useState<ActisRoleKey>("noc_engineer");
   const [savedRoles, setSavedRoles] = useState<RolesMap>(() =>
-    normalizeAllRolesPermissions(DEFAULT_ROLE_MENU_PERMISSIONS)
+    normalizeAllRolesPermissions(DEFAULT_ROLE_MENU_PERMISSIONS, [])
   );
   const [draftRoles, setDraftRoles] = useState<RolesMap>(() =>
-    normalizeAllRolesPermissions(DEFAULT_ROLE_MENU_PERMISSIONS)
+    normalizeAllRolesPermissions(DEFAULT_ROLE_MENU_PERMISSIONS, [])
   );
+
+  // Create custom role form state
+  const [newLevelName, setNewLevelName] = useState("");
+  const [copyFromRole, setCopyFromRole] = useState<string>("empty");
+  const [creatingRole, setCreatingRole] = useState(false);
+  const [deletingRole, setDeletingRole] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -57,17 +72,45 @@ export default function AccessLevelsPage() {
     message: string;
   } | null>(null);
 
+  const applyServerPayload = useCallback(
+    (json: any, preserveDraft = false) => {
+      const nextList: ActisRoleDefinition[] = Array.isArray(json?.rolesList)
+        ? json.rolesList
+        : [...DEFAULT_ACTIS_ROLE_LEVELS];
+      const customOnly = nextList.filter((r) => !r.isDefault);
+      const normalized = normalizeAllRolesPermissions(
+        json?.permissionsByRole,
+        customOnly
+      );
+
+      setRolesList(nextList);
+      setSavedRoles(normalized);
+      if (!preserveDraft) {
+        setDraftRoles(normalized);
+      } else {
+        setDraftRoles((prev) => {
+          const merged: RolesMap = { ...normalized };
+          for (const r of nextList) {
+            if (prev[r.key]) {
+              merged[r.key] = normalizeRoleMenuPermissions(r.key, prev[r.key]);
+            }
+          }
+          return merged;
+        });
+      }
+      setUpdatedBy(json?.updatedBy || null);
+      setUpdatedAt(json?.updatedAt || null);
+    },
+    []
+  );
+
   const loadAccessLevels = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/access-levels", { cache: "no-store" });
       const json = await res.json();
       if (res.ok && json?.success && json.permissionsByRole) {
-        const normalized = normalizeAllRolesPermissions(json.permissionsByRole);
-        setSavedRoles(normalized);
-        setDraftRoles(normalized);
-        setUpdatedBy(json.updatedBy || null);
-        setUpdatedAt(json.updatedAt || null);
+        applyServerPayload(json);
       }
     } catch {
       setNotice({
@@ -77,7 +120,7 @@ export default function AccessLevelsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyServerPayload]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -88,14 +131,15 @@ export default function AccessLevelsPage() {
   }, [isAdmin, loadAccessLevels]);
 
   const totalMenus = ALL_ACTIS_MENU_ITEMS.length;
-  const currentMenuList = draftRoles[selectedRole] || [];
+  const currentMenuList = draftRoles[selectedRole] || ["dashboard"];
   const activeMenuSet = useMemo(
     () => new Set<MenuAccessKey>(currentMenuList),
     [currentMenuList]
   );
 
   const activeCount = currentMenuList.length;
-  const activePercent = totalMenus > 0 ? Math.round((activeCount / totalMenus) * 100) : 0;
+  const activePercent =
+    totalMenus > 0 ? Math.round((activeCount / totalMenus) * 100) : 0;
 
   const isDirty = useMemo(() => {
     return JSON.stringify(draftRoles) !== JSON.stringify(savedRoles);
@@ -103,17 +147,19 @@ export default function AccessLevelsPage() {
 
   const userCountByRole = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const r of ACTIS_ROLE_LEVELS) counts[r.key] = 0;
+    for (const r of rolesList) counts[r.key] = 0;
     for (const u of users || []) {
-      if (u?.role && counts[u.role] !== undefined) {
-        counts[u.role] += 1;
+      if (u?.role) {
+        counts[u.role] = (counts[u.role] || 0) + 1;
       }
     }
     return counts;
-  }, [users]);
+  }, [users, rolesList]);
 
   const selectedRoleMeta =
-    ACTIS_ROLE_LEVELS.find((r) => r.key === selectedRole) || ACTIS_ROLE_LEVELS[0];
+    rolesList.find((r) => r.key === selectedRole) || rolesList[0];
+  const selectedIsDefault = isDefaultRoleKey(selectedRoleMeta?.key || "");
+  const selectedUserCount = userCountByRole[selectedRole] ?? 0;
 
   const handleToggleMenu = (menuKey: MenuAccessKey) => {
     if (isMenuLockedForRole(selectedRole, menuKey)) return;
@@ -197,16 +243,11 @@ export default function AccessLevelsPage() {
         throw new Error(json?.error || "Gagal menyimpan Level Akses.");
       }
 
-      const nextSaved = normalizeAllRolesPermissions(json.permissionsByRole);
-      setSavedRoles(nextSaved);
-      setDraftRoles(nextSaved);
-      setUpdatedBy(json.updatedBy || currentUser?.nama || null);
-      setUpdatedAt(json.updatedAt || new Date().toISOString());
-
+      applyServerPayload(json);
       await refreshAccessLevels({ broadcast: true });
       setNotice({
         type: "success",
-        message: `Konfigurasi Level Akses (${selectedRoleMeta.label}) berhasil disimpan dan langsung aktif di sidebar & rute halaman.`,
+        message: `Hak akses untuk "${selectedRoleMeta.label}" berhasil disimpan dan langsung aktif di sidebar & halaman.`,
       });
     } catch (err: unknown) {
       setNotice({
@@ -222,7 +263,9 @@ export default function AccessLevelsPage() {
   const handleResetSelectedRole = async () => {
     if (!isAdmin || resetting) return;
     const confirmed = await confirmDialog(
-      `Kembalikan daftar menu aktif untuk level user "${selectedRoleMeta.label}" ke pengaturan default standar ACTIS?`
+      selectedIsDefault
+        ? `Kembalikan daftar menu aktif untuk level user "${selectedRoleMeta.label}" ke pengaturan bawaan standar ACTIS?`
+        : `Kosongkan centang menu kustom "${selectedRoleMeta.label}" kembali ke bawaan awal (hanya Dashboard)?`
     );
     if (!confirmed) return;
 
@@ -240,16 +283,11 @@ export default function AccessLevelsPage() {
         throw new Error(json?.error || "Gagal mereset Level Akses.");
       }
 
-      const nextSaved = normalizeAllRolesPermissions(json.permissionsByRole);
-      setSavedRoles(nextSaved);
-      setDraftRoles(nextSaved);
-      setUpdatedBy(json.updatedBy || currentUser?.nama || null);
-      setUpdatedAt(json.updatedAt || new Date().toISOString());
-
+      applyServerPayload(json);
       await refreshAccessLevels({ broadcast: true });
       setNotice({
         type: "info",
-        message: `Level Akses "${selectedRoleMeta.label}" telah dikembalikan ke pengaturan default.`,
+        message: `Level Akses "${selectedRoleMeta.label}" telah dikembalikan ke pengaturan bawaan.`,
       });
     } catch (err: unknown) {
       setNotice({
@@ -259,6 +297,102 @@ export default function AccessLevelsPage() {
       });
     } finally {
       setResetting(false);
+    }
+  };
+
+  const handleCreateCustomRole = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin || creatingRole) return;
+
+    const cleanName = newLevelName.trim();
+    if (cleanName.length < 2) {
+      setNotice({
+        type: "error",
+        message: "Nama level baru minimal 2 karakter.",
+      });
+      return;
+    }
+
+    setCreatingRole(true);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/access-levels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          action: "create_role",
+          name: cleanName,
+          copyFromRole,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || "Gagal menambahkan level user baru.");
+      }
+
+      applyServerPayload(json, isDirty);
+      if (json.createdRole?.key) {
+        setSelectedRole(json.createdRole.key);
+      }
+      setNewLevelName("");
+      setCopyFromRole("empty");
+      await refreshAccessLevels({ broadcast: true });
+      setNotice({
+        type: "success",
+        message: `Level user "${json.createdRole?.label || cleanName}" berhasil dibuat dan otomatis tersedia di dropdown Pengaturan User Akses.`,
+      });
+    } catch (err: unknown) {
+      setNotice({
+        type: "error",
+        message:
+          err instanceof Error ? err.message : "Gagal membuat level user baru.",
+      });
+    } finally {
+      setCreatingRole(false);
+    }
+  };
+
+  const handleDeleteCustomRole = async () => {
+    if (!isAdmin || deletingRole || selectedIsDefault || selectedUserCount > 0) {
+      return;
+    }
+
+    const confirmed = await confirmDialog(
+      `Hapus level user buatan sendiri "${selectedRoleMeta.label}" secara permanen?`
+    );
+    if (!confirmed) return;
+
+    setDeletingRole(true);
+    setNotice(null);
+    try {
+      const res = await fetch(
+        `/api/access-levels?role=${encodeURIComponent(selectedRole)}`,
+        {
+          method: "DELETE",
+          cache: "no-store",
+        }
+      );
+      const json = await res.json();
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.error || "Gagal menghapus level user.");
+      }
+
+      applyServerPayload(json);
+      setSelectedRole("noc_engineer");
+      await refreshAccessLevels({ broadcast: true });
+      setNotice({
+        type: "info",
+        message: `Level user "${selectedRoleMeta.label}" telah dihapus.`,
+      });
+    } catch (err: unknown) {
+      setNotice({
+        type: "error",
+        message:
+          err instanceof Error ? err.message : "Gagal menghapus level user.",
+      });
+    } finally {
+      setDeletingRole(false);
     }
   };
 
@@ -299,7 +433,7 @@ export default function AccessLevelsPage() {
               Level Akses
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Atur menu ACTIS yang dapat diakses oleh masing-masing level pengguna secara terpusat.
+              Atur menu ACTIS untuk level default maupun level user kustom tambahan.
             </p>
           </div>
         </div>
@@ -318,10 +452,10 @@ export default function AccessLevelsPage() {
             type="button"
             onClick={handleResetSelectedRole}
             disabled={resetting || loading}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-rose-200 dark:border-rose-900 bg-white dark:bg-slate-900 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 text-xs font-semibold transition cursor-pointer disabled:opacity-50"
           >
-            <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-            <span>Reset Default</span>
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Kembalikan ke bawaan</span>
           </button>
 
           <button
@@ -335,7 +469,7 @@ export default function AccessLevelsPage() {
             }`}
           >
             <Save className="w-3.5 h-3.5" />
-            <span>{saving ? "Menyimpan..." : "Simpan Perubahan"}</span>
+            <span>{saving ? "Menyimpan..." : "Simpan hak akses"}</span>
           </button>
         </div>
       </div>
@@ -369,13 +503,13 @@ export default function AccessLevelsPage() {
         </div>
       )}
 
-      {/* Main White Panel Card (Matches Screenshot Layout) */}
+      {/* Main White Panel Card */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 space-y-5">
         {/* Control Row: Level User + Quick Buttons + Menu Aktif Progress Bar */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 pb-2 border-b border-slate-100 dark:border-slate-800">
           <div className="flex flex-wrap items-end gap-3">
             {/* Level user dropdown */}
-            <div className="min-w-[230px] relative">
+            <div className="min-w-[240px] relative">
               <div className="flex items-center gap-1.5 mb-1.5">
                 <label
                   htmlFor="access-level-role-select"
@@ -394,21 +528,22 @@ export default function AccessLevelsPage() {
               </div>
               {showLevelTooltip && (
                 <div className="absolute left-0 top-6 z-20 w-72 p-2.5 rounded-xl bg-slate-900 text-white text-[11px] shadow-lg leading-relaxed">
-                  Pilih role akun ACTIS yang ingin dikonfigurasi. Perubahan berlaku langsung untuk semua user pada role tersebut setelah menekan <strong>Simpan Perubahan</strong>.
+                  Pilih role bawaan atau level kustom yang ingin diatur. Perubahan berlaku langsung untuk semua user pada role tersebut setelah menekan <strong>Simpan hak akses</strong>.
                 </div>
               )}
               <select
                 id="access-level-role-select"
                 value={selectedRole}
                 onChange={(e) => {
-                  setSelectedRole(e.target.value as ActisRoleKey);
+                  setSelectedRole(e.target.value);
                   setNotice(null);
                 }}
                 className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
               >
-                {ACTIS_ROLE_LEVELS.map((r) => (
+                {rolesList.map((r) => (
                   <option key={r.key} value={r.key}>
                     {r.label} ({userCountByRole[r.key] ?? 0} akun)
+                    {!r.isDefault ? " • Kustom" : ""}
                   </option>
                 ))}
               </select>
@@ -441,7 +576,7 @@ export default function AccessLevelsPage() {
           {/* Menu aktif progress bar */}
           <div className="flex-1 lg:max-w-xl space-y-1.5">
             <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-medium text-slate-600 dark:text-slate-300">
                   Menu aktif
                 </span>
@@ -450,13 +585,16 @@ export default function AccessLevelsPage() {
                 >
                   {selectedRoleMeta.label}
                 </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                  {selectedIsDefault ? "Level Default (Dilindungi)" : "Level Buatan Sendiri"}
+                </span>
                 {isDirty && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
                     Belum Disimpan
                   </span>
                 )}
               </div>
-              <span className="text-xs text-slate-600 dark:text-slate-300 font-medium tabular-nums">
+              <span className="text-xs text-slate-600 dark:text-slate-300 font-medium tabular-nums shrink-0">
                 <strong className="font-extrabold text-slate-900 dark:text-white">
                   {activeCount}
                 </strong>{" "}
@@ -487,7 +625,7 @@ export default function AccessLevelsPage() {
           )}
         </div>
 
-        {/* Category Cards Grid (Matches Screenshot 5-col desktop flow) */}
+        {/* Category Cards Grid */}
         {loading ? (
           <div className="py-16 text-center text-xs text-slate-400">
             Memuat matriks hak akses menu...
@@ -581,6 +719,137 @@ export default function AccessLevelsPage() {
         )}
       </div>
 
+      {/* Bottom Management Cards: Buat level baru & Hapus level */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+        {/* Card Kiri: Buat level baru */}
+        <form
+          onSubmit={handleCreateCustomRole}
+          className="lg:col-span-8 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 flex flex-col justify-between space-y-3"
+        >
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-100">
+            <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <span>Buat level baru</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+            <div className="sm:col-span-5">
+              <label
+                htmlFor="new-custom-role-name"
+                className="flex items-center gap-1 text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+              >
+                <span>Nama level</span>
+                <span className="text-rose-500">*</span>
+                <span title="Masukkan nama role baru, misalnya: Kasir, Supervisor NOC, atau Teknisi Magang.">
+                  <HelpCircle className="w-3.5 h-3.5 text-blue-500" />
+                </span>
+              </label>
+              <input
+                id="new-custom-role-name"
+                type="text"
+                value={newLevelName}
+                onChange={(e) => setNewLevelName(e.target.value)}
+                placeholder="Contoh: Supervisor NOC, Admin Keuangan"
+                maxLength={50}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                required
+              />
+            </div>
+
+            <div className="sm:col-span-5">
+              <label
+                htmlFor="copy-role-template-select"
+                className="flex items-center gap-1 text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+              >
+                <span>Salin hak akses dari (opsional)</span>
+                <span title="Mulai dengan daftar menu kosong atau duplikasi dari level yang sudah ada.">
+                  <HelpCircle className="w-3.5 h-3.5 text-blue-500" />
+                </span>
+              </label>
+              <select
+                id="copy-role-template-select"
+                value={copyFromRole}
+                onChange={(e) => setCopyFromRole(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
+              >
+                <option value="empty">Kosong (hanya Dashboard)</option>
+                {rolesList.map((r) => (
+                  <option key={r.key} value={r.key}>
+                    {r.label} ({(draftRoles[r.key] || []).length} menu)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="sm:col-span-2">
+              <button
+                type="submit"
+                disabled={creatingRole || !newLevelName.trim()}
+                className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold shadow-xs transition cursor-pointer disabled:opacity-50"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{creatingRole ? "..." : "Buat"}</span>
+              </button>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            Level baru langsung muncul di pilihan Level saat menambah atau mengubah user di{" "}
+            <Link href="/settings/users" className="text-blue-600 dark:text-blue-400 hover:underline font-semibold">
+              Pengaturan User Akses
+            </Link>
+            . Atur centang menu di atas setelah level dibuat.
+          </p>
+        </form>
+
+        {/* Card Kanan: Hapus level */}
+        <div className="lg:col-span-4 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-sm p-4 sm:p-5 flex flex-col justify-between space-y-3">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-xs font-bold text-rose-600 dark:text-rose-400">
+              <Trash2 className="w-4 h-4 shrink-0" />
+              <span>Hapus level</span>
+            </div>
+
+            <div className="text-xs text-slate-700 dark:text-slate-200">
+              Level terpilih:{" "}
+              <strong className="font-bold text-slate-900 dark:text-white">
+                {selectedRoleMeta.label}
+              </strong>{" "}
+              <span className="text-slate-500 dark:text-slate-400">
+                (
+                {selectedUserCount === 0
+                  ? "belum dipakai user"
+                  : `dipakai ${selectedUserCount} akun`}
+                )
+              </span>
+            </div>
+
+            <div>
+              <button
+                type="button"
+                onClick={handleDeleteCustomRole}
+                disabled={deletingRole || selectedIsDefault || selectedUserCount > 0}
+                className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs font-bold transition ${
+                  selectedIsDefault || selectedUserCount > 0
+                    ? "border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-400 dark:text-slate-600 cursor-not-allowed"
+                    : "border-rose-300 dark:border-rose-800 bg-rose-50/70 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-950/70 cursor-pointer"
+                }`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>{deletingRole ? "Menghapus..." : "Hapus level ini"}</span>
+              </button>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+            {selectedIsDefault
+              ? "Hanya level buatan sendiri yang bisa dihapus. Level default (Administrator, NOC Engineer, Field Engineer, Sales Corporate, Admin Gudang) dilindungi."
+              : selectedUserCount > 0
+                ? `Masih digunakan oleh ${selectedUserCount} akun. Pindahkan role akun tersebut di Pengaturan User Akses sebelum menghapus.`
+                : "Level buatan sendiri ini belum dipakai oleh akun mana pun dan dapat dihapus."}
+          </p>
+        </div>
+      </div>
+
       {/* Ringkasan Modal (Lihat Ringkasan) */}
       {showSummaryModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -592,7 +861,7 @@ export default function AccessLevelsPage() {
                   <span>Ringkasan Hak Akses Menu Semua Level User</span>
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Perbandingan matriks menu aktif antar role ACTIS. Klik nama role pada kolom header untuk mengedit.
+                  Perbandingan matriks menu aktif antar role ACTIS (default &amp; kustom). Klik nama role pada header untuk mengedit.
                 </p>
               </div>
               <button
@@ -605,8 +874,8 @@ export default function AccessLevelsPage() {
             </div>
 
             {/* Role Summary Cards Row */}
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 bg-slate-50/70 dark:bg-slate-950/40">
-              {ACTIS_ROLE_LEVELS.map((r) => {
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 bg-slate-50/70 dark:bg-slate-950/40 max-h-44 overflow-y-auto">
+              {rolesList.map((r) => {
                 const count = (draftRoles[r.key] || []).length;
                 return (
                   <button
@@ -622,8 +891,15 @@ export default function AccessLevelsPage() {
                         : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-blue-300"
                     }`}
                   >
-                    <div className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
-                      {r.label}
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">
+                        {r.label}
+                      </div>
+                      {!r.isDefault && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-cyan-100 text-cyan-800 dark:bg-cyan-950/70 dark:text-cyan-300 shrink-0">
+                          Kustom
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center justify-between mt-1.5 text-[11px]">
                       <span className="text-slate-500 inline-flex items-center gap-1">
@@ -645,8 +921,8 @@ export default function AccessLevelsPage() {
                 <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-slate-700 dark:text-slate-200">
                   <tr>
                     <th className="py-2.5 px-3 rounded-tl-lg">Kategori / Menu ACTIS</th>
-                    {ACTIS_ROLE_LEVELS.map((r) => (
-                      <th key={r.key} className="py-2.5 px-3 text-center">
+                    {rolesList.map((r) => (
+                      <th key={r.key} className="py-2.5 px-3 text-center whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => {
@@ -666,7 +942,7 @@ export default function AccessLevelsPage() {
                     <React.Fragment key={cat.key}>
                       <tr className="bg-slate-50/90 dark:bg-slate-900/80">
                         <td
-                          colSpan={ACTIS_ROLE_LEVELS.length + 1}
+                          colSpan={rolesList.length + 1}
                           className="py-2 px-3 text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300"
                         >
                           {cat.label}
@@ -680,7 +956,7 @@ export default function AccessLevelsPage() {
                           <td className="py-2 px-3 font-medium text-slate-700 dark:text-slate-200">
                             {item.label}
                           </td>
-                          {ACTIS_ROLE_LEVELS.map((r) => {
+                          {rolesList.map((r) => {
                             const allowed = (draftRoles[r.key] || []).includes(item.key);
                             const locked = isMenuLockedForRole(r.key, item.key);
                             return (

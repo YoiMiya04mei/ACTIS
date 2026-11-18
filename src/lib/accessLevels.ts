@@ -1,9 +1,11 @@
-export type ActisRoleKey =
+export type ActisDefaultRoleKey =
   | "admin"
   | "noc_engineer"
   | "field_engineer"
   | "sales_corporate"
   | "warehouse_admin";
+
+export type ActisRoleKey = ActisDefaultRoleKey | (string & {});
 
 export type MenuAccessKey =
   | "dashboard"
@@ -44,10 +46,11 @@ export type MenuAccessKey =
   | "admin_updates";
 
 export interface ActisRoleDefinition {
-  key: ActisRoleKey;
+  key: string;
   label: string;
   description: string;
   badgeClass: string;
+  isDefault: boolean;
 }
 
 export interface ActisMenuItemDefinition {
@@ -64,13 +67,17 @@ export interface ActisMenuCategoryDefinition {
   items: ActisMenuItemDefinition[];
 }
 
-export const ACTIS_ROLE_LEVELS: readonly ActisRoleDefinition[] = [
+export const DEFAULT_ROLE_BADGE_CUSTOM =
+  "bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-950/60 dark:text-cyan-300 dark:border-cyan-800";
+
+export const DEFAULT_ACTIS_ROLE_LEVELS: readonly ActisRoleDefinition[] = [
   {
     key: "admin",
     label: "Administrator",
     description: "Akses penuh manajemen sistem, keamanan, user & seluruh modul.",
     badgeClass:
       "bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800",
+    isDefault: true,
   },
   {
     key: "noc_engineer",
@@ -78,6 +85,7 @@ export const ACTIS_ROLE_LEVELS: readonly ActisRoleDefinition[] = [
     description: "Operasional jaringan, antrean provisioning, backup config, & TACACS+.",
     badgeClass:
       "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800",
+    isDefault: true,
   },
   {
     key: "field_engineer",
@@ -85,6 +93,7 @@ export const ACTIS_ROLE_LEVELS: readonly ActisRoleDefinition[] = [
     description: "Teknisi lapangan, pengecekan POP/Enterprise, & pengembalian barang.",
     badgeClass:
       "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800",
+    isDefault: true,
   },
   {
     key: "sales_corporate",
@@ -92,6 +101,7 @@ export const ACTIS_ROLE_LEVELS: readonly ActisRoleDefinition[] = [
     description: "Input order provisioning, monitoring status antrean, & dokumen NOC.",
     badgeClass:
       "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800",
+    isDefault: true,
   },
   {
     key: "warehouse_admin",
@@ -99,8 +109,12 @@ export const ACTIS_ROLE_LEVELS: readonly ActisRoleDefinition[] = [
     description: "Manajemen master barang, stok masuk/keluar, retur, & Form Barang.",
     badgeClass:
       "bg-indigo-100 text-indigo-800 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800",
+    isDefault: true,
   },
 ];
+
+// Preserved export alias for backward compatibility
+export const ACTIS_ROLE_LEVELS = DEFAULT_ACTIS_ROLE_LEVELS;
 
 export const ACTIS_ACCESS_CATEGORIES: readonly ActisMenuCategoryDefinition[] = [
   {
@@ -195,14 +209,61 @@ export const ALL_ACTIS_MENU_KEYS: readonly MenuAccessKey[] = ALL_ACTIS_MENU_ITEM
 );
 
 const VALID_MENU_KEY_SET = new Set<string>(ALL_ACTIS_MENU_KEYS);
-const VALID_ROLE_KEY_SET = new Set<string>(ACTIS_ROLE_LEVELS.map((r) => r.key));
+const DEFAULT_ROLE_KEY_SET = new Set<string>(
+  DEFAULT_ACTIS_ROLE_LEVELS.map((r) => r.key)
+);
+const RESERVED_ROLE_KEYS = new Set<string>([
+  "request_barang",
+  "administrator",
+  "system",
+  "empty",
+  "all",
+  "null",
+  "undefined",
+]);
 
-export function isValidActisRoleKey(role: string): role is ActisRoleKey {
-  return VALID_ROLE_KEY_SET.has(role);
+export function isDefaultRoleKey(role: string): role is ActisDefaultRoleKey {
+  return DEFAULT_ROLE_KEY_SET.has(role);
+}
+
+export function isValidActisRoleKey(role: string): role is ActisDefaultRoleKey {
+  return isDefaultRoleKey(role);
 }
 
 export function isValidMenuAccessKey(key: string): key is MenuAccessKey {
   return VALID_MENU_KEY_SET.has(key);
+}
+
+export function slugifyCustomRoleKey(
+  rawName: string,
+  existingKeys: Iterable<string>
+): string {
+  const existingSet = new Set<string>(existingKeys);
+  let base = String(rawName || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  if (base.length < 2) {
+    base = `custom_${Date.now().toString(36)}`;
+  }
+  if (RESERVED_ROLE_KEYS.has(base) || DEFAULT_ROLE_KEY_SET.has(base)) {
+    base = `custom_${base}`;
+  }
+
+  let candidate = base.slice(0, 48);
+  let counter = 2;
+  while (
+    existingSet.has(candidate) ||
+    RESERVED_ROLE_KEYS.has(candidate) ||
+    DEFAULT_ROLE_KEY_SET.has(candidate)
+  ) {
+    const suffix = `_${counter}`;
+    candidate = `${base.slice(0, Math.max(2, 48 - suffix.length))}${suffix}`;
+    counter += 1;
+  }
+  return candidate;
 }
 
 export function isMenuLockedForRole(role: string, menuKey: MenuAccessKey): boolean {
@@ -213,7 +274,10 @@ export function isMenuLockedForRole(role: string, menuKey: MenuAccessKey): boole
   return false;
 }
 
-export const DEFAULT_ROLE_MENU_PERMISSIONS: Record<ActisRoleKey, MenuAccessKey[]> = {
+export const DEFAULT_ROLE_MENU_PERMISSIONS: Record<
+  ActisDefaultRoleKey,
+  MenuAccessKey[]
+> = {
   admin: [...ALL_ACTIS_MENU_KEYS],
   noc_engineer: [
     "dashboard",
@@ -299,12 +363,16 @@ export const DEFAULT_ROLE_MENU_PERMISSIONS: Record<ActisRoleKey, MenuAccessKey[]
 };
 
 export function normalizeRoleMenuPermissions(
-  role: ActisRoleKey,
+  role: string,
   rawList: unknown
 ): MenuAccessKey[] {
+  const defaultList = isDefaultRoleKey(role)
+    ? DEFAULT_ROLE_MENU_PERMISSIONS[role]
+    : (["dashboard"] as MenuAccessKey[]);
+
   const baseList = Array.isArray(rawList)
     ? rawList.filter((k): k is MenuAccessKey => typeof k === "string" && isValidMenuAccessKey(k))
-    : DEFAULT_ROLE_MENU_PERMISSIONS[role];
+    : defaultList;
 
   const allowedSet = new Set<MenuAccessKey>(baseList);
   for (const item of ALL_ACTIS_MENU_ITEMS) {
@@ -313,17 +381,65 @@ export function normalizeRoleMenuPermissions(
     }
   }
 
-  // Return in canonical order matching ALL_ACTIS_MENU_KEYS
   return ALL_ACTIS_MENU_KEYS.filter((k) => allowedSet.has(k));
 }
 
+export function normalizeCustomRolesList(
+  rawCustomRoles: unknown
+): ActisRoleDefinition[] {
+  if (!Array.isArray(rawCustomRoles)) return [];
+
+  const seenKeys = new Set<string>(DEFAULT_ROLE_KEY_SET);
+  const result: ActisRoleDefinition[] = [];
+
+  for (const item of rawCustomRoles) {
+    if (!item || typeof item !== "object") continue;
+    const rawKey = typeof (item as { key?: unknown }).key === "string"
+      ? (item as { key: string }).key.trim().toLowerCase()
+      : "";
+    const rawLabel = typeof (item as { label?: unknown }).label === "string"
+      ? (item as { label: string }).label.trim()
+      : "";
+
+    if (!rawKey || !rawLabel) continue;
+    if (seenKeys.has(rawKey) || RESERVED_ROLE_KEYS.has(rawKey)) continue;
+    if (!/^[a-z0-9_]{2,48}$/.test(rawKey)) continue;
+
+    seenKeys.add(rawKey);
+    result.push({
+      key: rawKey,
+      label: rawLabel.slice(0, 60),
+      description:
+        typeof (item as { description?: unknown }).description === "string" &&
+        (item as { description: string }).description.trim()
+          ? (item as { description: string }).description.trim().slice(0, 160)
+          : `Level akses kustom "${rawLabel.slice(0, 60)}".`,
+      badgeClass:
+        typeof (item as { badgeClass?: unknown }).badgeClass === "string" &&
+        (item as { badgeClass: string }).badgeClass.trim()
+          ? (item as { badgeClass: string }).badgeClass.trim()
+          : DEFAULT_ROLE_BADGE_CUSTOM,
+      isDefault: false,
+    });
+  }
+
+  return result;
+}
+
+export function buildAllRoleDefinitions(
+  customRoles: readonly ActisRoleDefinition[] = []
+): ActisRoleDefinition[] {
+  return [...DEFAULT_ACTIS_ROLE_LEVELS, ...customRoles];
+}
+
 export function normalizeAllRolesPermissions(
-  rawMap: unknown
-): Record<ActisRoleKey, MenuAccessKey[]> {
+  rawMap: unknown,
+  customRoles: readonly ActisRoleDefinition[] = []
+): Record<string, MenuAccessKey[]> {
   const input =
     rawMap && typeof rawMap === "object" ? (rawMap as Record<string, unknown>) : {};
 
-  return {
+  const out: Record<string, MenuAccessKey[]> = {
     admin: normalizeRoleMenuPermissions("admin", input.admin ?? DEFAULT_ROLE_MENU_PERMISSIONS.admin),
     noc_engineer: normalizeRoleMenuPermissions(
       "noc_engineer",
@@ -342,13 +458,26 @@ export function normalizeAllRolesPermissions(
       input.warehouse_admin ?? DEFAULT_ROLE_MENU_PERMISSIONS.warehouse_admin
     ),
   };
+
+  for (const cr of customRoles) {
+    out[cr.key] = normalizeRoleMenuPermissions(cr.key, input[cr.key] ?? ["dashboard"]);
+  }
+
+  return out;
 }
 
 export function getDefaultPermissionsForRole(role: string): MenuAccessKey[] {
-  if (isValidActisRoleKey(role)) {
+  if (isDefaultRoleKey(role)) {
     return [...DEFAULT_ROLE_MENU_PERMISSIONS[role]];
   }
   return ["dashboard"];
+}
+
+export function findRoleDefinition(
+  roleKey: string,
+  roleList: readonly ActisRoleDefinition[] = DEFAULT_ACTIS_ROLE_LEVELS
+): ActisRoleDefinition | undefined {
+  return roleList.find((r) => r.key === roleKey);
 }
 
 /**
@@ -363,7 +492,6 @@ export function getRequiredMenuForPathname(pathname: string | null | undefined):
     return null;
   }
 
-  // Exact and most-specific prefixes first
   if (clean === "/dashboard" || clean.startsWith("/dashboard/")) return "dashboard";
   if (clean === "/orders" || clean.startsWith("/orders/")) return "orders";
   if (clean === "/queue" || clean.startsWith("/queue/")) return "queue";

@@ -4,6 +4,25 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.39",
+      "date": "2026-11-18T16:30:26+07:00",
+      "title": "Tambah dan Hapus Level Akses User Kustom dengan Proteksi Level Default",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Menambahkan fitur Buat level baru (beserta opsi salin hak akses dari level yang ada atau mulai kosong hanya Dashboard) dan Hapus level pada halaman /settings/access-levels"
+        },
+        {
+          "type": "feat",
+          "text": "Menyambungkan daftar level akses kustom ke dropdown tambah/edit user di /settings/users serta validasi /api/users dan /api/users/[id]"
+        },
+        {
+          "type": "improve",
+          "text": "Melindungi 5 level default (Administrator, NOC Engineer, Field Engineer, Sales Corporate, Admin Gudang) serta level yang masih dipakai akun aktif agar tidak dapat dihapus"
+        }
+      ]
+    },
+    {
       "version": "1.2.38",
       "date": "2026-11-18T16:03:21+07:00",
       "title": "Fitur Manajemen Level Akses Menu per Role User ACTIS",

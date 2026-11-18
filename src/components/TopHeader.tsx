@@ -40,7 +40,11 @@ function formatWibDateTime(date: Date): string {
 export function TopHeader({ onOpenMobileSidebar }: TopHeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { currentUser, logout, hasMenuAccess } = useCurrentUser();
+  const { currentUser, logout, hasMenuAccess, getRoleDefinition } = useCurrentUser();
+  const roleLabel =
+    getRoleDefinition(currentUser?.role || "")?.label ||
+    currentUser?.role?.replace(/_/g, " ") ||
+    "";
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
 
@@ -110,7 +114,7 @@ export function TopHeader({ onOpenMobileSidebar }: TopHeaderProps) {
               {currentUser?.nama}
             </span>
             <span className="text-[10px] font-bold text-slate-400 uppercase hidden sm:inline">
-              ({currentUser?.role?.replace("_", " ")})
+              ({roleLabel})
             </span>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
           </button>
@@ -138,7 +142,7 @@ export function TopHeader({ onOpenMobileSidebar }: TopHeaderProps) {
                   >
                     {currentUser?.role === "admin"
                       ? "Administrator (Full Access)"
-                      : `${currentUser?.role?.replace("_", " ")} (User)`}
+                      : `${roleLabel} (User)`}
                   </span>
                 </div>
 
