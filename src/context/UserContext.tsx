@@ -6,6 +6,7 @@ import {
   findRoleDefinition,
   getDefaultPermissionsForRole,
   isMenuLockedForRole,
+  resolveDefaultLandingHref,
   type ActisRoleDefinition,
   type MenuAccessKey,
 } from "@/lib/accessLevels";
@@ -71,15 +72,27 @@ interface UserContextType {
   allowedMenus: MenuAccessKey[];
   accessLevelsLoaded: boolean;
   hasMenuAccess: (menuKey: MenuAccessKey) => boolean;
-  refreshAccessLevels: (opts?: { broadcast?: boolean }) => Promise<void>;
+  refreshAccessLevels: (opts?: { broadcast?: boolean }) => Promise<MenuAccessKey[] | null>;
   login: (
     email: string,
     password: string,
     rememberMe?: boolean
-  ) => Promise<{ success: boolean; error?: string; rememberMe?: boolean; user?: AppUser }>;
+  ) => Promise<{
+    success: boolean;
+    error?: string;
+    rememberMe?: boolean;
+    user?: AppUser;
+    landingPath?: string | null;
+  }>;
   loginWithRememberMe: (options?: {
     rememberMe?: boolean;
-  }) => Promise<{ success: boolean; error?: string; rememberMe?: boolean; user?: AppUser }>;
+  }) => Promise<{
+    success: boolean;
+    error?: string;
+    rememberMe?: boolean;
+    user?: AppUser;
+    landingPath?: string | null;
+  }>;
   logout: (options?: { reason?: "timeout" | "manual" }) => Promise<void>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   addUser: (data: {
@@ -121,31 +134,38 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [allowedMenus, setAllowedMenus] = useState<MenuAccessKey[]>([]);
   const [accessLevelsLoaded, setAccessLevelsLoaded] = useState<boolean>(false);
 
-  const refreshAccessLevels = useCallback(async (opts?: { broadcast?: boolean }) => {
-    try {
-      const res = await fetch("/api/access-levels", { cache: "no-store" });
-      if (!res.ok) return;
-      const json = await res.json();
-      if (json?.success && Array.isArray(json.myAllowedMenus)) {
-        setAllowedMenus(json.myAllowedMenus as MenuAccessKey[]);
-        if (Array.isArray(json.rolesList) && json.rolesList.length > 0) {
-          setRoleLevels(json.rolesList as ActisRoleDefinition[]);
+  const refreshAccessLevels = useCallback(
+    async (opts?: { broadcast?: boolean }): Promise<MenuAccessKey[] | null> => {
+      try {
+        const res = await fetch("/api/access-levels", { cache: "no-store" });
+        if (!res.ok) return null;
+        const json = await res.json();
+        let nextAllowed: MenuAccessKey[] | null = null;
+        if (json?.success && Array.isArray(json.myAllowedMenus)) {
+          nextAllowed = json.myAllowedMenus as MenuAccessKey[];
+          setAllowedMenus(nextAllowed);
+          if (Array.isArray(json.rolesList) && json.rolesList.length > 0) {
+            setRoleLevels(json.rolesList as ActisRoleDefinition[]);
+          }
+          setAccessLevelsLoaded(true);
         }
-        setAccessLevelsLoaded(true);
-      }
-      if (opts?.broadcast && typeof BroadcastChannel !== "undefined") {
-        try {
-          const ch = new BroadcastChannel("actis_access_levels_sync");
-          ch.postMessage({ ts: Date.now() });
-          ch.close();
-        } catch {
-          // ignore
+        if (opts?.broadcast && typeof BroadcastChannel !== "undefined") {
+          try {
+            const ch = new BroadcastChannel("actis_access_levels_sync");
+            ch.postMessage({ ts: Date.now() });
+            ch.close();
+          } catch {
+            // ignore
+          }
         }
+        return nextAllowed;
+      } catch {
+        // keep existing state cleanly
+        return null;
       }
-    } catch {
-      // keep existing state cleanly
-    }
-  }, []);
+    },
+    []
+  );
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -298,14 +318,20 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       } catch {}
 
       handleSetUser(data.user);
-      if (data.user?.role !== "request_barang") {
-        await Promise.all([fetchUsers(), refreshAccessLevels()]);
+      let landingPath: string | null = "/queue";
+      if (data.user?.role === "request_barang") {
+        landingPath = "/request-barang";
+      } else {
+        const [, menus] = await Promise.all([fetchUsers(), refreshAccessLevels()]);
+        const effectiveMenus = menus ?? getDefaultPermissionsForRole(data.user?.role || "");
+        landingPath = resolveDefaultLandingHref(effectiveMenus) || "/dashboard";
       }
 
       return {
         success: true,
         user: data.user,
         rememberMe: Boolean(data.rememberMe ?? rememberMe),
+        landingPath,
       };
     } catch (err: any) {
       return { success: false, error: err.message || "Terjadi kesalahan koneksi server." };
@@ -345,11 +371,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
       setCurrentUserState(data.user);
       setIsAuthenticated(true);
-      if (data.user?.role !== "request_barang") {
-        await Promise.all([fetchUsers(), refreshAccessLevels()]);
+      let landingPath: string | null = "/queue";
+      if (data.user?.role === "request_barang") {
+        landingPath = "/request-barang";
+      } else {
+        const [, menus] = await Promise.all([fetchUsers(), refreshAccessLevels()]);
+        const effectiveMenus = menus ?? getDefaultPermissionsForRole(data.user?.role || "");
+        landingPath = resolveDefaultLandingHref(effectiveMenus) || "/dashboard";
       }
 
-      return { success: true, rememberMe: keepRememberMe, user: data.user };
+      return { success: true, rememberMe: keepRememberMe, user: data.user, landingPath };
     } catch (err: any) {
       return { success: false, error: err.message || "Terjadi kesalahan koneksi server." };
     }

@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.41",
+      "date": "2026-11-18T21:44:21+07:00",
+      "title": "Menu Dashboard Dapat Diceklis dan Unceklis di Level Akses serta Landing Route Dinamis",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Menghapus kunci permanen alwaysLocked pada menu Dashboard agar bisa dicentang atau di-uncheck di Level Akses dan menyembunyikan link Dashboard di Sidebar saat dinonaktifkan"
+        },
+        {
+          "type": "fix",
+          "text": "Menambahkan resolveDefaultLandingHref di /login, /, /settings/access-levels, dan AppShell agar akun yang tidak memiliki izin Dashboard atau List Antrean otomatis diarahkan ke menu pertama yang diizinkan"
+        }
+      ]
+    },
+    {
       "version": "1.2.40",
       "date": "2026-11-18T17:03:59+07:00",
       "title": "ACC dan Proses Daftar Request Barang Mengikuti Hak Akses Menu Level Akses",

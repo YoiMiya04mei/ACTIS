@@ -72,12 +72,9 @@ export function middleware(request: NextRequest) {
 
   const sessionCookie = request.cookies.get("actis_session")?.value;
 
-  // Root URL redirection: direct to /login if unauthenticated, /queue if authenticated
-  if (pathname === "/") {
-    if (!sessionCookie) {
-      return NextResponse.redirect(new URL("/login", request.url));
-    }
-    return NextResponse.redirect(new URL("/queue", request.url));
+  // Root URL redirection: direct to /login if unauthenticated; authenticated "/" resolves landing page in app/page.tsx
+  if (pathname === "/" && !sessionCookie) {
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   // Redirect unauthenticated visitors attempting to access protected pages to /login

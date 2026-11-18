@@ -142,7 +142,7 @@ export default function LoginPage() {
       const targetPath =
         (result.user?.role || rememberedUser?.role) === "request_barang"
           ? "/request-barang"
-          : "/queue";
+          : result.landingPath || "/queue";
       setStatusNote("Berhasil masuk kembali melalui Ingat Saya.");
       setSuccess(true);
       setTimeout(() => {
@@ -211,7 +211,7 @@ export default function LoginPage() {
       const targetPath =
         (result.user?.role || rememberedUser?.role) === "request_barang"
           ? "/request-barang"
-          : "/queue";
+          : result.landingPath || "/queue";
       setStatusNote(
         targetPath === "/request-barang"
           ? "Login berhasil! Mengalihkan ke portal Request Barang."
@@ -267,11 +267,14 @@ export default function LoginPage() {
         }
       }
 
-      const targetPath = result.user?.role === "request_barang" ? "/request-barang" : "/queue";
+      const targetPath =
+        result.user?.role === "request_barang"
+          ? "/request-barang"
+          : result.landingPath || "/queue";
       setStatusNote(
         targetPath === "/request-barang"
           ? "Login berhasil! Mengalihkan ke portal Request Barang."
-          : "Login berhasil! Mengalihkan ke dashboard antrean."
+          : "Login berhasil! Mengalihkan ke halaman kerja Anda."
       );
       setSuccess(true);
       setTimeout(() => {

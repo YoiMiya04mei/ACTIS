@@ -129,7 +129,7 @@ export async function resetStoredAccessLevels(
     if (current.customRoles.some((r) => r.key === targetRole)) {
       const merged = {
         ...current.roles,
-        [targetRole]: ["dashboard"] as MenuAccessKey[],
+        [targetRole]: [] as MenuAccessKey[],
       };
       return persistAccessLevelsState(current.customRoles, merged, actorName);
     }
@@ -180,7 +180,7 @@ export async function createCustomRoleLevel(
   const copiedMenus =
     copySource && copySource !== "empty" && current.roles[copySource]
       ? normalizeRoleMenuPermissions(newKey, current.roles[copySource])
-      : (["dashboard"] as MenuAccessKey[]);
+      : ([] as MenuAccessKey[]);
 
   const newDef: ActisRoleDefinition = {
     key: newKey,
@@ -269,5 +269,5 @@ export function getAllowedMenusForRole(
   if (role && Array.isArray(rolesMap[role])) {
     return normalizeRoleMenuPermissions(role, rolesMap[role]);
   }
-  return ["dashboard"];
+  return [];
 }

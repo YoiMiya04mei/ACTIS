@@ -91,7 +91,7 @@ export async function PUT(request: NextRequest) {
           ip_address: clientIp,
           tipe: "SETTING_UPDATE",
           aktifitas: `Menambahkan Level Akses user baru: ${result.createdRole.label} (${result.createdRole.key})`,
-          detail: `Menu aktif awal: ${result.state.roles[result.createdRole.key]?.length || 1} menu`,
+          detail: `Menu aktif awal: ${result.state.roles[result.createdRole.key]?.length ?? 0} menu`,
           user_agent: userAgent,
         }).catch(() => {});
 

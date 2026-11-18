@@ -194,29 +194,31 @@ export function Sidebar({
           {/* Navigation Links Grouped by Section (Styled like Photo 2) */}
           <div className="p-3 space-y-4 flex-1 min-h-0 overflow-y-auto scrollbar-none">
             {/* TOP NAVIGATION: DASHBOARD UTAMA */}
-            <div className="space-y-1">
-              <Link
-                href="/dashboard"
-                onClick={onCloseMobile}
-                className={`group flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
-                  pathname === "/dashboard"
-                    ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold shadow-sm shadow-blue-500/20"
-                    : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
-                }`}
-                title="Dashboard Utama"
-              >
-                <div className="flex items-center space-x-3">
-                  <LayoutDashboard
-                    className={`w-5 h-5 shrink-0 ${
-                      pathname === "/dashboard"
-                        ? "text-white"
-                        : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
-                    }`}
-                  />
-                  <span>Dashboard</span>
-                </div>
-              </Link>
-            </div>
+            {hasMenuAccess("dashboard") && (
+              <div className="space-y-1">
+                <Link
+                  href="/dashboard"
+                  onClick={onCloseMobile}
+                  className={`group flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                    pathname === "/dashboard"
+                      ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold shadow-sm shadow-blue-500/20"
+                      : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                  title="Dashboard Utama"
+                >
+                  <div className="flex items-center space-x-3">
+                    <LayoutDashboard
+                      className={`w-5 h-5 shrink-0 ${
+                        pathname === "/dashboard"
+                          ? "text-white"
+                          : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                      }`}
+                    />
+                    <span>Dashboard</span>
+                  </div>
+                </Link>
+              </div>
+            )}
 
             {/* SECTION 1: LAYANAN & INVENTARIS */}
             {showLayananSection && (

@@ -7,7 +7,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { TopHeader } from "@/components/TopHeader";
 import { IdleSessionManager } from "@/components/IdleSessionManager";
 import { useCurrentUser } from "@/context/UserContext";
-import { getRequiredMenuForPathname } from "@/lib/accessLevels";
+import { getRequiredMenuForPathname, resolveDefaultLandingHref } from "@/lib/accessLevels";
 import { Lock, ArrowLeft } from "lucide-react";
 
 interface AppShellProps {
@@ -21,6 +21,7 @@ export function AppShell({ children }: AppShellProps) {
     currentUser,
     isAuthenticated,
     isLoading,
+    allowedMenus,
     accessLevelsLoaded,
     hasMenuAccess,
   } = useCurrentUser();
@@ -28,6 +29,7 @@ export function AppShell({ children }: AppShellProps) {
   const [appVersion, setAppVersion] = useState("1.1.0");
   const isRequestBarangOnlyUser = isAuthenticated && currentUser?.role === "request_barang";
   const requiredMenuKey = getRequiredMenuForPathname(pathname);
+  const fallbackHref = resolveDefaultLandingHref(allowedMenus);
   const isRouteForbiddenByLevel =
     isAuthenticated &&
     accessLevelsLoaded &&
@@ -123,13 +125,19 @@ export function AppShell({ children }: AppShellProps) {
                 Akun Anda ({currentUser?.nama || "-"}) saat ini tidak memiliki izin akses untuk membuka halaman ini sesuai konfigurasi <strong>Level Akses</strong> oleh Administrator.
               </p>
               <div className="pt-2 flex justify-center">
-                <Link
-                  href="/dashboard"
-                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs inline-flex items-center"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
-                  Kembali ke Dashboard
-                </Link>
+                {fallbackHref ? (
+                  <Link
+                    href={fallbackHref}
+                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition shadow-xs inline-flex items-center"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
+                    {fallbackHref === "/dashboard" ? "Kembali ke Dashboard" : "Buka Menu Tersedia"}
+                  </Link>
+                ) : (
+                  <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+                    Belum ada menu yang diaktifkan untuk level akun ini. Hubungi Administrator.
+                  </span>
+                )}
               </div>
             </div>
           ) : (

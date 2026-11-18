@@ -30,6 +30,7 @@ import {
   isMenuLockedForRole,
   normalizeAllRolesPermissions,
   normalizeRoleMenuPermissions,
+  resolveDefaultLandingHref,
   type ActisRoleDefinition,
   type ActisRoleKey,
   type MenuAccessKey,
@@ -38,7 +39,7 @@ import {
 type RolesMap = Record<string, MenuAccessKey[]>;
 
 export default function AccessLevelsPage() {
-  const { currentUser, users, refreshAccessLevels } = useCurrentUser();
+  const { currentUser, users, allowedMenus, refreshAccessLevels } = useCurrentUser();
   const { confirm: confirmDialog } = useDialog();
 
   const isAdmin = currentUser?.role === "admin";
@@ -265,7 +266,7 @@ export default function AccessLevelsPage() {
     const confirmed = await confirmDialog(
       selectedIsDefault
         ? `Kembalikan daftar menu aktif untuk level user "${selectedRoleMeta.label}" ke pengaturan bawaan standar ACTIS?`
-        : `Kosongkan centang menu kustom "${selectedRoleMeta.label}" kembali ke bawaan awal (hanya Dashboard)?`
+        : `Kosongkan semua centang menu pada level kustom "${selectedRoleMeta.label}"?`
     );
     if (!confirmed) return;
 
@@ -396,6 +397,8 @@ export default function AccessLevelsPage() {
     }
   };
 
+  const fallbackHref = resolveDefaultLandingHref(allowedMenus);
+
   if (!isAdmin) {
     return (
       <div className="max-w-lg mx-auto my-12 p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm text-center space-y-4">
@@ -408,15 +411,17 @@ export default function AccessLevelsPage() {
         <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
           Halaman konfigurasi <strong>Level Akses</strong> hanya dapat dikelola oleh Administrator.
         </p>
-        <div className="pt-2">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition"
-          >
-            <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
-            Kembali ke Dashboard
-          </Link>
-        </div>
+        {fallbackHref && (
+          <div className="pt-2">
+            <Link
+              href={fallbackHref}
+              className="inline-flex items-center px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 mr-1.5" />
+              {fallbackHref === "/dashboard" ? "Kembali ke Dashboard" : "Buka Menu Tersedia"}
+            </Link>
+          </div>
+        )}
       </div>
     );
   }
@@ -771,7 +776,7 @@ export default function AccessLevelsPage() {
                 onChange={(e) => setCopyFromRole(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 text-xs sm:text-sm text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
               >
-                <option value="empty">Kosong (hanya Dashboard)</option>
+                <option value="empty">Kosong (tanpa menu aktif)</option>
                 {rolesList.map((r) => (
                   <option key={r.key} value={r.key}>
                     {r.label} ({(draftRoles[r.key] || []).length} menu)

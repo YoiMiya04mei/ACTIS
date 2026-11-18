@@ -121,7 +121,7 @@ export const ACTIS_ACCESS_CATEGORIES: readonly ActisMenuCategoryDefinition[] = [
     key: "utama",
     label: "Utama",
     items: [
-      { key: "dashboard", label: "Dashboard", href: "/dashboard", alwaysLocked: true },
+      { key: "dashboard", label: "Dashboard", href: "/dashboard" },
       { key: "orders", label: "Order & Progress", href: "/orders/new" },
       { key: "tools_hub", label: "Portal Tools Hub", href: "/tools" },
     ],
@@ -368,7 +368,7 @@ export function normalizeRoleMenuPermissions(
 ): MenuAccessKey[] {
   const defaultList = isDefaultRoleKey(role)
     ? DEFAULT_ROLE_MENU_PERMISSIONS[role]
-    : (["dashboard"] as MenuAccessKey[]);
+    : ([] as MenuAccessKey[]);
 
   const baseList = Array.isArray(rawList)
     ? rawList.filter((k): k is MenuAccessKey => typeof k === "string" && isValidMenuAccessKey(k))
@@ -411,12 +411,12 @@ export function normalizeCustomRolesList(
       label: rawLabel.slice(0, 60),
       description:
         typeof (item as { description?: unknown }).description === "string" &&
-        (item as { description: string }).description.trim()
+          (item as { description: string }).description.trim()
           ? (item as { description: string }).description.trim().slice(0, 160)
           : `Level akses kustom "${rawLabel.slice(0, 60)}".`,
       badgeClass:
         typeof (item as { badgeClass?: unknown }).badgeClass === "string" &&
-        (item as { badgeClass: string }).badgeClass.trim()
+          (item as { badgeClass: string }).badgeClass.trim()
           ? (item as { badgeClass: string }).badgeClass.trim()
           : DEFAULT_ROLE_BADGE_CUSTOM,
       isDefault: false,
@@ -460,7 +460,7 @@ export function normalizeAllRolesPermissions(
   };
 
   for (const cr of customRoles) {
-    out[cr.key] = normalizeRoleMenuPermissions(cr.key, input[cr.key] ?? ["dashboard"]);
+    out[cr.key] = normalizeRoleMenuPermissions(cr.key, input[cr.key] ?? []);
   }
 
   return out;
@@ -470,7 +470,36 @@ export function getDefaultPermissionsForRole(role: string): MenuAccessKey[] {
   if (isDefaultRoleKey(role)) {
     return [...DEFAULT_ROLE_MENU_PERMISSIONS[role]];
   }
-  return ["dashboard"];
+  return [];
+}
+
+/**
+ * Returns the href of the first permitted menu item for a role's allowed menus,
+ * or null if no menus are permitted.
+ */
+export function getFirstAccessibleHref(
+  allowedMenus: readonly MenuAccessKey[]
+): string | null {
+  const allowedSet = new Set(allowedMenus);
+  for (const item of ALL_ACTIS_MENU_ITEMS) {
+    if (allowedSet.has(item.key)) {
+      return item.href;
+    }
+  }
+  return null;
+}
+
+/**
+ * Resolves the default landing route based on permitted menus.
+ * Preserves /queue when allowed, otherwise /dashboard, otherwise the first allowed menu href.
+ */
+export function resolveDefaultLandingHref(
+  allowedMenus: readonly MenuAccessKey[]
+): string | null {
+  const allowedSet = new Set(allowedMenus);
+  if (allowedSet.has("queue")) return "/queue";
+  if (allowedSet.has("dashboard")) return "/dashboard";
+  return getFirstAccessibleHref(allowedMenus);
 }
 
 export function findRoleDefinition(
