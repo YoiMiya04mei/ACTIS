@@ -811,6 +811,7 @@ model InventorySetting {
 model InventoryRequest {
   id                 String                @id @default(uuid())
   request_number     String                @unique // e.g. REQ-20261116-0001
+  account_id         String?
   pic_name           String
   pic_phone          String?
   request_date       DateTime              @default(now())
@@ -833,6 +834,7 @@ model InventoryRequest {
 
   items InventoryRequestItem[]
 
+  @@index([account_id])
   @@index([status, created_at])
   @@index([request_date])
   @@index([pickup_location])

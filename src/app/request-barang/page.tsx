@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
-import Link from "next/link";
 import { SearchableItemSelect } from "@/components/inventory/SearchableItemSelect";
-import { InUseMonitorPanel } from "@/components/inventory/InUseMonitorPanel";
+import { FinishInUseDialog } from "@/components/inventory/FinishInUseDialog";
+import { PageSizeSelector, PaginationNavigator } from "@/components/Pagination";
 import {
   AlertCircle,
   AlertTriangle,
-  ArrowLeft,
   ArrowRight,
   Boxes,
   CheckCircle2,
@@ -18,8 +17,13 @@ import {
   Lock,
   LogIn,
   LogOut,
+  MapPin,
+  Package,
+  Phone,
   PlusCircle,
   RefreshCw,
+  RotateCcw,
+  Search,
   Send,
   ShieldAlert,
   ShieldCheck,
@@ -27,6 +31,7 @@ import {
   Trash2,
   User,
   UserX,
+  X,
 } from "lucide-react";
 import {
   PICKUP_LOCATION_OPTIONS,
@@ -164,17 +169,6 @@ export default function PublicRequestBarangPage() {
   const [catalog, setCatalog] = useState<PublicCatalogItem[]>([]);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"request" | "in-use">("request");
-  const [inUseActiveCount, setInUseActiveCount] = useState<number | null>(null);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const tabParam = new URLSearchParams(window.location.search).get("tab");
-      if (tabParam === "in-use") {
-        setActiveTab("in-use");
-      }
-    }
-  }, []);
 
   // Form fields matching INFORMASI REQUEST specification
   const [picName, setPicName] = useState("");
@@ -193,6 +187,26 @@ export default function PublicRequestBarangPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<SubmittedReceipt | null>(null);
+
+  // Portal 2-tab menu ("request" = Form Request, "in-use" = Barang Sedang Digunakan)
+  const [activeTab, setActiveTab] = useState<"request" | "in-use">("request");
+  const [inUseTransactions, setInUseTransactions] = useState<any[]>([]);
+  const [inUseLoading, setInUseLoading] = useState(false);
+  const [inUseRefreshing, setInUseRefreshing] = useState(false);
+  const [inUseSearch, setInUseSearch] = useState("");
+  const [inUseStatusFilter, setInUseStatusFilter] = useState("");
+  const [inUsePage, setInUsePage] = useState(1);
+  const [inUsePageSize, setInUsePageSize] = useState(10);
+  const [inUseTotalPages, setInUseTotalPages] = useState(1);
+  const [inUseTotalCount, setInUseTotalCount] = useState(0);
+  const [activeNeedFinishCount, setActiveNeedFinishCount] = useState(0);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [rejectedRequests, setRejectedRequests] = useState<any[]>([]);
+  const [inUseNotification, setInUseNotification] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
+  const [finishTx, setFinishTx] = useState<any | null>(null);
 
   const loadCatalog = useCallback(async () => {
     setLoadingCatalog(true);
@@ -220,16 +234,53 @@ export default function PublicRequestBarangPage() {
     }
   }, []);
 
-  const loadInUseBadgeCount = useCallback(async () => {
-    try {
-      const res = await fetch("/api/public/inventory-in-use?limit=1", { cache: "no-store" });
-      if (!res.ok) return;
-      const json = await res.json();
-      if (json?.success && typeof json?.pagination?.total === "number") {
-        setInUseActiveCount(json.pagination.total);
+  const loadInUse = useCallback(
+    async (isManual = false) => {
+      if (isManual) setInUseRefreshing(true);
+      setInUseLoading(true);
+      try {
+        const params = new URLSearchParams({
+          search: inUseSearch,
+          status: inUseStatusFilter,
+          page: String(inUsePage),
+          limit: String(inUsePageSize),
+        });
+        const res = await fetch(`/api/request-barang/in-use?${params.toString()}`, {
+          cache: "no-store",
+        });
+        if (res.status === 401 || res.status === 403) {
+          setInUseTransactions([]);
+          setActiveNeedFinishCount(0);
+          setPendingRequests([]);
+          setRejectedRequests([]);
+          return;
+        }
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || "Gagal memuat data barang sedang digunakan.");
+        }
+        const nextTotalPages = json.pagination?.totalPages || 1;
+        setInUseTransactions(Array.isArray(json.data) ? json.data : []);
+        setInUseTotalPages(nextTotalPages);
+        setInUseTotalCount(Number(json.pagination?.total || 0));
+        setActiveNeedFinishCount(Number(json.activeNeedFinishCount || 0));
+        setPendingRequests(Array.isArray(json.pendingRequests) ? json.pendingRequests : []);
+        setRejectedRequests(Array.isArray(json.rejectedRequests) ? json.rejectedRequests : []);
+        if (nextTotalPages > 0 && inUsePage > nextTotalPages) {
+          setInUsePage(nextTotalPages);
+        }
+      } catch (err: any) {
+        setInUseNotification({
+          type: "error",
+          message: err?.message || "Gagal memuat data barang sedang digunakan.",
+        });
+      } finally {
+        setInUseLoading(false);
+        setInUseRefreshing(false);
       }
-    } catch {}
-  }, []);
+    },
+    [inUseSearch, inUseStatusFilter, inUsePage, inUsePageSize]
+  );
 
   const checkPortalAuth = useCallback(async () => {
     setPortalAuth((prev) => ({ ...prev, loading: true }));
@@ -263,7 +314,6 @@ export default function PublicRequestBarangPage() {
           setPicName((prev) => prev || nextState.user?.nama || "");
         }
         loadCatalog();
-        loadInUseBadgeCount();
       } else {
         setLoadingCatalog(false);
       }
@@ -279,7 +329,13 @@ export default function PublicRequestBarangPage() {
       });
       setLoadingCatalog(false);
     }
-  }, [loadCatalog, loadInUseBadgeCount]);
+  }, [loadCatalog]);
+
+  useEffect(() => {
+    if (portalAuth.authenticated && portalAuth.hasAccess) {
+      loadInUse();
+    }
+  }, [portalAuth.authenticated, portalAuth.hasAccess, loadInUse]);
 
   useEffect(() => {
     checkPortalAuth();
@@ -303,7 +359,12 @@ export default function PublicRequestBarangPage() {
       } catch {}
 
       setCatalog([]);
-      setInUseActiveCount(null);
+      setInUseTransactions([]);
+      setActiveNeedFinishCount(0);
+      setPendingRequests([]);
+      setRejectedRequests([]);
+      setFinishTx(null);
+      setActiveTab("request");
       setReceipt(null);
       setPicName("");
       setLoginPassword("");
@@ -611,6 +672,9 @@ export default function PublicRequestBarangPage() {
           formatWorkTypeLabel(json.data.work_types, json.data.work_type_other),
       });
       setFieldErrors({});
+      if (portalAuth.authenticated && portalAuth.hasAccess) {
+        loadInUse();
+      }
     } catch (err: any) {
       setSubmitError(err?.message || "Terjadi kesalahan saat mengirim request.");
       errorBannerRef.current?.focus();
@@ -972,35 +1036,43 @@ export default function PublicRequestBarangPage() {
     );
   }
 
+  const showPortalMenuTabs = portalAuth.authenticated && portalAuth.hasAccess;
+
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 py-8 px-4 sm:px-6 lg:px-8">
       <div
-        className={`${activeTab === "in-use" ? "max-w-7xl" : "max-w-4xl"} mx-auto space-y-6 transition-all`}
+        className={`${
+          activeTab === "in-use" && showPortalMenuTabs ? "max-w-6xl" : "max-w-4xl"
+        } mx-auto space-y-6 transition-all`}
       >
         {/* Top Title Header */}
         <header className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 text-white text-xs font-bold tracking-wider uppercase">
-            {activeTab === "in-use" ? (
+            {activeTab === "in-use" && showPortalMenuTabs ? (
               <Clock className="w-3.5 h-3.5 text-amber-300" />
             ) : (
               <ClipboardList className="w-3.5 h-3.5 text-sky-300" />
             )}
             {portalAuth.loginRequired
               ? "Portal Terautentikasi • Request Barang"
-              : "Portal Request Barang (Tanpa Login)"}
+              : "Formulir Request Barang (Tanpa Login)"}
           </div>
           <h1
             id={formHeadingId}
             className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-slate-100 uppercase"
           >
-            {activeTab === "in-use"
+            {activeTab === "in-use" && showPortalMenuTabs
               ? "Barang Sedang Digunakan"
               : "Form Request Barang Keluar"}
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 max-w-2xl mx-auto">
-            {activeTab === "in-use" ? (
+            {activeTab === "in-use" && showPortalMenuTabs ? (
               <>
-                Pantau keberadaan perangkat aktif (router, switch, OTB, laptop) di luar gudang dan input penyelesaian pemakaian barang oleh client.
+                Daftar barang dari pengajuan yang telah{" "}
+                <strong className="text-slate-800 dark:text-slate-200">
+                  di-ACC Barang Keluar
+                </strong>{" "}
+                oleh admin. Klik <strong className="text-emerald-700 dark:text-emerald-400">Selesai</strong> setelah kegiatan lapangan selesai untuk mendata barang terpakai dan sisa pengembalian.
               </>
             ) : (
               <>
@@ -1012,105 +1084,516 @@ export default function PublicRequestBarangPage() {
           </p>
         </header>
 
-        {/* Active Session Bar */}
+        {/* Active Session Bar & Separated Portal Tabs */}
         {portalAuth.authenticated && portalAuth.user && (
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-4 py-3 shadow-xs flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-blue-600 text-white font-bold text-sm flex items-center justify-center shrink-0">
-                {portalAuth.user.nama.charAt(0).toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                    {portalAuth.user.nama}
-                  </span>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
-                    <ShieldCheck className="w-3 h-3" />
-                    Akses Terverifikasi
-                  </span>
+          <div className="space-y-3">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl px-4 py-3 shadow-xs flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-blue-600 text-white font-bold text-sm flex items-center justify-center shrink-0">
+                  {portalAuth.user.nama.charAt(0).toUpperCase()}
                 </div>
-                <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">
-                  @{portalAuth.user.username}
-                </p>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      {portalAuth.user.nama}
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
+                      <ShieldCheck className="w-3 h-3" />
+                      Akses Terverifikasi
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">
+                    @{portalAuth.user.username}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePortalLogout({ reason: "manual" })}
+                  disabled={loggingOut}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs font-bold text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-950/70 transition cursor-pointer disabled:opacity-50"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>{loggingOut ? "Keluar..." : "Keluar"}</span>
+                </button>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {portalAuth.user.role !== "request_barang" && (
-                <Link
-                  href="/queue"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Dashboard ACTIS</span>
-                </Link>
-              )}
+            {/* 2-Menu Portal Navigation Bar */}
+            <nav
+              aria-label="Menu Portal Request Barang"
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-1.5 shadow-xs flex flex-wrap gap-1.5"
+            >
               <button
                 type="button"
-                onClick={() => handlePortalLogout({ reason: "manual" })}
-                disabled={loggingOut}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs font-bold text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-950/70 transition cursor-pointer disabled:opacity-50"
+                onClick={() => setActiveTab("request")}
+                className={`flex-1 min-w-[180px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+                  activeTab === "request"
+                    ? "bg-blue-600 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                }`}
               >
-                <LogOut className="w-3.5 h-3.5" />
-                <span>{loggingOut ? "Keluar..." : "Keluar"}</span>
+                <ClipboardList className="w-4 h-4 shrink-0" />
+                <span>Form Request Barang</span>
               </button>
-            </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("in-use");
+                  loadInUse(true);
+                }}
+                className={`flex-1 min-w-[200px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
+                  activeTab === "in-use"
+                    ? "bg-amber-600 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                }`}
+              >
+                <Clock className="w-4 h-4 shrink-0" />
+                <span>Barang Sedang Digunakan</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold ${
+                    activeTab === "in-use"
+                      ? "bg-white/20 text-white"
+                      : activeNeedFinishCount > 0
+                        ? "bg-amber-100 text-amber-800 border border-amber-300"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                  }`}
+                >
+                  {activeNeedFinishCount}
+                </span>
+              </button>
+            </nav>
           </div>
         )}
 
-        {/* Portal Menu Switcher: Form Request Barang & Barang Sedang Digunakan */}
-        <nav
-          aria-label="Menu Portal Request Barang"
-          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-1.5 shadow-xs flex flex-wrap items-center gap-1.5"
-        >
-          <button
-            type="button"
-            onClick={() => setActiveTab("request")}
-            className={`flex-1 min-w-[180px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
-              activeTab === "request"
-                ? "bg-blue-600 text-white shadow-xs"
-                : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-            }`}
-          >
-            <ClipboardList className="w-4 h-4 shrink-0" />
-            <span>Form Request Barang Keluar</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("in-use")}
-            className={`flex-1 min-w-[180px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
-              activeTab === "in-use"
-                ? "bg-amber-600 text-white shadow-xs"
-                : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-            }`}
-          >
-            <Clock className="w-4 h-4 shrink-0" />
-            <span>Barang Sedang Digunakan</span>
-            {inUseActiveCount !== null && (
-              <span
-                className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
-                  activeTab === "in-use"
-                    ? "bg-white/20 text-white"
-                    : "bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300"
+        {activeTab === "in-use" && showPortalMenuTabs ? (
+          <section aria-label="Daftar Barang Sedang Digunakan" className="space-y-5">
+            {inUseNotification && (
+              <div
+                role="status"
+                className={`p-4 rounded-xl border text-xs sm:text-sm flex items-center justify-between gap-3 ${
+                  inUseNotification.type === "success"
+                    ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
+                    : "bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200"
                 }`}
               >
-                {inUseActiveCount}
-              </span>
+                <div className="flex items-center gap-2">
+                  {inUseNotification.type === "success" ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                  )}
+                  <span>{inUseNotification.message}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setInUseNotification(null)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+                  aria-label="Tutup notifikasi"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             )}
-          </button>
-        </nav>
 
-        {activeTab === "in-use" ? (
-          <InUseMonitorPanel
-            apiBasePath="/api/public/inventory-in-use"
-            finishEndpoint="/api/public/inventory-in-use/finish"
-            canEditPicLocation={false}
-            showInternalLinks={false}
-            showHeader={false}
-            onAuthExpired={() => checkPortalAuth()}
-            onTotalActiveCountChange={setInUseActiveCount}
-          />
+            {/* Pending Requests Awaiting Admin Approval */}
+            {pendingRequests.length > 0 && (
+              <div className="bg-blue-50/80 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/70 rounded-2xl p-4 space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="text-xs font-extrabold uppercase tracking-wider text-blue-800 dark:text-blue-200 flex items-center gap-1.5">
+                    <Package className="w-4 h-4 text-blue-600" />
+                    Pengajuan Menunggu ACC Admin ({pendingRequests.length})
+                  </span>
+                  <span className="text-[11px] text-blue-700 dark:text-blue-300">
+                    Setelah di-ACC di menu Barang Keluar, item otomatis muncul pada tabel di bawah.
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {pendingRequests.map((req) => (
+                    <div
+                      key={req.id}
+                      className="rounded-xl bg-white dark:bg-slate-900 border border-blue-200/80 dark:border-blue-800/60 px-3 py-2 text-xs flex items-center justify-between gap-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="font-mono font-bold text-blue-700 dark:text-blue-300 truncate">
+                          {req.request_number}
+                        </p>
+                        <p className="text-[11px] text-slate-600 dark:text-slate-400 truncate">
+                          {req.pickup_location} • {req.work_type_label}
+                        </p>
+                      </div>
+                      <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200 text-[10px] font-bold shrink-0">
+                        Menunggu ACC ({req.items?.length || 0} item)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Recently Rejected Requests */}
+            {rejectedRequests.length > 0 && (
+              <div className="bg-rose-50/70 dark:bg-rose-950/25 border border-rose-200 dark:border-rose-800/60 rounded-2xl p-4 space-y-2">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-rose-800 dark:text-rose-200 flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 text-rose-600" />
+                  Pengajuan Ditolak Terbaru ({rejectedRequests.length})
+                </span>
+                <div className="space-y-1.5">
+                  {rejectedRequests.map((rej) => (
+                    <div
+                      key={rej.id}
+                      className="rounded-xl bg-white dark:bg-slate-900 border border-rose-200/80 dark:border-rose-800/50 px-3 py-2 text-xs flex flex-wrap items-center justify-between gap-2"
+                    >
+                      <span className="font-mono font-bold text-rose-700 dark:text-rose-300">
+                        {rej.request_number} ({rej.pickup_location})
+                      </span>
+                      <span className="text-[11px] text-slate-600 dark:text-slate-300">
+                        Alasan: {rej.rejected_reason || "Ditolak oleh petugas gudang"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Filter & Search Toolbar (Parity with ACTIS Barang Sedang Digunakan) */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-sm flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <PageSizeSelector
+                  value={inUsePageSize}
+                  onChange={(newSize) => {
+                    setInUsePageSize(newSize);
+                    setInUsePage(1);
+                  }}
+                  options={[10, 30, 50, 100]}
+                />
+
+                <select
+                  value={inUseStatusFilter}
+                  onChange={(e) => {
+                    setInUseStatusFilter(e.target.value);
+                    setInUsePage(1);
+                  }}
+                  aria-label="Filter status barang sedang digunakan"
+                  className="py-2 px-3 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                >
+                  <option value="">Semua Status Aktif</option>
+                  <option value="SEDANG_DIGUNAKAN">Sedang Digunakan</option>
+                  <option value="SEBAGIAN_KEMBALI">Sebagian Kembali</option>
+                  <option value="MENUNGGU_PENGEMBALIAN">Menunggu Pengembalian</option>
+                  <option value="SUDAH_KEMBALI">Sudah Kembali (Riwayat)</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2 w-full xl:w-auto">
+                <div className="relative flex-1 xl:w-72">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-2.5" />
+                  <input
+                    type="text"
+                    placeholder="Cari No. Transaksi, Request, Barang..."
+                    value={inUseSearch}
+                    onChange={(e) => {
+                      setInUseSearch(e.target.value);
+                      setInUsePage(1);
+                    }}
+                    className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => loadInUse(true)}
+                  disabled={inUseRefreshing}
+                  className="p-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-200 hover:text-amber-600 shadow-xs transition disabled:opacity-50 cursor-pointer shrink-0"
+                  title="Muat ulang daftar barang sedang digunakan"
+                >
+                  <RefreshCw
+                    className={`w-4 h-4 ${inUseRefreshing ? "animate-spin text-amber-600" : ""}`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Main In-Use Transactions Table (Parity with ACTIS /inventory/in-use) */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-800/60 font-bold text-[10px] text-slate-600 dark:text-slate-300 uppercase border-b border-slate-200/80 dark:border-slate-800">
+                    <tr>
+                      <th className="py-3 px-4">No. Transaksi &amp; Tgl</th>
+                      <th className="py-3 px-4">Nama PIC &amp; Kontak</th>
+                      <th className="py-3 px-4">Lokasi Penggunaan</th>
+                      <th className="py-3 px-4">Detail Perangkat</th>
+                      <th className="py-3 px-4">Keterangan Barang</th>
+                      <th className="py-3 px-4 text-center">Status</th>
+                      <th className="py-3 px-4 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {inUseLoading ? (
+                      <tr>
+                        <td colSpan={7} className="py-12 text-center text-slate-400">
+                          <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-amber-600" />
+                          Memuat daftar barang yang sedang digunakan...
+                        </td>
+                      </tr>
+                    ) : inUseTransactions.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-12 text-center text-slate-400 px-4">
+                          Belum ada barang yang sedang digunakan untuk akun Anda (atau pengajuan belum di-ACC admin gudang).
+                        </td>
+                      </tr>
+                    ) : (
+                      inUseTransactions.map((tx) => (
+                        <tr
+                          key={tx.id}
+                          className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition"
+                        >
+                          <td className="py-3 px-4 align-top">
+                            <span className="font-mono font-bold text-amber-600 dark:text-amber-400 block">
+                              {tx.transaction_number}
+                            </span>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                              {new Date(tx.transaction_date).toLocaleDateString("id-ID")}
+                            </p>
+                            {Array.isArray(tx.approved_requests) &&
+                              tx.approved_requests.length > 0 && (
+                                <div className="mt-1 flex flex-wrap gap-1">
+                                  {tx.approved_requests.map((ar: any) => (
+                                    <span
+                                      key={ar.id}
+                                      className="inline-block px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-mono text-[10px] font-semibold"
+                                    >
+                                      {ar.request_number}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                          </td>
+
+                          <td className="py-3 px-4 align-top">
+                            <p className="font-bold text-slate-900 dark:text-slate-100 flex items-center">
+                              <User className="w-3.5 h-3.5 mr-1 text-slate-400 shrink-0" />
+                              {tx.pic_name}
+                            </p>
+                            {tx.pic_phone && (
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center mt-0.5">
+                                <Phone className="w-3 h-3 mr-1 text-slate-400 shrink-0" />
+                                {tx.pic_phone}
+                              </p>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4 align-top">
+                            <p className="text-slate-800 dark:text-slate-200 flex items-center">
+                              <MapPin className="w-3.5 h-3.5 mr-1 text-slate-400 shrink-0" />
+                              {tx.location || "Lokasi tidak dispesifikasikan"}
+                            </p>
+                            {tx.purpose && (
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                {tx.purpose}
+                              </p>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-4 align-top">
+                            <div className="space-y-1.5">
+                              {tx.details?.map((d: any) => {
+                                let parsedSns: string[] = [];
+                                if (d.unit_serial_numbers) {
+                                  try {
+                                    parsedSns = JSON.parse(d.unit_serial_numbers);
+                                  } catch {}
+                                }
+
+                                return (
+                                  <div key={d.id} className="text-[11px]">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                        {d.item?.name}
+                                      </span>
+                                      <span className="font-bold font-mono text-slate-600 dark:text-slate-300 shrink-0">
+                                        Keluar: {Number(d.quantity)}
+                                        {Number(d.qty_used || 0) > 0 && (
+                                          <span className="text-purple-600 dark:text-purple-400">
+                                            {" "}
+                                            | Terpakai: {Number(d.qty_used)}
+                                          </span>
+                                        )}
+                                        {" | Sisa: "}
+                                        <span className="text-amber-600 dark:text-amber-400 font-black">
+                                          {Number(d.qty_remaining)} {d.unit}
+                                        </span>
+                                      </span>
+                                    </div>
+                                    {parsedSns.length > 0 && (
+                                      <div className="mt-1 flex flex-wrap gap-1">
+                                        {parsedSns.map((sn, sIdx) => (
+                                          <span
+                                            key={sIdx}
+                                            className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono text-[10px] border border-slate-200 dark:border-slate-700"
+                                          >
+                                            SN: {sn}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4 align-top">
+                            <div className="space-y-1.5">
+                              {tx.details?.map((d: any) => {
+                                const note = d.notes || tx.notes;
+                                return (
+                                  <div key={d.id} className="text-[11px]">
+                                    {note ? (
+                                      <div>
+                                        <span className="text-slate-700 dark:text-slate-300 font-medium">
+                                          {note}
+                                        </span>
+                                        {d.notes && tx.notes && d.notes !== tx.notes && (
+                                          <p className="text-[10px] text-slate-400 mt-0.5">
+                                            {tx.notes}
+                                          </p>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="text-slate-400 italic text-[11px]">-</span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                              {(!tx.details || tx.details.length === 0) && (
+                                <span className="text-slate-400 italic text-[11px]">
+                                  {tx.notes || "-"}
+                                </span>
+                              )}
+                              {tx.client_usages && tx.client_usages.length > 0 && (
+                                <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
+                                  <span className="block text-[10px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">
+                                    Dipakai Client ({tx.client_usages.length}):
+                                  </span>
+                                  {tx.client_usages.map((cu: any) => (
+                                    <div
+                                      key={cu.id}
+                                      className="p-2 rounded-lg bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200/70 dark:border-purple-800/50 text-[10px] space-y-0.5"
+                                    >
+                                      <p className="font-bold text-slate-800 dark:text-slate-200">
+                                        {cu.client_name}
+                                        {cu.client_phone ? ` (${cu.client_phone})` : ""}
+                                      </p>
+                                      <p className="text-slate-500 dark:text-slate-400">
+                                        {cu.client_address}
+                                      </p>
+                                      <div className="flex flex-wrap gap-1 pt-0.5">
+                                        {(cu.items || []).map((ci: any) => {
+                                          let ciSns: string[] = [];
+                                          if (ci.serial_numbers) {
+                                            try {
+                                              ciSns = JSON.parse(ci.serial_numbers);
+                                            } catch {}
+                                          }
+                                          return (
+                                            <span
+                                              key={ci.id}
+                                              className="px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300 font-semibold"
+                                            >
+                                              {ci.item?.name}: {Number(ci.quantity)} {ci.unit}
+                                              {ciSns.length > 0 ? ` [${ciSns.join(", ")}]` : ""}
+                                            </span>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4 text-center align-top">
+                            <span
+                              className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                                tx.status === "SUDAH_KEMBALI"
+                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                  : tx.status === "MENUNGGU_PENGEMBALIAN"
+                                    ? "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300"
+                                    : tx.status === "SEBAGIAN_KEMBALI"
+                                      ? "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
+                                      : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+                              }`}
+                            >
+                              {tx.status}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-4 text-center align-top">
+                            <div className="flex items-center justify-center">
+                              {(tx.status === "SEDANG_DIGUNAKAN" ||
+                                tx.status === "SEBAGIAN_KEMBALI") && (
+                                <button
+                                  type="button"
+                                  onClick={() => setFinishTx(tx)}
+                                  className="inline-flex items-center px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 font-bold text-[11px] shadow-xs transition cursor-pointer"
+                                  title="Selesaikan kegiatan & data pemakaian client serta sisa pengembalian"
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                                  Selesai
+                                </button>
+                              )}
+                              {tx.status === "MENUNGGU_PENGEMBALIAN" && (
+                                <span
+                                  className="inline-flex items-center px-2.5 py-1 rounded-lg bg-orange-50 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300 font-bold text-[11px] border border-orange-200/80 dark:border-orange-800"
+                                  title="Menunggu admin gudang memverifikasi pengembalian sisa barang"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5 mr-1 shrink-0" />
+                                  Menunggu Gudang
+                                </span>
+                              )}
+                              {tx.status === "SUDAH_KEMBALI" && (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 font-bold text-[11px] border border-emerald-200 dark:border-emerald-800">
+                                  <CheckCircle2 className="w-3.5 h-3.5 mr-1 shrink-0" />
+                                  Selesai
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="p-3 bg-slate-50/70 dark:bg-slate-900/80 border-t border-slate-100 dark:border-slate-800">
+                <PaginationNavigator
+                  currentPage={inUsePage}
+                  totalPages={inUseTotalPages}
+                  totalItems={inUseTotalCount}
+                  pageSize={inUsePageSize}
+                  onPageChange={(p) => setInUsePage(p)}
+                  entryLabel="transaksi"
+                />
+              </div>
+            </div>
+
+            <FinishInUseDialog
+              tx={finishTx}
+              submitEndpoint="/api/request-barang/in-use/finish"
+              onClose={() => setFinishTx(null)}
+              onSuccess={(message) => {
+                setInUseNotification({ type: "success", message });
+                setFinishTx(null);
+                loadInUse();
+              }}
+            />
+          </section>
         ) : receipt ? (
           <section
             role="status"
@@ -1212,7 +1695,21 @@ export default function PublicRequestBarangPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex flex-wrap items-center justify-end gap-2.5">
+                {showPortalMenuTabs && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReceipt(null);
+                      setActiveTab("in-use");
+                      loadInUse(true);
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-3 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold text-sm transition cursor-pointer"
+                  >
+                    <Clock className="w-4 h-4" />
+                    Lihat Barang Sedang Digunakan
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={resetForNewRequest}

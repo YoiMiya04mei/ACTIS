@@ -1585,153 +1585,6 @@ export async function processFinishInUse(payload: FinishInUsePayload) {
   });
 }
 
-export interface InUseQueryParams {
-  pic?: string;
-  location?: string;
-  status?: string | null;
-  search?: string;
-  page?: number;
-  limit?: number;
-}
-
-export function parseInUseQueryParams(requestUrl: string): Required<InUseQueryParams> {
-  const { searchParams } = new URL(requestUrl);
-  const pic = searchParams.get("pic")?.trim() || "";
-  const location = searchParams.get("location")?.trim() || "";
-  const status = searchParams.get("status")?.trim() || "";
-  const search = searchParams.get("search")?.trim() || "";
-  const parsedPage = parseInt(searchParams.get("page") || "1", 10);
-  const parsedLimit = parseInt(searchParams.get("limit") || "20", 10);
-  const page = Number.isFinite(parsedPage) ? Math.max(1, parsedPage) : 1;
-  const limit = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(100, parsedLimit)) : 20;
-  return { pic, location, status, search, page, limit };
-}
-
-/**
- * Shared paginated query for deployed ("Barang Sedang Digunakan") transactions.
- * Reused by both internal dashboard (`/api/inventory/in-use`) and `/request-barang` portal.
- */
-export async function queryInventoryInUseTransactions(params: InUseQueryParams) {
-  const page = Math.max(1, params.page || 1);
-  const limit = Math.max(1, Math.min(100, params.limit || 20));
-  const skip = (page - 1) * limit;
-
-  const whereClause: Prisma.InventoryTransactionWhereInput = {
-    type: "OUT",
-  };
-
-  if (params.status) {
-    whereClause.status = params.status;
-  } else {
-    whereClause.status = {
-      in: ["SEDANG_DIGUNAKAN", "SEBAGIAN_KEMBALI", "MENUNGGU_PENGEMBALIAN"],
-    };
-  }
-
-  if (params.pic) {
-    whereClause.pic_name = { contains: params.pic, mode: "insensitive" };
-  }
-
-  if (params.location) {
-    whereClause.location = { contains: params.location, mode: "insensitive" };
-  }
-
-  if (params.search) {
-    whereClause.OR = [
-      { transaction_number: { contains: params.search, mode: "insensitive" } },
-      { pic_name: { contains: params.search, mode: "insensitive" } },
-      { location: { contains: params.search, mode: "insensitive" } },
-      { purpose: { contains: params.search, mode: "insensitive" } },
-      {
-        details: {
-          some: {
-            item: {
-              OR: [
-                { name: { contains: params.search, mode: "insensitive" } },
-                { code: { contains: params.search, mode: "insensitive" } },
-              ],
-            },
-          },
-        },
-      },
-    ];
-  }
-
-  const [total, transactions] = await Promise.all([
-    prisma.inventoryTransaction.count({ where: whereClause }),
-    prisma.inventoryTransaction.findMany({
-      where: whereClause,
-      include: {
-        details: {
-          include: {
-            item: {
-              select: {
-                id: true,
-                name: true,
-                code: true,
-                unit: true,
-                type: true,
-                brand: true,
-                model: true,
-                storage_location: true,
-              },
-            },
-          },
-        },
-        returns: {
-          select: {
-            id: true,
-            return_number: true,
-            return_date: true,
-            pic_name: true,
-            details: {
-              select: {
-                id: true,
-                transaction_detail_id: true,
-                item_id: true,
-                quantity: true,
-                condition: true,
-                serial_numbers: true,
-              },
-            },
-          },
-        },
-        client_usages: {
-          orderBy: { created_at: "asc" },
-          include: {
-            items: {
-              include: {
-                item: {
-                  select: {
-                    id: true,
-                    name: true,
-                    code: true,
-                    unit: true,
-                    type: true,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      orderBy: { transaction_date: "desc" },
-      skip,
-      take: limit,
-    }),
-  ]);
-
-  return {
-    data: transactions,
-    pagination: {
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit),
-    },
-  };
-}
-
 export interface DeleteTransactionPayload {
   transaction_id: string;
   deleted_by?: string;
@@ -2066,7 +1919,8 @@ export async function getPublicInventoryCatalog() {
 
 export async function createPublicInventoryRequest(
   rawPayload: unknown,
-  ipAddress?: string | null
+  ipAddress?: string | null,
+  portalAccount?: { id: string; nama: string; username: string } | null
 ) {
   const validated = validatePublicInventoryRequestInput(rawPayload);
   if (!validated.ok) {
@@ -2104,6 +1958,7 @@ export async function createPublicInventoryRequest(
     const created = await tx.inventoryRequest.create({
       data: {
         request_number: requestNumber,
+        account_id: portalAccount?.id || null,
         pic_name: data.pic_name,
         pic_phone: data.pic_phone,
         request_date: data.request_date,
@@ -2140,17 +1995,20 @@ export async function createPublicInventoryRequest(
         entity_type: "REQUEST",
         entity_id: created.id,
         action: "CREATE",
-        user_id: null,
-        user_name: `${data.pic_name} (Form Publik)`,
+        user_id: portalAccount?.id || null,
+        user_name: portalAccount
+          ? `${portalAccount.nama} (@${portalAccount.username})`
+          : `${data.pic_name} (Form Publik)`,
         data_after: JSON.stringify({
           request_number: created.request_number,
+          account_id: created.account_id,
           pic_name: created.pic_name,
           pickup_location: created.pickup_location,
           work_types: data.work_types,
           work_type_other: data.work_type_other,
           items_count: created.items.length,
         }),
-        reason: `Pengajuan Form Request Tanpa Login (${formatWorkTypeLabel(
+        reason: `Pengajuan Form Request ${portalAccount ? "Portal Terautentikasi" : "Tanpa Login"} (${formatWorkTypeLabel(
           data.work_types,
           data.work_type_other
         )})`,
@@ -2164,6 +2022,229 @@ export async function createPublicInventoryRequest(
       work_type_label: formatWorkTypeLabel(created.work_types, created.work_type_other),
     };
   });
+}
+
+export function buildPortalAccountOwnershipWhere(account: {
+  id: string;
+  nama: string;
+}): Prisma.InventoryRequestWhereInput {
+  return {
+    OR: [
+      { account_id: account.id },
+      {
+        account_id: null,
+        pic_name: { equals: account.nama, mode: "insensitive" },
+      },
+    ],
+  };
+}
+
+export async function assertPortalAccountOwnsOutTransaction(
+  account: { id: string; nama: string },
+  transactionId: string
+): Promise<boolean> {
+  if (!transactionId) return false;
+  const match = await prisma.inventoryTransaction.findFirst({
+    where: {
+      id: transactionId,
+      type: "OUT",
+      approved_requests: {
+        some: buildPortalAccountOwnershipWhere(account),
+      },
+    },
+    select: { id: true },
+  });
+  return Boolean(match);
+}
+
+export async function listPortalInUseTransactions(params: {
+  account: { id: string; nama: string };
+  status?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const page = Math.max(1, Number(params.page) || 1);
+  const limit = Math.max(1, Math.min(100, Number(params.limit) || 10));
+  const skip = (page - 1) * limit;
+  const search = params.search?.trim();
+  const statusFilter = params.status?.trim().toUpperCase();
+
+  const ownershipFilter = buildPortalAccountOwnershipWhere(params.account);
+  const baseWhere: Prisma.InventoryTransactionWhereInput = {
+    type: "OUT",
+    approved_requests: {
+      some: ownershipFilter,
+    },
+  };
+
+  const whereClause: Prisma.InventoryTransactionWhereInput = {
+    ...baseWhere,
+    status: statusFilter
+      ? statusFilter
+      : {
+          in: ["SEDANG_DIGUNAKAN", "SEBAGIAN_KEMBALI", "MENUNGGU_PENGEMBALIAN"],
+        },
+  };
+
+  if (search) {
+    whereClause.OR = [
+      { transaction_number: { contains: search, mode: "insensitive" } },
+      { pic_name: { contains: search, mode: "insensitive" } },
+      { location: { contains: search, mode: "insensitive" } },
+      { purpose: { contains: search, mode: "insensitive" } },
+      {
+        approved_requests: {
+          some: { request_number: { contains: search, mode: "insensitive" } },
+        },
+      },
+      {
+        details: {
+          some: {
+            item: {
+              OR: [
+                { name: { contains: search, mode: "insensitive" } },
+                { code: { contains: search, mode: "insensitive" } },
+              ],
+            },
+          },
+        },
+      },
+    ];
+  }
+
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const [total, transactions, activeNeedFinishCount, pendingRequests, rejectedRequests] =
+    await Promise.all([
+      prisma.inventoryTransaction.count({ where: whereClause }),
+      prisma.inventoryTransaction.findMany({
+        where: whereClause,
+        include: {
+          approved_requests: {
+            select: {
+              id: true,
+              request_number: true,
+              pickup_location: true,
+              work_types: true,
+              work_type_other: true,
+              approved_by_name: true,
+              approved_at: true,
+            },
+          },
+          details: {
+            include: {
+              item: {
+                select: {
+                  id: true,
+                  name: true,
+                  code: true,
+                  unit: true,
+                  type: true,
+                  brand: true,
+                  model: true,
+                  storage_location: true,
+                },
+              },
+            },
+          },
+          returns: {
+            select: {
+              id: true,
+              return_number: true,
+              return_date: true,
+              pic_name: true,
+              details: {
+                select: {
+                  id: true,
+                  transaction_detail_id: true,
+                  item_id: true,
+                  quantity: true,
+                  condition: true,
+                  serial_numbers: true,
+                },
+              },
+            },
+          },
+          client_usages: {
+            orderBy: { created_at: "asc" },
+            include: {
+              items: {
+                include: {
+                  item: {
+                    select: {
+                      id: true,
+                      name: true,
+                      code: true,
+                      unit: true,
+                      type: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { transaction_date: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.inventoryTransaction.count({
+        where: {
+          ...baseWhere,
+          status: { in: ["SEDANG_DIGUNAKAN", "SEBAGIAN_KEMBALI"] },
+        },
+      }),
+      prisma.inventoryRequest.findMany({
+        where: {
+          ...ownershipFilter,
+          status: "PENDING",
+        },
+        orderBy: { created_at: "desc" },
+        take: 20,
+        include: {
+          items: {
+            include: {
+              item: { select: { id: true, code: true, name: true, unit: true } },
+            },
+          },
+        },
+      }),
+      prisma.inventoryRequest.findMany({
+        where: {
+          ...ownershipFilter,
+          status: "REJECTED",
+          updated_at: { gte: thirtyDaysAgo },
+        },
+        orderBy: { updated_at: "desc" },
+        take: 10,
+        select: {
+          id: true,
+          request_number: true,
+          pic_name: true,
+          rejected_reason: true,
+          rejected_by_name: true,
+          rejected_at: true,
+          pickup_location: true,
+        },
+      }),
+    ]);
+
+  return {
+    transactions,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+    },
+    activeNeedFinishCount,
+    pendingRequests: pendingRequests.map((req) => ({
+      ...req,
+      work_type_label: formatWorkTypeLabel(req.work_types, req.work_type_other),
+    })),
+    rejectedRequests,
+  };
 }
 
 export async function listInventoryRequests(filters?: {

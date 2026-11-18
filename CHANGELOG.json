@@ -4,6 +4,25 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.34",
+      "date": "2026-11-18T11:23:50+07:00",
+      "title": "Menu Barang Sedang Digunakan Terisolasi Per Akun di Portal /request-barang",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Menambahkan menu Barang Sedang Digunakan pada portal /request-barang khusus menampilkan request barang keluar milik akun pemohon yang sudah di-ACC admin beserta status antrean menunggu ACC"
+        },
+        {
+          "type": "feat",
+          "text": "Menyediakan dialog Selesai Penggunaan & Detail Pemakaian Client (komponen bersama FinishInUseDialog) melalui endpoint /api/request-barang/in-use dan /api/request-barang/in-use/finish dengan validasi kepemilikan transaksi"
+        },
+        {
+          "type": "improve",
+          "text": "Menambahkan kolom account_id pada InventoryRequest agar pemetaan request dan transaksi keluar berjalan akurat per akun portal tanpa bercampur antar teknisi"
+        }
+      ]
+    },
+    {
       "version": "1.2.33",
       "date": "2026-11-18T10:28:45+07:00",
       "title": "Fitur Barang Sedang Digunakan di Portal /request-barang",
