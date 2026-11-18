@@ -69,9 +69,11 @@ interface RowItem {
 }
 
 export default function BarangKeluarPage() {
-  const { currentUser } = useCurrentUser();
-  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "warehouse_admin";
+  const { currentUser, hasMenuAccess } = useCurrentUser();
   const isAdministrator = currentUser?.role === "admin";
+  const canProcessOut = Boolean(
+    currentUser && (isAdministrator || hasMenuAccess("inv_out"))
+  );
 
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -217,10 +219,10 @@ export default function BarangKeluarPage() {
   }, [fetchData]);
 
   useEffect(() => {
-    if (currentUser?.nama && !officer) {
-      setOfficer(currentUser.nama);
+    if (currentUser?.nama) {
+      setOfficer((prev) => (!prev || prev === "Admin Gudang" ? currentUser.nama : prev));
     }
-  }, [currentUser]);
+  }, [currentUser?.nama]);
 
   const handleAddRow = () => {
     setRows([
@@ -564,7 +566,7 @@ export default function BarangKeluarPage() {
       )}
 
       {/* Main Stock Out Form */}
-      {isAdmin && (
+      {canProcessOut && (
         <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-5">
           <div className="flex items-center justify-between">
             <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center">
@@ -1405,7 +1407,7 @@ export default function BarangKeluarPage() {
         open={requestsModalOpen}
         requests={inventoryRequests}
         loading={requestsLoading}
-        isAdmin={isAdmin}
+        canManageRequests={canProcessOut}
         onClose={() => setRequestsModalOpen(false)}
         onRefresh={fetchRequests}
         onAcceptRequest={handleLoadRequestForAcc}

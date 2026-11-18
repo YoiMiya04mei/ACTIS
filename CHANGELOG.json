@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.40",
+      "date": "2026-11-18T17:03:59+07:00",
+      "title": "ACC dan Proses Daftar Request Barang Mengikuti Hak Akses Menu Level Akses",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Mengizinkan semua level akun (default maupun kustom) yang mendapat izin menu Barang Keluar (inv_out) di Level Akses untuk melihat tombol Tolak dan ACC & Proses Barang Keluar pada modal Daftar Request Barang"
+        },
+        {
+          "type": "fix",
+          "text": "Membuka akses submit POST /api/inventory/transactions/out dan POST /api/inventory/requests/[id]/reject berbasis izin menu inv_out serta menyesuaikan prefill nama petugas penyerah gudang sesuai akun login"
+        }
+      ]
+    },
+    {
       "version": "1.2.39",
       "date": "2026-11-18T16:30:26+07:00",
       "title": "Tambah dan Hapus Level Akses User Kustom dengan Proteksi Level Default",

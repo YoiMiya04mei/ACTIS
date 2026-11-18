@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/security";
 import { processStockOut } from "@/lib/inventoryService";
-import { getInventoryPermissions } from "@/lib/inventoryAuth";
+import { canUserAccessInventoryMenu } from "@/lib/inventoryAuth";
 import { triggerInventoryMirrorSync } from "@/lib/inventoryMirrorService";
 
 export async function POST(request: NextRequest) {
   const auth = await requireAuth(request);
   if (!auth.ok) return auth.response;
 
-  const permissions = getInventoryPermissions(auth.user);
-  if (!permissions.canCreateOutTransaction) {
+  const canCreateOut = await canUserAccessInventoryMenu(auth.user, "inv_out");
+  if (!canCreateOut) {
     return NextResponse.json(
-      { success: false, error: "Akses ditolak: Hanya Admin/Warehouse Admin yang dapat membuat transaksi barang keluar." },
+      { success: false, error: "Akses ditolak: Level akun Anda tidak memiliki izin pada menu Barang Keluar." },
       { status: 403 }
     );
   }

@@ -1,4 +1,6 @@
 import { AuthenticatedUser } from "./security";
+import type { MenuAccessKey } from "./accessLevels";
+import { getAllowedMenusForRole, getStoredAccessLevels } from "./accessLevelsStore";
 
 export interface InventoryPermissions {
   canView: boolean;
@@ -104,4 +106,23 @@ export function getInventoryPermissions(user: AuthenticatedUser | null | undefin
     canManageSettings: false,
     canEditPicLocation: false,
   };
+}
+
+/**
+ * Checks whether an authenticated ACTIS dashboard user has access to a given
+ * inventory menu (default or custom role configured under Level Akses).
+ */
+export async function canUserAccessInventoryMenu(
+  user: AuthenticatedUser | null | undefined,
+  menuKey: MenuAccessKey
+): Promise<boolean> {
+  if (!user || !user.role || user.role === "request_barang") {
+    return false;
+  }
+  if (user.role === "admin") {
+    return true;
+  }
+  const stored = await getStoredAccessLevels();
+  const allowedMenus = getAllowedMenusForRole(stored.roles, user.role);
+  return allowedMenus.includes(menuKey);
 }

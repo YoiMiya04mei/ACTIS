@@ -67,7 +67,8 @@ interface StockOutRequestsDialogProps {
   open: boolean;
   requests: InventoryRequestRecord[];
   loading: boolean;
-  isAdmin: boolean;
+  canManageRequests?: boolean;
+  isAdmin?: boolean;
   onClose: () => void;
   onRefresh: () => Promise<void> | void;
   onAcceptRequest: (req: InventoryRequestRecord) => void;
@@ -93,12 +94,14 @@ export function StockOutRequestsDialog({
   open,
   requests,
   loading,
+  canManageRequests,
   isAdmin,
   onClose,
   onRefresh,
   onAcceptRequest,
   onRejectSuccess,
 }: StockOutRequestsDialogProps) {
+  const canActOnRequests = Boolean(canManageRequests ?? isAdmin);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const titleId = useId();
 
@@ -489,7 +492,7 @@ export function StockOutRequestsDialog({
                     </div>
                   )}
 
-                  {req.status === "PENDING" && isAdmin && (
+                  {req.status === "PENDING" && canActOnRequests && (
                     <div className="pt-2 border-t border-slate-200/80 dark:border-slate-800 space-y-2">
                       {!isRejecting ? (
                         <div className="flex flex-wrap items-center justify-end gap-2">
