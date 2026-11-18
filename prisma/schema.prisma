@@ -888,5 +888,22 @@ model SystemUpdateHistory {
   @@map("system_update_histories")
 }
 
+// ============================================================================
+// SHARED TOOLS STORAGE (DOCUMENTS, TEMPLATES & ARCHIVE ACROSS ACCOUNTS)
+// ============================================================================
+
+model SharedDocumentEntry {
+  key             String   @id
+  value           String   @db.Text
+  deleted_ids     String   @default("[]") @db.Text
+  is_default_seed Boolean  @default(false)
+  version         Int      @default(1)
+  updated_by      String?
+  updated_by_id   String?
+  updated_at      DateTime @default(now()) @updatedAt
+
+  @@map("shared_document_entries")
+}
+
 
 

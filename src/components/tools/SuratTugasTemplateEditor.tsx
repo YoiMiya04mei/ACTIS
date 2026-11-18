@@ -46,28 +46,33 @@ export const SuratTugasTemplateEditor: React.FC<SuratTugasTemplateEditorProps> =
 }) => {
   const { confirm: confirmDialog } = useDialog();
   const isAdmin = !currentUser || currentUser.role === 'admin' || (currentUser as any).role === 'noc_engineer';
-  const [formData, setFormData] = useState<SuratTugasTemplate>(() => {
-    const initial = { ...template };
-    if (initial.companyName) {
-      initial.companyName = initial.companyName.replace(/\s+Jl\.?$/i, '').trim();
+  const normalizeTemplate = (tpl: SuratTugasTemplate): SuratTugasTemplate => {
+    const normalized = { ...tpl };
+    if (normalized.companyName) {
+      normalized.companyName = normalized.companyName.replace(/\s+Jl\.?$/i, '').trim();
     }
-    // If background kop exists but spacer is at default low value, set to 38mm
-    if (initial.letterheadBackgroundUrl && (!initial.headerSpacerHeight || initial.headerSpacerHeight <= 10)) {
-      initial.headerSpacerHeight = 38;
+    if (normalized.letterheadBackgroundUrl && (!normalized.headerSpacerHeight || normalized.headerSpacerHeight <= 10)) {
+      normalized.headerSpacerHeight = 38;
     }
-    return initial;
-  });
+    return normalized;
+  };
+
+  const [formData, setFormData] = useState<SuratTugasTemplate>(() => normalizeTemplate(template));
+  const formDataRef = useRef<SuratTugasTemplate>(formData);
+  formDataRef.current = formData;
+  const lastTemplateJsonRef = useRef<string>(JSON.stringify(normalizeTemplate(template)));
 
   useEffect(() => {
-    if (template) {
-      const updated = { ...template };
-      if (updated.companyName) {
-        updated.companyName = updated.companyName.replace(/\s+Jl\.?$/i, '').trim();
-      }
-      if (updated.letterheadBackgroundUrl && (!updated.headerSpacerHeight || updated.headerSpacerHeight <= 10)) {
-        updated.headerSpacerHeight = 38;
-      }
-      setFormData(updated);
+    if (!template) return;
+    const normalized = normalizeTemplate(template);
+    const nextJson = JSON.stringify(normalized);
+    if (nextJson === lastTemplateJsonRef.current) return;
+
+    const hasUnsavedLocalEdits =
+      JSON.stringify(formDataRef.current) !== lastTemplateJsonRef.current;
+    lastTemplateJsonRef.current = nextJson;
+    if (!hasUnsavedLocalEdits) {
+      setFormData(normalized);
     }
   }, [template]);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -141,14 +146,18 @@ export const SuratTugasTemplateEditor: React.FC<SuratTugasTemplateEditorProps> =
     setIsSaving(true);
     try {
       const saved = await suratTugasStorage.saveTemplate(formData);
-      onUpdateTemplate(saved);
+      const normalized = normalizeTemplate(saved);
+      lastTemplateJsonRef.current = JSON.stringify(normalized);
+      setFormData(normalized);
+      onUpdateTemplate(normalized);
       addToast(
         'success',
         'Template Surat Tugas Disimpan',
-        'Kop surat, tanda tangan, dan cap perusahaan untuk Surat Tugas berhasil diperbarui.'
+        'Kop surat, tanda tangan, dan cap perusahaan untuk Surat Tugas berhasil diperbarui ke semua akun.'
       );
-    } catch {
-      addToast('error', 'Gagal', 'Terjadi kesalahan saat menyimpan template.');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Terjadi kesalahan saat menyimpan template.';
+      addToast('error', 'Gagal', msg);
     } finally {
       setIsSaving(false);
     }
@@ -165,14 +174,21 @@ export const SuratTugasTemplateEditor: React.FC<SuratTugasTemplateEditorProps> =
         'Apakah Anda yakin ingin mengembalikan template Surat Tugas ke konfigurasi standar PT Jembatan Data Pangrango?'
       )
     ) {
-      const reset = await suratTugasStorage.resetTemplate();
-      setFormData(reset);
-      onUpdateTemplate(reset);
-      addToast(
-        'info',
-        'Template Direset',
-        'Konfigurasi template Surat Tugas telah dikembalikan ke standar awal.'
-      );
+      try {
+        const reset = await suratTugasStorage.resetTemplate();
+        const normalized = normalizeTemplate(reset);
+        lastTemplateJsonRef.current = JSON.stringify(normalized);
+        setFormData(normalized);
+        onUpdateTemplate(normalized);
+        addToast(
+          'info',
+          'Template Direset',
+          'Konfigurasi template Surat Tugas telah dikembalikan ke standar awal.'
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Gagal mereset template.';
+        addToast('error', 'Gagal', msg);
+      }
     }
   };
 

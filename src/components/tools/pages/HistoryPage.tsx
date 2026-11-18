@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSharedDocumentSync } from '@/hooks/useSharedDocumentSync';
+import { SHARED_DOCUMENT_KEYS } from '@/lib/sharedDocumentKeys';
 import {
   Search,
   Eye,
@@ -170,12 +172,8 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
   // Permissions based on currentUser
   const canDelete = currentUser ? authService.hasPermission(currentUser.role, 'canDeleteRFO') : false;
 
-  useEffect(() => {
-    loadAllDocuments();
-  }, []);
-
-  const loadAllDocuments = async () => {
-    setLoading(true);
+  const loadAllDocuments = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const [rfoDocs, stDocs, baDocs, pmDocs, bpvDocs] = await Promise.all([
         storageService.getAllRFOs().catch(() => []),
@@ -191,11 +189,21 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
       setBankVoucherList(bpvDocs);
     } catch (e) {
       console.error('Failed to load documents:', e);
-      addToast('error', 'Gagal Memuat Data', 'Tidak dapat mengambil arsip dokumen.');
+      if (!opts?.silent) {
+        addToast('error', 'Gagal Memuat Data', 'Tidak dapat mengambil arsip dokumen.');
+      }
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
-  };
+  }, [addToast]);
+
+  useEffect(() => {
+    loadAllDocuments();
+  }, [loadAllDocuments]);
+
+  useSharedDocumentSync(SHARED_DOCUMENT_KEYS, () => {
+    loadAllDocuments({ silent: true });
+  });
 
   // Convert all items into UnifiedDocumentItem format
   const unifiedItems: UnifiedDocumentItem[] = useMemo(() => {

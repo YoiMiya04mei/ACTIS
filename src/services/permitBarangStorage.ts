@@ -57,38 +57,13 @@ export const SAMPLE_PERMIT_BARANG: PermitBarangDocument = {
 };
 
 class PermitBarangStorageService {
-  constructor() {
-    this.initDefaultData();
-  }
-
-  private async initDefaultData(): Promise<void> {
-    try {
-      const existing = await indexedDbStorage.getItem<PermitBarangDocument[]>(STORAGE_KEYS.DOCUMENTS);
-      if (!existing || existing.length === 0) {
-        await indexedDbStorage.setItem(STORAGE_KEYS.DOCUMENTS, [SAMPLE_PERMIT_BARANG]);
-      }
-      const existingTemplate = await indexedDbStorage.getItem<PermitBarangTemplate>(
-        STORAGE_KEYS.TEMPLATE
-      );
-      if (!existingTemplate) {
-        await indexedDbStorage.setItem(
-          STORAGE_KEYS.TEMPLATE,
-          DEFAULT_PERMIT_BARANG_TEMPLATE
-        );
-      }
-    } catch (e) {
-      console.warn('PermitBarangStorage initialization notice:', e);
-    }
-  }
-
   async getAllPermitBarang(): Promise<PermitBarangDocument[]> {
     try {
-      const data = await indexedDbStorage.getItem<PermitBarangDocument[]>(STORAGE_KEYS.DOCUMENTS);
-      if (!data || data.length === 0) {
-        return [SAMPLE_PERMIT_BARANG];
-      }
-      // Sort newest created first
-      return data.sort(
+      const data = await indexedDbStorage.ensureSharedDocuments<PermitBarangDocument>(
+        STORAGE_KEYS.DOCUMENTS as 'jdp_permit_barang_documents_v1',
+        [SAMPLE_PERMIT_BARANG]
+      );
+      return [...data].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
     } catch (e) {
@@ -116,57 +91,64 @@ class PermitBarangStorageService {
   }
 
   async savePermitBarang(doc: PermitBarangDocument): Promise<void> {
-    const list = await this.getAllPermitBarang();
-    const idx = list.findIndex((item) => item.id === doc.id);
+    const now = new Date().toISOString();
+    const docToSave: PermitBarangDocument = {
+      ...doc,
+      createdAt: doc.createdAt || now,
+      updatedAt: now,
+    };
 
-    if (idx >= 0) {
-      list[idx] = { ...doc, updatedAt: new Date().toISOString() };
-    } else {
-      list.unshift({
-        ...doc,
-        createdAt: doc.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-    }
-
-    await indexedDbStorage.setItem(STORAGE_KEYS.DOCUMENTS, list);
+    await indexedDbStorage.upsertSharedDocument<PermitBarangDocument>(
+      STORAGE_KEYS.DOCUMENTS as 'jdp_permit_barang_documents_v1',
+      docToSave
+    );
     await this.clearDraft();
   }
 
   async deletePermitBarang(id: string): Promise<void> {
-    const list = await this.getAllPermitBarang();
-    const filtered = list.filter((item) => item.id !== id);
-    await indexedDbStorage.setItem(STORAGE_KEYS.DOCUMENTS, filtered);
+    await indexedDbStorage.deleteSharedDocument<PermitBarangDocument>(
+      STORAGE_KEYS.DOCUMENTS as 'jdp_permit_barang_documents_v1',
+      id
+    );
   }
 
   async saveDraft(draft: PermitBarangDraft): Promise<void> {
-    await indexedDbStorage.setItem(STORAGE_KEYS.DRAFT, draft);
+    await indexedDbStorage.setLocalItem(STORAGE_KEYS.DRAFT, draft);
   }
 
   async getDraft(): Promise<PermitBarangDraft | null> {
-    return await indexedDbStorage.getItem<PermitBarangDraft>(STORAGE_KEYS.DRAFT);
+    return await indexedDbStorage.getLocalItem<PermitBarangDraft>(STORAGE_KEYS.DRAFT);
   }
 
   async clearDraft(): Promise<void> {
-    await indexedDbStorage.removeItem(STORAGE_KEYS.DRAFT);
+    await indexedDbStorage.removeLocalItem(STORAGE_KEYS.DRAFT);
   }
 
   async getTemplate(): Promise<PermitBarangTemplate> {
-    const t = await indexedDbStorage.getItem<PermitBarangTemplate>(STORAGE_KEYS.TEMPLATE);
-    return t || DEFAULT_PERMIT_BARANG_TEMPLATE;
+    try {
+      return await indexedDbStorage.ensureSharedTemplate<PermitBarangTemplate>(
+        STORAGE_KEYS.TEMPLATE as 'jdp_permit_barang_template_v1',
+        DEFAULT_PERMIT_BARANG_TEMPLATE
+      );
+    } catch {
+      return DEFAULT_PERMIT_BARANG_TEMPLATE;
+    }
   }
 
   async saveTemplate(template: PermitBarangTemplate): Promise<PermitBarangTemplate> {
-    await indexedDbStorage.setItem(STORAGE_KEYS.TEMPLATE, template);
-    return template;
+    return await indexedDbStorage.saveSharedTemplate<PermitBarangTemplate>(
+      STORAGE_KEYS.TEMPLATE as 'jdp_permit_barang_template_v1',
+      template,
+      DEFAULT_PERMIT_BARANG_TEMPLATE
+    );
   }
 
   async resetTemplate(): Promise<PermitBarangTemplate> {
-    await indexedDbStorage.setItem(
-      STORAGE_KEYS.TEMPLATE,
+    return await indexedDbStorage.saveSharedTemplate<PermitBarangTemplate>(
+      STORAGE_KEYS.TEMPLATE as 'jdp_permit_barang_template_v1',
+      DEFAULT_PERMIT_BARANG_TEMPLATE,
       DEFAULT_PERMIT_BARANG_TEMPLATE
     );
-    return DEFAULT_PERMIT_BARANG_TEMPLATE;
   }
 }
 

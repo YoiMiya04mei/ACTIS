@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSharedDocumentSync } from '@/hooks/useSharedDocumentSync';
+import { SHARED_DOCUMENT_KEYS } from '@/lib/sharedDocumentKeys';
 import {
   Search,
   Eye,
@@ -57,22 +59,28 @@ export const HistorySuratTugasPage: React.FC<HistorySuratTugasPageProps> = ({
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadDocuments();
-  }, []);
-
-  const loadDocuments = async () => {
-    setLoading(true);
+  const loadDocuments = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const list = await suratTugasStorage.getAllSuratTugas();
       setDocuments(list);
     } catch (e) {
       console.error(e);
-      addToast('error', 'Gagal Memuat Data', 'Tidak dapat mengambil data arsip Surat Tugas.');
+      if (!opts?.silent) {
+        addToast('error', 'Gagal Memuat Data', 'Tidak dapat mengambil data arsip Surat Tugas.');
+      }
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
-  };
+  }, [addToast]);
+
+  useEffect(() => {
+    loadDocuments();
+  }, [loadDocuments]);
+
+  useSharedDocumentSync([SHARED_DOCUMENT_KEYS[1]], () => {
+    loadDocuments({ silent: true });
+  });
 
   // Filtered documents
   const filteredList = useMemo(() => {

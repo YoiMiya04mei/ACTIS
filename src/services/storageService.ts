@@ -49,31 +49,13 @@ const SAMPLE_RFO: RFODocument = {
 };
 
 class LocalStorageProvider implements IStorageProvider {
-  constructor() {
-    this.initDefaultData();
-  }
-
-  private async initDefaultData() {
-    try {
-      const existing = await indexedDbStorage.getItem<RFODocument[]>(STORAGE_KEYS.RFOS);
-      if (!existing || existing.length === 0) {
-        await indexedDbStorage.setItem(STORAGE_KEYS.RFOS, [SAMPLE_RFO]);
-      }
-      const existingTemplate = await indexedDbStorage.getItem<RFOTemplate>(STORAGE_KEYS.TEMPLATE);
-      if (!existingTemplate) {
-        await indexedDbStorage.setItem(STORAGE_KEYS.TEMPLATE, DEFAULT_RFO_TEMPLATE);
-      }
-    } catch (e) {
-      console.warn('StorageService initialization notice:', e);
-    }
-  }
-
   async getAllRFOs(): Promise<RFODocument[]> {
     try {
-      const data = await indexedDbStorage.getItem<RFODocument[]>(STORAGE_KEYS.RFOS);
-      if (!data || data.length === 0) return [SAMPLE_RFO];
-      // Sort newest created first
-      return data.sort(
+      const data = await indexedDbStorage.ensureSharedDocuments<RFODocument>(
+        STORAGE_KEYS.RFOS as 'jdp_rfo_documents_v1',
+        [SAMPLE_RFO]
+      );
+      return [...data].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
     } catch (e) {
@@ -88,81 +70,77 @@ class LocalStorageProvider implements IStorageProvider {
   }
 
   async saveRFO(rfo: RFODocument): Promise<RFODocument> {
-    const list = await this.getAllRFOs();
-    const existingIndex = list.findIndex((item) => item.id === rfo.id);
     const now = new Date().toISOString();
+    const docToSave: RFODocument = {
+      ...rfo,
+      createdAt: rfo.createdAt || now,
+      updatedAt: now,
+    };
 
-    let updatedList: RFODocument[];
-    if (existingIndex >= 0) {
-      updatedList = [...list];
-      updatedList[existingIndex] = {
-        ...rfo,
-        updatedAt: now,
-      };
-    } else {
-      updatedList = [
-        {
-          ...rfo,
-          createdAt: rfo.createdAt || now,
-          updatedAt: now,
-        },
-        ...list,
-      ];
-    }
-
-    await indexedDbStorage.setItem(STORAGE_KEYS.RFOS, updatedList);
-    return rfo;
+    const updatedList = await indexedDbStorage.upsertSharedDocument<RFODocument>(
+      STORAGE_KEYS.RFOS as 'jdp_rfo_documents_v1',
+      docToSave
+    );
+    return updatedList.find((item) => item.id === docToSave.id) || docToSave;
   }
 
   async updateRFO(id: string, updates: Partial<RFODocument>): Promise<RFODocument> {
-    const list = await this.getAllRFOs();
-    const index = list.findIndex((item) => item.id === id);
-    if (index === -1) {
+    const existing = await this.getRFOById(id);
+    if (!existing) {
       throw new Error(`RFO with ID ${id} not found.`);
     }
 
-    const updated = {
-      ...list[index],
+    const updated: RFODocument = {
+      ...existing,
       ...updates,
       updatedAt: new Date().toISOString(),
     };
 
-    list[index] = updated;
-    await indexedDbStorage.setItem(STORAGE_KEYS.RFOS, list);
-    return updated;
+    const updatedList = await indexedDbStorage.upsertSharedDocument<RFODocument>(
+      STORAGE_KEYS.RFOS as 'jdp_rfo_documents_v1',
+      updated
+    );
+    return updatedList.find((item) => item.id === id) || updated;
   }
 
   async deleteRFO(id: string): Promise<boolean> {
-    const list = await this.getAllRFOs();
-    const filtered = list.filter((item) => item.id !== id);
-    if (filtered.length === list.length) return false;
-    await indexedDbStorage.setItem(STORAGE_KEYS.RFOS, filtered);
-    return true;
+    const res = await indexedDbStorage.deleteSharedDocument<RFODocument>(
+      STORAGE_KEYS.RFOS as 'jdp_rfo_documents_v1',
+      id
+    );
+    return res.deleted;
   }
 
   async getTemplate(): Promise<RFOTemplate> {
     try {
-      const data = await indexedDbStorage.getItem<RFOTemplate>(STORAGE_KEYS.TEMPLATE);
-      if (!data) return DEFAULT_RFO_TEMPLATE;
-      return { ...DEFAULT_RFO_TEMPLATE, ...data };
+      return await indexedDbStorage.ensureSharedTemplate<RFOTemplate>(
+        STORAGE_KEYS.TEMPLATE as 'jdp_rfo_template_v1',
+        DEFAULT_RFO_TEMPLATE
+      );
     } catch {
       return DEFAULT_RFO_TEMPLATE;
     }
   }
 
   async saveTemplate(template: RFOTemplate): Promise<RFOTemplate> {
-    await indexedDbStorage.setItem(STORAGE_KEYS.TEMPLATE, template);
-    return template;
+    return await indexedDbStorage.saveSharedTemplate<RFOTemplate>(
+      STORAGE_KEYS.TEMPLATE as 'jdp_rfo_template_v1',
+      template,
+      DEFAULT_RFO_TEMPLATE
+    );
   }
 
   async resetTemplate(): Promise<RFOTemplate> {
-    await indexedDbStorage.setItem(STORAGE_KEYS.TEMPLATE, DEFAULT_RFO_TEMPLATE);
-    return DEFAULT_RFO_TEMPLATE;
+    return await indexedDbStorage.saveSharedTemplate<RFOTemplate>(
+      STORAGE_KEYS.TEMPLATE as 'jdp_rfo_template_v1',
+      DEFAULT_RFO_TEMPLATE,
+      DEFAULT_RFO_TEMPLATE
+    );
   }
 
   async getDraft(): Promise<RFODraft | null> {
     try {
-      return await indexedDbStorage.getItem<RFODraft>(STORAGE_KEYS.DRAFT);
+      return await indexedDbStorage.getLocalItem<RFODraft>(STORAGE_KEYS.DRAFT);
     } catch {
       return null;
     }
@@ -170,7 +148,7 @@ class LocalStorageProvider implements IStorageProvider {
 
   async saveDraft(draft: RFODraft): Promise<void> {
     try {
-      await indexedDbStorage.setItem(STORAGE_KEYS.DRAFT, draft);
+      await indexedDbStorage.setLocalItem(STORAGE_KEYS.DRAFT, draft);
     } catch (e) {
       console.warn('Failed to save draft:', e);
     }
@@ -178,7 +156,7 @@ class LocalStorageProvider implements IStorageProvider {
 
   async clearDraft(): Promise<void> {
     try {
-      await indexedDbStorage.removeItem(STORAGE_KEYS.DRAFT);
+      await indexedDbStorage.removeLocalItem(STORAGE_KEYS.DRAFT);
     } catch (e) {
       console.warn('Failed to clear draft:', e);
     }

@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useSharedDocumentSync } from '@/hooks/useSharedDocumentSync';
+import { SHARED_DOCUMENT_KEYS } from '@/lib/sharedDocumentKeys';
 import {
   Save,
   Copy,
@@ -188,14 +190,20 @@ export const CreateBeritaAcaraPage: React.FC<CreateBeritaAcaraPageProps> = ({
     }
   }, [beritaAcaraTemplate, initialEditData]);
 
-  const loadNextSequence = async () => {
+  const loadNextSequence = useCallback(async () => {
     try {
       const nextSeq = await beritaAcaraStorage.getNextSequenceNumber();
       setSequenceNumber(nextSeq);
     } catch (e) {
       console.warn('Failed to fetch next sequence for Berita Acara:', e);
     }
-  };
+  }, []);
+
+  useSharedDocumentSync([SHARED_DOCUMENT_KEYS[2]], () => {
+    if (!editingId && !isManualNumber) {
+      loadNextSequence();
+    }
+  });
 
   // Personnel handlers
   const handleAddPersonnel = () => {

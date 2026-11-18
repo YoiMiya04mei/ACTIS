@@ -46,28 +46,33 @@ export const BeritaAcaraTemplateEditor: React.FC<BeritaAcaraTemplateEditorProps>
 }) => {
   const { confirm: confirmDialog } = useDialog();
   const isAdmin = !currentUser || currentUser.role === 'admin' || (currentUser as any).role === 'noc_engineer';
-  const [formData, setFormData] = useState<BeritaAcaraTemplate>(() => {
-    const initial = { ...template };
-    if (initial.companyName) {
-      initial.companyName = initial.companyName.replace(/\s+Jl\.?$/i, '').trim();
+  const normalizeTemplate = (tpl: BeritaAcaraTemplate): BeritaAcaraTemplate => {
+    const normalized = { ...tpl };
+    if (normalized.companyName) {
+      normalized.companyName = normalized.companyName.replace(/\s+Jl\.?$/i, '').trim();
     }
-    // If background kop exists but spacer is at default low value, set to 38mm
-    if (initial.letterheadBackgroundUrl && (!initial.headerSpacerHeight || initial.headerSpacerHeight <= 10)) {
-      initial.headerSpacerHeight = 38;
+    if (normalized.letterheadBackgroundUrl && (!normalized.headerSpacerHeight || normalized.headerSpacerHeight <= 10)) {
+      normalized.headerSpacerHeight = 38;
     }
-    return initial;
-  });
+    return normalized;
+  };
+
+  const [formData, setFormData] = useState<BeritaAcaraTemplate>(() => normalizeTemplate(template));
+  const formDataRef = useRef<BeritaAcaraTemplate>(formData);
+  formDataRef.current = formData;
+  const lastTemplateJsonRef = useRef<string>(JSON.stringify(normalizeTemplate(template)));
 
   useEffect(() => {
-    if (template) {
-      const updated = { ...template };
-      if (updated.companyName) {
-        updated.companyName = updated.companyName.replace(/\s+Jl\.?$/i, '').trim();
-      }
-      if (updated.letterheadBackgroundUrl && (!updated.headerSpacerHeight || updated.headerSpacerHeight <= 10)) {
-        updated.headerSpacerHeight = 38;
-      }
-      setFormData(updated);
+    if (!template) return;
+    const normalized = normalizeTemplate(template);
+    const nextJson = JSON.stringify(normalized);
+    if (nextJson === lastTemplateJsonRef.current) return;
+
+    const hasUnsavedLocalEdits =
+      JSON.stringify(formDataRef.current) !== lastTemplateJsonRef.current;
+    lastTemplateJsonRef.current = nextJson;
+    if (!hasUnsavedLocalEdits) {
+      setFormData(normalized);
     }
   }, [template]);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -144,14 +149,18 @@ export const BeritaAcaraTemplateEditor: React.FC<BeritaAcaraTemplateEditorProps>
     setIsSaving(true);
     try {
       const saved = await beritaAcaraStorage.saveTemplate(formData);
-      onUpdateTemplate(saved);
+      const normalized = normalizeTemplate(saved);
+      lastTemplateJsonRef.current = JSON.stringify(normalized);
+      setFormData(normalized);
+      onUpdateTemplate(normalized);
       addToast(
         'success',
         'Template Berita Acara Disimpan',
-        'Kop surat, penandatangan, tanda tangan, dan cap perusahaan untuk Berita Acara berhasil diperbarui.'
+        'Kop surat, penandatangan, tanda tangan, dan cap perusahaan untuk Berita Acara berhasil diperbarui ke semua akun.'
       );
-    } catch {
-      addToast('error', 'Gagal', 'Terjadi kesalahan saat menyimpan template.');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Terjadi kesalahan saat menyimpan template.';
+      addToast('error', 'Gagal', msg);
     } finally {
       setIsSaving(false);
     }
@@ -168,10 +177,17 @@ export const BeritaAcaraTemplateEditor: React.FC<BeritaAcaraTemplateEditorProps>
         'Kembalikan template Berita Acara ke konfigurasi standar PT Jembatan Data Pangrango?'
       )
     ) {
-      const reset = await beritaAcaraStorage.resetTemplate();
-      setFormData(reset);
-      onUpdateTemplate(reset);
-      addToast('info', 'Template Direset', 'Konfigurasi template Berita Acara kembali ke default.');
+      try {
+        const reset = await beritaAcaraStorage.resetTemplate();
+        const normalized = normalizeTemplate(reset);
+        lastTemplateJsonRef.current = JSON.stringify(normalized);
+        setFormData(normalized);
+        onUpdateTemplate(normalized);
+        addToast('info', 'Template Direset', 'Konfigurasi template Berita Acara kembali ke default.');
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Gagal mereset template.';
+        addToast('error', 'Gagal', msg);
+      }
     }
   };
 

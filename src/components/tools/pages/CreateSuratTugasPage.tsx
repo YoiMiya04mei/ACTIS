@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSharedDocumentSync } from '@/hooks/useSharedDocumentSync';
+import { SHARED_DOCUMENT_KEYS } from '@/lib/sharedDocumentKeys';
 import {
   Save,
   Copy,
@@ -160,14 +162,20 @@ export const CreateSuratTugasPage: React.FC<CreateSuratTugasPageProps> = ({
     }
   }, [suratTugasTemplate, initialEditData]);
 
-  const loadNextSequence = async () => {
+  const loadNextSequence = useCallback(async () => {
     try {
       const nextSeq = await suratTugasStorage.getNextSequenceNumber();
       setSequenceNumber(nextSeq);
     } catch (e) {
       console.warn('Failed to fetch next sequence:', e);
     }
-  };
+  }, []);
+
+  useSharedDocumentSync([SHARED_DOCUMENT_KEYS[1]], () => {
+    if (!editingId && !isManualNumber) {
+      loadNextSequence();
+    }
+  });
 
   // Personnel handlers
   const handleAddPersonnel = () => {

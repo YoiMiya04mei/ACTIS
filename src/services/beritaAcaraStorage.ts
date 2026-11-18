@@ -47,38 +47,13 @@ export const SAMPLE_BERITA_ACARA: BeritaAcaraDocument = {
 };
 
 class BeritaAcaraStorageService {
-  constructor() {
-    this.initDefaultData();
-  }
-
-  private async initDefaultData(): Promise<void> {
-    try {
-      const existing = await indexedDbStorage.getItem<BeritaAcaraDocument[]>(STORAGE_KEYS.DOCUMENTS);
-      if (!existing || existing.length === 0) {
-        await indexedDbStorage.setItem(STORAGE_KEYS.DOCUMENTS, [SAMPLE_BERITA_ACARA]);
-      }
-      const existingTemplate = await indexedDbStorage.getItem<BeritaAcaraTemplate>(
-        STORAGE_KEYS.TEMPLATE
-      );
-      if (!existingTemplate) {
-        await indexedDbStorage.setItem(
-          STORAGE_KEYS.TEMPLATE,
-          DEFAULT_BERITA_ACARA_TEMPLATE
-        );
-      }
-    } catch (e) {
-      console.warn('BeritaAcaraStorage initialization notice:', e);
-    }
-  }
-
   async getAllBeritaAcara(): Promise<BeritaAcaraDocument[]> {
     try {
-      const data = await indexedDbStorage.getItem<BeritaAcaraDocument[]>(STORAGE_KEYS.DOCUMENTS);
-      if (!data || data.length === 0) {
-        return [SAMPLE_BERITA_ACARA];
-      }
-      // Sort newest created first
-      return data.sort(
+      const data = await indexedDbStorage.ensureSharedDocuments<BeritaAcaraDocument>(
+        STORAGE_KEYS.DOCUMENTS as 'jdp_berita_acara_documents_v1',
+        [SAMPLE_BERITA_ACARA]
+      );
+      return [...data].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
     } catch (e) {
@@ -112,43 +87,31 @@ class BeritaAcaraStorageService {
   }
 
   async saveBeritaAcara(doc: BeritaAcaraDocument): Promise<BeritaAcaraDocument> {
-    const list = await this.getAllBeritaAcara();
-    const existingIndex = list.findIndex((item) => item.id === doc.id);
     const now = new Date().toISOString();
+    const docToSave: BeritaAcaraDocument = {
+      ...doc,
+      createdAt: doc.createdAt || now,
+      updatedAt: now,
+    };
 
-    let updatedList: BeritaAcaraDocument[];
-    if (existingIndex >= 0) {
-      updatedList = [...list];
-      updatedList[existingIndex] = {
-        ...doc,
-        updatedAt: now,
-      };
-    } else {
-      updatedList = [
-        {
-          ...doc,
-          createdAt: doc.createdAt || now,
-          updatedAt: now,
-        },
-        ...list,
-      ];
-    }
-
-    await indexedDbStorage.setItem(STORAGE_KEYS.DOCUMENTS, updatedList);
-    return doc;
+    const updatedList = await indexedDbStorage.upsertSharedDocument<BeritaAcaraDocument>(
+      STORAGE_KEYS.DOCUMENTS as 'jdp_berita_acara_documents_v1',
+      docToSave
+    );
+    return updatedList.find((item) => item.id === docToSave.id) || docToSave;
   }
 
   async deleteBeritaAcara(id: string): Promise<boolean> {
-    const list = await this.getAllBeritaAcara();
-    const filtered = list.filter((item) => item.id !== id);
-    if (filtered.length === list.length) return false;
-    await indexedDbStorage.setItem(STORAGE_KEYS.DOCUMENTS, filtered);
-    return true;
+    const res = await indexedDbStorage.deleteSharedDocument<BeritaAcaraDocument>(
+      STORAGE_KEYS.DOCUMENTS as 'jdp_berita_acara_documents_v1',
+      id
+    );
+    return res.deleted;
   }
 
   async getDraft(): Promise<BeritaAcaraDraft | null> {
     try {
-      return await indexedDbStorage.getItem<BeritaAcaraDraft>(STORAGE_KEYS.DRAFT);
+      return await indexedDbStorage.getLocalItem<BeritaAcaraDraft>(STORAGE_KEYS.DRAFT);
     } catch {
       return null;
     }
@@ -156,7 +119,7 @@ class BeritaAcaraStorageService {
 
   async saveDraft(draft: BeritaAcaraDraft): Promise<void> {
     try {
-      await indexedDbStorage.setItem(STORAGE_KEYS.DRAFT, draft);
+      await indexedDbStorage.setLocalItem(STORAGE_KEYS.DRAFT, draft);
     } catch (e) {
       console.warn('Failed to save draft Berita Acara:', e);
     }
@@ -164,7 +127,7 @@ class BeritaAcaraStorageService {
 
   async clearDraft(): Promise<void> {
     try {
-      await indexedDbStorage.removeItem(STORAGE_KEYS.DRAFT);
+      await indexedDbStorage.removeLocalItem(STORAGE_KEYS.DRAFT);
     } catch (e) {
       console.warn('Failed to clear draft Berita Acara:', e);
     }
@@ -172,33 +135,29 @@ class BeritaAcaraStorageService {
 
   async getTemplate(): Promise<BeritaAcaraTemplate> {
     try {
-      const data = await indexedDbStorage.getItem<BeritaAcaraTemplate>(STORAGE_KEYS.TEMPLATE);
-      if (!data) return DEFAULT_BERITA_ACARA_TEMPLATE;
-      return { ...DEFAULT_BERITA_ACARA_TEMPLATE, ...data };
+      return await indexedDbStorage.ensureSharedTemplate<BeritaAcaraTemplate>(
+        STORAGE_KEYS.TEMPLATE as 'jdp_berita_acara_template_v1',
+        DEFAULT_BERITA_ACARA_TEMPLATE
+      );
     } catch {
       return DEFAULT_BERITA_ACARA_TEMPLATE;
     }
   }
 
   async saveTemplate(template: BeritaAcaraTemplate): Promise<BeritaAcaraTemplate> {
-    try {
-      await indexedDbStorage.setItem(STORAGE_KEYS.TEMPLATE, template);
-    } catch (e) {
-      console.warn('Failed to save Berita Acara template:', e);
-    }
-    return template;
+    return await indexedDbStorage.saveSharedTemplate<BeritaAcaraTemplate>(
+      STORAGE_KEYS.TEMPLATE as 'jdp_berita_acara_template_v1',
+      template,
+      DEFAULT_BERITA_ACARA_TEMPLATE
+    );
   }
 
   async resetTemplate(): Promise<BeritaAcaraTemplate> {
-    try {
-      await indexedDbStorage.setItem(
-        STORAGE_KEYS.TEMPLATE,
-        DEFAULT_BERITA_ACARA_TEMPLATE
-      );
-    } catch (e) {
-      console.warn('Failed to reset Berita Acara template:', e);
-    }
-    return DEFAULT_BERITA_ACARA_TEMPLATE;
+    return await indexedDbStorage.saveSharedTemplate<BeritaAcaraTemplate>(
+      STORAGE_KEYS.TEMPLATE as 'jdp_berita_acara_template_v1',
+      DEFAULT_BERITA_ACARA_TEMPLATE,
+      DEFAULT_BERITA_ACARA_TEMPLATE
+    );
   }
 }
 

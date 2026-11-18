@@ -4,6 +4,29 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.35",
+      "date": "2026-11-18T13:31:25+07:00",
+      "title": "Sinkronisasi Real-Time Dokumen, Template Surat, dan Arsip Antar Akun di PostgreSQL",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Menambahkan endpoint /api/storage/[key] dan /api/storage/sync-meta yang tersimpan persisten di PostgreSQL (model SharedDocumentEntry) agar seluruh akun berbagi Dokumen, Template Kop Surat, dan Arsip yang sama"
+        },
+        {
+          "type": "feat",
+          "text": "Menambahkan sinkronisasi otomatis lintas akun dan lintas tab via useSharedDocumentSync (BroadcastChannel, focus/visibilitychange, dan polling versi ringan 4 detik)"
+        },
+        {
+          "type": "fix",
+          "text": "Mengatasi kegagalan 404 pada IndexedDbStorageService yang menyebabkan data terisolasi per browser dan mencegah data sampel default menimpa dokumen atau kop surat yang sudah ada"
+        },
+        {
+          "type": "improve",
+          "text": "Menerapkan penyimpanan atomik per dokumen, tombstone ID penghapusan agar dokumen terhapus tidak muncul kembali, serta pembatasan akses admin untuk perubahan template"
+        }
+      ]
+    },
+    {
       "version": "1.2.34",
       "date": "2026-11-18T11:23:50+07:00",
       "title": "Menu Barang Sedang Digunakan Terisolasi Per Akun di Portal /request-barang",

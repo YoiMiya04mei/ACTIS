@@ -1,12 +1,14 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, FilePlus2, Sliders } from "lucide-react";
 import { HistoryPage } from "@/components/tools/pages/HistoryPage";
 import { ToastContainer, ToastMessage } from "@/components/tools/Toast";
 import { useCurrentUser } from "@/context/UserContext";
+import { useSharedDocumentSync } from "@/hooks/useSharedDocumentSync";
+import { SHARED_TEMPLATE_KEYS } from "@/lib/sharedDocumentKeys";
 import type { RFODocument, RFOTemplate } from "@/types/rfo";
 import { DEFAULT_RFO_TEMPLATE } from "@/templates/rfoTemplate";
 import { storageService } from "@/services/storageService";
@@ -37,12 +39,26 @@ export default function DocumentHistoryRoute() {
     DEFAULT_PERMIT_BARANG_TEMPLATE
   );
 
-  useEffect(() => {
-    storageService.getTemplate().then(setTemplate).catch(() => {});
-    suratTugasStorage.getTemplate().then(setSuratTugasTemplate).catch(() => {});
-    beritaAcaraStorage.getTemplate().then(setBeritaAcaraTemplate).catch(() => {});
-    permitBarangStorage.getTemplate().then(setPermitBarangTemplate).catch(() => {});
+  const loadTemplates = useCallback(async () => {
+    const [rfoTpl, stTpl, baTpl, pmTpl] = await Promise.all([
+      storageService.getTemplate().catch(() => null),
+      suratTugasStorage.getTemplate().catch(() => null),
+      beritaAcaraStorage.getTemplate().catch(() => null),
+      permitBarangStorage.getTemplate().catch(() => null),
+    ]);
+    if (rfoTpl) setTemplate((prev) => (JSON.stringify(prev) === JSON.stringify(rfoTpl) ? prev : rfoTpl));
+    if (stTpl) setSuratTugasTemplate((prev) => (JSON.stringify(prev) === JSON.stringify(stTpl) ? prev : stTpl));
+    if (baTpl) setBeritaAcaraTemplate((prev) => (JSON.stringify(prev) === JSON.stringify(baTpl) ? prev : baTpl));
+    if (pmTpl) setPermitBarangTemplate((prev) => (JSON.stringify(prev) === JSON.stringify(pmTpl) ? prev : pmTpl));
   }, []);
+
+  useEffect(() => {
+    loadTemplates();
+  }, [loadTemplates]);
+
+  useSharedDocumentSync(SHARED_TEMPLATE_KEYS, () => {
+    loadTemplates();
+  });
 
   const addToast = (type: ToastMessage["type"], title: string, message?: string) => {
     const id = Date.now().toString() + Math.random().toString(36).substring(2, 6);

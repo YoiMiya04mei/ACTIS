@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSharedDocumentSync } from '@/hooks/useSharedDocumentSync';
+import { SHARED_DOCUMENT_KEYS } from '@/lib/sharedDocumentKeys';
 import {
   FileText,
   FolderClock,
@@ -76,12 +78,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   const [loading, setLoading] = useState<boolean>(true);
   const [feedFilter, setFeedFilter] = useState<FeedFilterType>('all');
 
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
-
-  const loadDashboardData = async () => {
-    setLoading(true);
+  const loadDashboardData = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
       const [rfoDocs, stDocs, baDocs, pmDocs] = await Promise.all([
         storageService.getAllRFOs().catch(() => []),
@@ -95,11 +93,21 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       setPermitBarangList(pmDocs);
     } catch (e) {
       console.error('Failed to load dashboard data:', e);
-      addToast('error', 'Gagal Memuat Data', 'Tidak dapat mengambil ringkasan dokumen.');
+      if (!opts?.silent) {
+        addToast('error', 'Gagal Memuat Data', 'Tidak dapat mengambil ringkasan dokumen.');
+      }
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
-  };
+  }, [addToast]);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  useSharedDocumentSync(SHARED_DOCUMENT_KEYS, () => {
+    loadDashboardData({ silent: true });
+  });
 
   // Combined feed sorted newest first
   const unifiedFeed: UnifiedFeedItem[] = useMemo(() => {

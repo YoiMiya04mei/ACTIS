@@ -70,9 +70,19 @@ export const TemplatePage: React.FC<TemplatePageProps> = ({
   const isAdmin = !currentUser || currentUser.role === 'admin' || (currentUser as any).role === 'noc_engineer';
   const [activeSubTab, setActiveSubTab] = useState<'rfo' | 'surat-tugas' | 'berita-acara' | 'permit-barang'>(initialSubTab);
   const [formData, setFormData] = useState<RFOTemplate>({ ...template });
+  const formDataRef = useRef<RFOTemplate>(formData);
+  formDataRef.current = formData;
+  const lastTemplateJsonRef = useRef<string>(JSON.stringify(template));
 
   useEffect(() => {
-    if (template) {
+    if (!template) return;
+    const nextJson = JSON.stringify(template);
+    if (nextJson === lastTemplateJsonRef.current) return;
+
+    const hasUnsavedLocalEdits =
+      JSON.stringify(formDataRef.current) !== lastTemplateJsonRef.current;
+    lastTemplateJsonRef.current = nextJson;
+    if (!hasUnsavedLocalEdits) {
       setFormData({ ...template });
     }
   }, [template]);
@@ -139,14 +149,17 @@ export const TemplatePage: React.FC<TemplatePageProps> = ({
     setIsSaving(true);
     try {
       const saved = await storageService.saveTemplate(formData);
+      lastTemplateJsonRef.current = JSON.stringify(saved);
+      setFormData({ ...saved });
       onUpdateTemplate(saved);
       addToast(
         'success',
         'Template Disimpan',
-        'Kop surat dan pengaturan dokumen RFO berhasil diperbarui.'
+        'Kop surat dan pengaturan dokumen RFO berhasil diperbarui ke semua akun.'
       );
     } catch (e) {
-      addToast('error', 'Gagal', 'Terjadi kesalahan saat menyimpan template.');
+      const msg = e instanceof Error ? e.message : 'Terjadi kesalahan saat menyimpan template.';
+      addToast('error', 'Gagal', msg);
     } finally {
       setIsSaving(false);
     }
@@ -163,14 +176,20 @@ export const TemplatePage: React.FC<TemplatePageProps> = ({
         'Apakah Anda yakin ingin mengembalikan template ke konfigurasi standar PT Jembatan Data Pangrango?'
       )
     ) {
-      const reset = await storageService.resetTemplate();
-      setFormData(reset);
-      onUpdateTemplate(reset);
-      addToast(
-        'info',
-        'Template Direset',
-        'Konfigurasi template telah dikembalikan ke standar awal.'
-      );
+      try {
+        const reset = await storageService.resetTemplate();
+        lastTemplateJsonRef.current = JSON.stringify(reset);
+        setFormData(reset);
+        onUpdateTemplate(reset);
+        addToast(
+          'info',
+          'Template Direset',
+          'Konfigurasi template telah dikembalikan ke standar awal.'
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Gagal mereset template.';
+        addToast('error', 'Gagal', msg);
+      }
     }
   };
 

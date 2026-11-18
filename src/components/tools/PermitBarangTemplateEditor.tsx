@@ -46,27 +46,33 @@ export const PermitBarangTemplateEditor: React.FC<PermitBarangTemplateEditorProp
 }) => {
   const { confirm: confirmDialog } = useDialog();
   const isAdmin = !currentUser || currentUser.role === 'admin' || (currentUser as any).role === 'noc_engineer';
-  const [formData, setFormData] = useState<PermitBarangTemplate>(() => {
-    const initial = { ...template };
-    if (initial.companyName) {
-      initial.companyName = initial.companyName.replace(/\s+Jl\.?$/i, '').trim();
+  const normalizeTemplate = (tpl: PermitBarangTemplate): PermitBarangTemplate => {
+    const normalized = { ...tpl };
+    if (normalized.companyName) {
+      normalized.companyName = normalized.companyName.replace(/\s+Jl\.?$/i, '').trim();
     }
-    if (initial.letterheadBackgroundUrl && (!initial.headerSpacerHeight || initial.headerSpacerHeight <= 10)) {
-      initial.headerSpacerHeight = 38;
+    if (normalized.letterheadBackgroundUrl && (!normalized.headerSpacerHeight || normalized.headerSpacerHeight <= 10)) {
+      normalized.headerSpacerHeight = 38;
     }
-    return initial;
-  });
+    return normalized;
+  };
+
+  const [formData, setFormData] = useState<PermitBarangTemplate>(() => normalizeTemplate(template));
+  const formDataRef = useRef<PermitBarangTemplate>(formData);
+  formDataRef.current = formData;
+  const lastTemplateJsonRef = useRef<string>(JSON.stringify(normalizeTemplate(template)));
 
   useEffect(() => {
-    if (template) {
-      const updated = { ...template };
-      if (updated.companyName) {
-        updated.companyName = updated.companyName.replace(/\s+Jl\.?$/i, '').trim();
-      }
-      if (updated.letterheadBackgroundUrl && (!updated.headerSpacerHeight || updated.headerSpacerHeight <= 10)) {
-        updated.headerSpacerHeight = 38;
-      }
-      setFormData(updated);
+    if (!template) return;
+    const normalized = normalizeTemplate(template);
+    const nextJson = JSON.stringify(normalized);
+    if (nextJson === lastTemplateJsonRef.current) return;
+
+    const hasUnsavedLocalEdits =
+      JSON.stringify(formDataRef.current) !== lastTemplateJsonRef.current;
+    lastTemplateJsonRef.current = nextJson;
+    if (!hasUnsavedLocalEdits) {
+      setFormData(normalized);
     }
   }, [template]);
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -128,14 +134,18 @@ export const PermitBarangTemplateEditor: React.FC<PermitBarangTemplateEditorProp
     setIsSaving(true);
     try {
       const saved = await permitBarangStorage.saveTemplate(formData);
-      onUpdateTemplate(saved);
+      const normalized = normalizeTemplate(saved);
+      lastTemplateJsonRef.current = JSON.stringify(normalized);
+      setFormData(normalized);
+      onUpdateTemplate(normalized);
       addToast(
         'success',
         'Template Permit Barang Disimpan',
-        'Kop surat, penandatangan, tanda tangan, dan stempel untuk Permit Barang berhasil diperbarui.'
+        'Kop surat, penandatangan, tanda tangan, dan stempel untuk Permit Barang berhasil diperbarui ke semua akun.'
       );
-    } catch {
-      addToast('error', 'Gagal', 'Terjadi kesalahan saat menyimpan template.');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Terjadi kesalahan saat menyimpan template.';
+      addToast('error', 'Gagal', msg);
     } finally {
       setIsSaving(false);
     }
@@ -152,10 +162,17 @@ export const PermitBarangTemplateEditor: React.FC<PermitBarangTemplateEditorProp
         'Kembalikan template Permit Masuk & Keluar Barang ke konfigurasi standar PT Jembatan Data Pangrango?'
       )
     ) {
-      const reset = await permitBarangStorage.resetTemplate();
-      setFormData(reset);
-      onUpdateTemplate(reset);
-      addToast('info', 'Template Direset', 'Konfigurasi template Permit Barang kembali ke default.');
+      try {
+        const reset = await permitBarangStorage.resetTemplate();
+        const normalized = normalizeTemplate(reset);
+        lastTemplateJsonRef.current = JSON.stringify(normalized);
+        setFormData(normalized);
+        onUpdateTemplate(normalized);
+        addToast('info', 'Template Direset', 'Konfigurasi template Permit Barang kembali ke default.');
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Gagal mereset template.';
+        addToast('error', 'Gagal', msg);
+      }
     }
   };
 

@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { ArrowLeft, FolderClock, FileText, ShieldAlert } from "lucide-react";
 import { TemplatePage } from "@/components/tools/pages/TemplatePage";
 import { ToastContainer, ToastMessage } from "@/components/tools/Toast";
 import { useCurrentUser } from "@/context/UserContext";
+import { useSharedDocumentSync } from "@/hooks/useSharedDocumentSync";
+import { SHARED_TEMPLATE_KEYS } from "@/lib/sharedDocumentKeys";
 import type { RFOTemplate } from "@/types/rfo";
 import { DEFAULT_RFO_TEMPLATE } from "@/templates/rfoTemplate";
 import { storageService } from "@/services/storageService";
@@ -33,12 +35,26 @@ export default function DocumentTemplatesRoute() {
     DEFAULT_PERMIT_BARANG_TEMPLATE
   );
 
-  useEffect(() => {
-    storageService.getTemplate().then(setTemplate).catch(() => {});
-    suratTugasStorage.getTemplate().then(setSuratTugasTemplate).catch(() => {});
-    beritaAcaraStorage.getTemplate().then(setBeritaAcaraTemplate).catch(() => {});
-    permitBarangStorage.getTemplate().then(setPermitBarangTemplate).catch(() => {});
+  const loadTemplates = useCallback(async () => {
+    const [rfoTpl, stTpl, baTpl, pmTpl] = await Promise.all([
+      storageService.getTemplate().catch(() => null),
+      suratTugasStorage.getTemplate().catch(() => null),
+      beritaAcaraStorage.getTemplate().catch(() => null),
+      permitBarangStorage.getTemplate().catch(() => null),
+    ]);
+    if (rfoTpl) setTemplate((prev) => (JSON.stringify(prev) === JSON.stringify(rfoTpl) ? prev : rfoTpl));
+    if (stTpl) setSuratTugasTemplate((prev) => (JSON.stringify(prev) === JSON.stringify(stTpl) ? prev : stTpl));
+    if (baTpl) setBeritaAcaraTemplate((prev) => (JSON.stringify(prev) === JSON.stringify(baTpl) ? prev : baTpl));
+    if (pmTpl) setPermitBarangTemplate((prev) => (JSON.stringify(prev) === JSON.stringify(pmTpl) ? prev : pmTpl));
   }, []);
+
+  useEffect(() => {
+    loadTemplates();
+  }, [loadTemplates]);
+
+  useSharedDocumentSync(SHARED_TEMPLATE_KEYS, () => {
+    loadTemplates();
+  });
 
   const addToast = (type: ToastMessage["type"], title: string, message?: string) => {
     const id = Date.now().toString() + Math.random().toString(36).substring(2, 6);
@@ -139,10 +155,8 @@ export default function DocumentTemplatesRoute() {
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
         <TemplatePage
           template={template}
-          onUpdateTemplate={async (t) => {
+          onUpdateTemplate={(t) => {
             setTemplate(t);
-            await storageService.saveTemplate(t);
-            addToast("success", "Template RFO Tersimpan", "Perubahan template berhasil diperbarui.");
             fetch("/api/logs", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -156,10 +170,8 @@ export default function DocumentTemplatesRoute() {
             }).catch(() => {});
           }}
           suratTugasTemplate={suratTugasTemplate}
-          onUpdateSuratTugasTemplate={async (st) => {
+          onUpdateSuratTugasTemplate={(st) => {
             setSuratTugasTemplate(st);
-            await suratTugasStorage.saveTemplate(st);
-            addToast("success", "Template Surat Tugas Tersimpan", "Perubahan template berhasil diperbarui.");
             fetch("/api/logs", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -173,10 +185,8 @@ export default function DocumentTemplatesRoute() {
             }).catch(() => {});
           }}
           beritaAcaraTemplate={beritaAcaraTemplate}
-          onUpdateBeritaAcaraTemplate={async (ba) => {
+          onUpdateBeritaAcaraTemplate={(ba) => {
             setBeritaAcaraTemplate(ba);
-            await beritaAcaraStorage.saveTemplate(ba);
-            addToast("success", "Template Berita Acara Tersimpan", "Perubahan template berhasil diperbarui.");
             fetch("/api/logs", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -190,10 +200,8 @@ export default function DocumentTemplatesRoute() {
             }).catch(() => {});
           }}
           permitBarangTemplate={permitBarangTemplate}
-          onUpdatePermitBarangTemplate={async (pm) => {
+          onUpdatePermitBarangTemplate={(pm) => {
             setPermitBarangTemplate(pm);
-            await permitBarangStorage.saveTemplate(pm);
-            addToast("success", "Template Permit Barang Tersimpan", "Perubahan template berhasil diperbarui.");
             fetch("/api/logs", {
               method: "POST",
               headers: { "Content-Type": "application/json" },

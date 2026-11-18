@@ -48,34 +48,13 @@ export const SAMPLE_BANK_PAYMENT_VOUCHER: BankPaymentVoucherDocument = {
 };
 
 class BankPaymentVoucherStorageService {
-  constructor() {
-    this.initDefaultData();
-  }
-
-  private async initDefaultData(): Promise<void> {
-    try {
-      const existing = await indexedDbStorage.getItem<BankPaymentVoucherDocument[]>(
-        STORAGE_KEYS.DOCUMENTS
-      );
-      if (!existing || existing.length === 0) {
-        await indexedDbStorage.setItem(STORAGE_KEYS.DOCUMENTS, [
-          SAMPLE_BANK_PAYMENT_VOUCHER,
-        ]);
-      }
-    } catch (e) {
-      console.warn('BankPaymentVoucherStorage initialization notice:', e);
-    }
-  }
-
   async getAllVouchers(): Promise<BankPaymentVoucherDocument[]> {
     try {
-      const data = await indexedDbStorage.getItem<BankPaymentVoucherDocument[]>(
-        STORAGE_KEYS.DOCUMENTS
+      const data = await indexedDbStorage.ensureSharedDocuments<BankPaymentVoucherDocument>(
+        STORAGE_KEYS.DOCUMENTS as 'jdp_bank_payment_voucher_documents_v1',
+        [SAMPLE_BANK_PAYMENT_VOUCHER]
       );
-      if (!data || data.length === 0) {
-        return [SAMPLE_BANK_PAYMENT_VOUCHER];
-      }
-      return data.sort(
+      return [...data].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
     } catch (e) {
@@ -91,23 +70,16 @@ class BankPaymentVoucherStorageService {
 
   async saveVoucher(doc: BankPaymentVoucherDocument): Promise<boolean> {
     try {
-      const list = await this.getAllVouchers();
-      const existingIndex = list.findIndex((item) => item.id === doc.id);
-
-      if (existingIndex >= 0) {
-        list[existingIndex] = {
-          ...doc,
-          updatedAt: new Date().toISOString(),
-        };
-      } else {
-        list.unshift({
-          ...doc,
-          createdAt: doc.createdAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      }
-
-      await indexedDbStorage.setItem(STORAGE_KEYS.DOCUMENTS, list);
+      const now = new Date().toISOString();
+      const docToSave: BankPaymentVoucherDocument = {
+        ...doc,
+        createdAt: doc.createdAt || now,
+        updatedAt: now,
+      };
+      await indexedDbStorage.upsertSharedDocument<BankPaymentVoucherDocument>(
+        STORAGE_KEYS.DOCUMENTS as 'jdp_bank_payment_voucher_documents_v1',
+        docToSave
+      );
       return true;
     } catch (e) {
       console.error('Error saving Bank Payment Voucher:', e);
@@ -117,10 +89,11 @@ class BankPaymentVoucherStorageService {
 
   async deleteVoucher(id: string): Promise<boolean> {
     try {
-      const list = await this.getAllVouchers();
-      const filtered = list.filter((item) => item.id !== id);
-      await indexedDbStorage.setItem(STORAGE_KEYS.DOCUMENTS, filtered);
-      return true;
+      const res = await indexedDbStorage.deleteSharedDocument<BankPaymentVoucherDocument>(
+        STORAGE_KEYS.DOCUMENTS as 'jdp_bank_payment_voucher_documents_v1',
+        id
+      );
+      return res.deleted;
     } catch (e) {
       console.error('Error deleting Bank Payment Voucher:', e);
       return false;
@@ -129,7 +102,7 @@ class BankPaymentVoucherStorageService {
 
   async saveDraft(draft: BankPaymentVoucherDraft): Promise<void> {
     try {
-      await indexedDbStorage.setItem(STORAGE_KEYS.DRAFT, draft);
+      await indexedDbStorage.setLocalItem(STORAGE_KEYS.DRAFT, draft);
     } catch (e) {
       console.error('Error saving draft:', e);
     }
@@ -137,7 +110,7 @@ class BankPaymentVoucherStorageService {
 
   async getDraft(): Promise<BankPaymentVoucherDraft | null> {
     try {
-      return await indexedDbStorage.getItem<BankPaymentVoucherDraft>(STORAGE_KEYS.DRAFT);
+      return await indexedDbStorage.getLocalItem<BankPaymentVoucherDraft>(STORAGE_KEYS.DRAFT);
     } catch (e) {
       console.error('Error loading draft:', e);
       return null;
@@ -146,7 +119,7 @@ class BankPaymentVoucherStorageService {
 
   async clearDraft(): Promise<void> {
     try {
-      await indexedDbStorage.removeItem(STORAGE_KEYS.DRAFT);
+      await indexedDbStorage.removeLocalItem(STORAGE_KEYS.DRAFT);
     } catch (e) {
       console.error('Error clearing draft:', e);
     }

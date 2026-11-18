@@ -44,38 +44,13 @@ export const SAMPLE_SURAT_TUGAS: SuratTugasDocument = {
 };
 
 class SuratTugasStorageService {
-  constructor() {
-    this.initDefaultData();
-  }
-
-  private async initDefaultData(): Promise<void> {
-    try {
-      const existing = await indexedDbStorage.getItem<SuratTugasDocument[]>(STORAGE_KEYS.DOCUMENTS);
-      if (!existing || existing.length === 0) {
-        await indexedDbStorage.setItem(STORAGE_KEYS.DOCUMENTS, [SAMPLE_SURAT_TUGAS]);
-      }
-      const existingTemplate = await indexedDbStorage.getItem<SuratTugasTemplate>(
-        STORAGE_KEYS.TEMPLATE
-      );
-      if (!existingTemplate) {
-        await indexedDbStorage.setItem(
-          STORAGE_KEYS.TEMPLATE,
-          DEFAULT_SURAT_TUGAS_TEMPLATE
-        );
-      }
-    } catch (e) {
-      console.warn('SuratTugasStorage initialization notice:', e);
-    }
-  }
-
   async getAllSuratTugas(): Promise<SuratTugasDocument[]> {
     try {
-      const data = await indexedDbStorage.getItem<SuratTugasDocument[]>(STORAGE_KEYS.DOCUMENTS);
-      if (!data || data.length === 0) {
-        return [SAMPLE_SURAT_TUGAS];
-      }
-      // Sort newest created first
-      return data.sort(
+      const data = await indexedDbStorage.ensureSharedDocuments<SuratTugasDocument>(
+        STORAGE_KEYS.DOCUMENTS as 'jdp_surat_tugas_documents_v1',
+        [SAMPLE_SURAT_TUGAS]
+      );
+      return [...data].sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
     } catch (e) {
@@ -107,43 +82,31 @@ class SuratTugasStorageService {
   }
 
   async saveSuratTugas(doc: SuratTugasDocument): Promise<SuratTugasDocument> {
-    const list = await this.getAllSuratTugas();
-    const existingIndex = list.findIndex((item) => item.id === doc.id);
     const now = new Date().toISOString();
+    const docToSave: SuratTugasDocument = {
+      ...doc,
+      createdAt: doc.createdAt || now,
+      updatedAt: now,
+    };
 
-    let updatedList: SuratTugasDocument[];
-    if (existingIndex >= 0) {
-      updatedList = [...list];
-      updatedList[existingIndex] = {
-        ...doc,
-        updatedAt: now,
-      };
-    } else {
-      updatedList = [
-        {
-          ...doc,
-          createdAt: doc.createdAt || now,
-          updatedAt: now,
-        },
-        ...list,
-      ];
-    }
-
-    await indexedDbStorage.setItem(STORAGE_KEYS.DOCUMENTS, updatedList);
-    return doc;
+    const updatedList = await indexedDbStorage.upsertSharedDocument<SuratTugasDocument>(
+      STORAGE_KEYS.DOCUMENTS as 'jdp_surat_tugas_documents_v1',
+      docToSave
+    );
+    return updatedList.find((item) => item.id === docToSave.id) || docToSave;
   }
 
   async deleteSuratTugas(id: string): Promise<boolean> {
-    const list = await this.getAllSuratTugas();
-    const filtered = list.filter((item) => item.id !== id);
-    if (filtered.length === list.length) return false;
-    await indexedDbStorage.setItem(STORAGE_KEYS.DOCUMENTS, filtered);
-    return true;
+    const res = await indexedDbStorage.deleteSharedDocument<SuratTugasDocument>(
+      STORAGE_KEYS.DOCUMENTS as 'jdp_surat_tugas_documents_v1',
+      id
+    );
+    return res.deleted;
   }
 
   async getDraft(): Promise<SuratTugasDraft | null> {
     try {
-      return await indexedDbStorage.getItem<SuratTugasDraft>(STORAGE_KEYS.DRAFT);
+      return await indexedDbStorage.getLocalItem<SuratTugasDraft>(STORAGE_KEYS.DRAFT);
     } catch {
       return null;
     }
@@ -151,7 +114,7 @@ class SuratTugasStorageService {
 
   async saveDraft(draft: SuratTugasDraft): Promise<void> {
     try {
-      await indexedDbStorage.setItem(STORAGE_KEYS.DRAFT, draft);
+      await indexedDbStorage.setLocalItem(STORAGE_KEYS.DRAFT, draft);
     } catch (e) {
       console.warn('Failed to save draft Surat Tugas:', e);
     }
@@ -159,7 +122,7 @@ class SuratTugasStorageService {
 
   async clearDraft(): Promise<void> {
     try {
-      await indexedDbStorage.removeItem(STORAGE_KEYS.DRAFT);
+      await indexedDbStorage.removeLocalItem(STORAGE_KEYS.DRAFT);
     } catch (e) {
       console.warn('Failed to clear draft Surat Tugas:', e);
     }
@@ -167,33 +130,29 @@ class SuratTugasStorageService {
 
   async getTemplate(): Promise<SuratTugasTemplate> {
     try {
-      const data = await indexedDbStorage.getItem<SuratTugasTemplate>(STORAGE_KEYS.TEMPLATE);
-      if (!data) return DEFAULT_SURAT_TUGAS_TEMPLATE;
-      return { ...DEFAULT_SURAT_TUGAS_TEMPLATE, ...data };
+      return await indexedDbStorage.ensureSharedTemplate<SuratTugasTemplate>(
+        STORAGE_KEYS.TEMPLATE as 'jdp_surat_tugas_template_v1',
+        DEFAULT_SURAT_TUGAS_TEMPLATE
+      );
     } catch {
       return DEFAULT_SURAT_TUGAS_TEMPLATE;
     }
   }
 
   async saveTemplate(template: SuratTugasTemplate): Promise<SuratTugasTemplate> {
-    try {
-      await indexedDbStorage.setItem(STORAGE_KEYS.TEMPLATE, template);
-    } catch (e) {
-      console.warn('Failed to save Surat Tugas template:', e);
-    }
-    return template;
+    return await indexedDbStorage.saveSharedTemplate<SuratTugasTemplate>(
+      STORAGE_KEYS.TEMPLATE as 'jdp_surat_tugas_template_v1',
+      template,
+      DEFAULT_SURAT_TUGAS_TEMPLATE
+    );
   }
 
   async resetTemplate(): Promise<SuratTugasTemplate> {
-    try {
-      await indexedDbStorage.setItem(
-        STORAGE_KEYS.TEMPLATE,
-        DEFAULT_SURAT_TUGAS_TEMPLATE
-      );
-    } catch (e) {
-      console.warn('Failed to reset Surat Tugas template:', e);
-    }
-    return DEFAULT_SURAT_TUGAS_TEMPLATE;
+    return await indexedDbStorage.saveSharedTemplate<SuratTugasTemplate>(
+      STORAGE_KEYS.TEMPLATE as 'jdp_surat_tugas_template_v1',
+      DEFAULT_SURAT_TUGAS_TEMPLATE,
+      DEFAULT_SURAT_TUGAS_TEMPLATE
+    );
   }
 }
 

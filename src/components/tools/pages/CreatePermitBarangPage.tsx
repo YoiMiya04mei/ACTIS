@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSharedDocumentSync } from '@/hooks/useSharedDocumentSync';
+import { SHARED_DOCUMENT_KEYS } from '@/lib/sharedDocumentKeys';
 import {
   Save,
   Copy,
@@ -237,6 +239,18 @@ export const CreatePermitBarangPage: React.FC<CreatePermitBarangPageProps> = ({
       });
     }
   }, [initialEditData]);
+
+  const loadNextSequence = useCallback(() => {
+    permitBarangStorage.getNextSequenceNumber().then((next) => {
+      setSequenceNumber(next);
+    });
+  }, []);
+
+  useSharedDocumentSync([SHARED_DOCUMENT_KEYS[3]], () => {
+    if (!editingId) {
+      loadNextSequence();
+    }
+  });
 
   // Sync signer, recipient, and location from template if template changes
   useEffect(() => {
