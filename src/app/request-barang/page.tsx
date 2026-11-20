@@ -7,7 +7,6 @@ import { PageSizeSelector, PaginationNavigator } from "@/components/Pagination";
 import {
   AlertCircle,
   AlertTriangle,
-  ArrowRight,
   Boxes,
   CheckCircle2,
   ClipboardList,
@@ -27,10 +26,8 @@ import {
   Send,
   ShieldAlert,
   ShieldCheck,
-  Sparkles,
   Trash2,
   User,
-  UserX,
   X,
 } from "lucide-react";
 import {
@@ -66,26 +63,7 @@ interface PortalAuthState {
   rememberedUser: RememberedPortalUser | null;
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  admin: "Administrator",
-  noc_engineer: "NOC Engineer",
-  field_engineer: "Field Engineer",
-  sales_corporate: "Sales Corporate",
-  warehouse_admin: "Admin Gudang",
-  request_barang: "User Request Barang",
-};
-
 const SAVED_PASSWORD_SENTINEL = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
-
-function getInitials(name: string): string {
-  const parts = String(name || "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (parts.length === 0) return "U";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
 
 interface PublicCatalogItem {
   id: string;
@@ -159,7 +137,6 @@ export default function PublicRequestBarangPage() {
   const [loginRememberMe, setLoginRememberMe] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [loginSubmitting, setLoginSubmitting] = useState(false);
-  const [quickLoading, setQuickLoading] = useState(false);
   const [forgettingAccount, setForgettingAccount] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginSuccessNote, setLoginSuccessNote] = useState<string | null>(null);
@@ -356,7 +333,7 @@ export default function PublicRequestBarangPage() {
             forgetDevice,
           }),
         });
-      } catch {}
+      } catch { }
 
       setCatalog([]);
       setInUseTransactions([]);
@@ -416,47 +393,14 @@ export default function PublicRequestBarangPage() {
     handlePortalLogout,
   ]);
 
-  const handleQuickLogin = async () => {
-    if (quickLoading || loginSubmitting || forgettingAccount) return;
-    setLoginError(null);
-    setLoginSuccessNote(null);
-    setIsTimeout(false);
-    setQuickLoading(true);
-    try {
-      const res = await fetch("/api/request-barang/auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          useRememberCookie: true,
-          rememberMe: true,
-        }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.success) {
-        setUsingSavedCredential(false);
-        setLoginError(
-          json.error || "Sesi Ingat Saya tidak berlaku lagi. Silakan masuk dengan username dan password."
-        );
-        await checkPortalAuth();
-        return;
-      }
-      setLoginSuccessNote("Login berhasil! Membuka Form Request Barang...");
-      await checkPortalAuth();
-    } catch (err: any) {
-      setLoginError(err?.message || "Gagal memproses Masuk Cepat.");
-    } finally {
-      setQuickLoading(false);
-    }
-  };
-
   const handleForgetAccount = async () => {
-    if (forgettingAccount || quickLoading || loginSubmitting) return;
+    if (forgettingAccount || loginSubmitting) return;
     setForgettingAccount(true);
     setLoginError(null);
     setLoginSuccessNote(null);
     try {
       await fetch("/api/request-barang/auth?forgetDevice=1", { method: "DELETE" });
-    } catch {}
+    } catch { }
     userEditedPasswordRef.current = false;
     setUsingSavedCredential(false);
     setLoginUsername("");
@@ -470,7 +414,7 @@ export default function PublicRequestBarangPage() {
 
   const handlePortalLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (loginSubmitting || quickLoading || forgettingAccount) return;
+    if (loginSubmitting || forgettingAccount) return;
     setLoginError(null);
     setLoginSuccessNote(null);
     setIsTimeout(false);
@@ -478,7 +422,7 @@ export default function PublicRequestBarangPage() {
     const trimmedUsername = loginUsername.trim().toLowerCase();
     const matchesRemembered = Boolean(
       portalAuth.rememberedUser &&
-        trimmedUsername === portalAuth.rememberedUser.username.toLowerCase()
+      trimmedUsername === portalAuth.rememberedUser.username.toLowerCase()
     );
 
     if (usingSavedCredential && matchesRemembered) {
@@ -687,10 +631,10 @@ export default function PublicRequestBarangPage() {
     !portalAuth.loading &&
     (!portalAuth.loginRequired || (portalAuth.authenticated && portalAuth.hasAccess));
 
-  const isBusy = loginSubmitting || quickLoading || forgettingAccount;
+  const isBusy = loginSubmitting || forgettingAccount;
   const matchesRemembered = Boolean(
     portalAuth.rememberedUser &&
-      loginUsername.trim().toLowerCase() === portalAuth.rememberedUser.username.toLowerCase()
+    loginUsername.trim().toLowerCase() === portalAuth.rememberedUser.username.toLowerCase()
   );
   const showSavedState = usingSavedCredential && matchesRemembered;
 
@@ -771,7 +715,7 @@ export default function PublicRequestBarangPage() {
                       <p className="font-bold">Sesi Anda Telah Berakhir</p>
                       <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-300/90 leading-relaxed">
                         {portalAuth.rememberedUser
-                          ? "Demi keamanan akun, sesi ditutup karena tidak ada aktivitas. Klik Masuk Kembali atau isi kredensial."
+                          ? "Demi keamanan akun, sesi ditutup karena tidak ada aktivitas. Klik Masuk ke Form Request Barang tanpa mengetik ulang kredensial."
                           : "Anda telah lama tidak aktif di halaman ini. Silakan login kembali menggunakan username."}
                       </p>
                     </div>
@@ -799,76 +743,6 @@ export default function PublicRequestBarangPage() {
                   </div>
                 )}
 
-                {/* 1-Click Quick Login Card when valid actis_rb_remember exists */}
-                {portalAuth.rememberedUser && !loginSuccessNote && (
-                  <div className="mb-6 rounded-2xl border border-blue-200 dark:border-blue-800/60 bg-blue-50/75 dark:bg-blue-950/30 p-4 space-y-3.5">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-sm">
-                        {getInitials(portalAuth.rememberedUser.nama)}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
-                            {portalAuth.rememberedUser.nama}
-                          </span>
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 text-[10px] font-bold">
-                            <ShieldCheck className="w-3 h-3" />
-                            Tersimpan
-                          </span>
-                        </div>
-                        <p className="text-[11px] font-mono text-slate-600 dark:text-slate-300 truncate">
-                          @{portalAuth.rememberedUser.username}
-                        </p>
-                        <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
-                          {ROLE_LABELS[portalAuth.rememberedUser.role] || portalAuth.rememberedUser.role}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleQuickLogin}
-                        disabled={isBusy}
-                        className="flex-1 min-h-[44px] py-2.5 px-3.5 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 shadow-sm shadow-blue-500/20 transition disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
-                      >
-                        {quickLoading ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                            <span>Masuk Cepat...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Sparkles className="w-4 h-4 shrink-0" />
-                            <span>Masuk Kembali Tanpa Ketik Ulang</span>
-                            <ArrowRight className="w-3.5 h-3.5 shrink-0" />
-                          </>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleForgetAccount}
-                        disabled={isBusy}
-                        title="Hapus akun tersimpan di perangkat ini"
-                        className="min-h-[44px] px-3 py-2.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 transition disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shrink-0"
-                      >
-                        <UserX className="w-3.5 h-3.5" />
-                        <span>Ganti</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {portalAuth.rememberedUser && !loginSuccessNote && (
-                  <div className="relative flex items-center justify-center my-4">
-                    <div className="border-t border-slate-200 dark:border-slate-700/80 w-full" />
-                    <span className="px-3 bg-white dark:bg-slate-900 text-[11px] font-medium text-slate-400 dark:text-slate-500 whitespace-nowrap">
-                      atau masuk dengan username lain
-                    </span>
-                    <div className="border-t border-slate-200 dark:border-slate-700/80 w-full" />
-                  </div>
-                )}
-
                 <form onSubmit={handlePortalLogin} className="space-y-4">
                   <div>
                     <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -878,7 +752,7 @@ export default function PublicRequestBarangPage() {
                       >
                         Username
                       </label>
-                      {!portalAuth.rememberedUser && loginUsername && (
+                      {(portalAuth.rememberedUser || loginUsername) && (
                         <button
                           type="button"
                           onClick={handleForgetAccount}
@@ -910,7 +784,7 @@ export default function PublicRequestBarangPage() {
                             usingSavedCredential &&
                             portalAuth.rememberedUser &&
                             nextVal.toLowerCase() !==
-                              portalAuth.rememberedUser.username.toLowerCase()
+                            portalAuth.rememberedUser.username.toLowerCase()
                           ) {
                             userEditedPasswordRef.current = true;
                             setUsingSavedCredential(false);
@@ -1041,9 +915,8 @@ export default function PublicRequestBarangPage() {
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950 py-8 px-4 sm:px-6 lg:px-8">
       <div
-        className={`${
-          activeTab === "in-use" && showPortalMenuTabs ? "max-w-6xl" : "max-w-4xl"
-        } mx-auto space-y-6 transition-all`}
+        className={`${activeTab === "in-use" && showPortalMenuTabs ? "max-w-6xl" : "max-w-4xl"
+          } mx-auto space-y-6 transition-all`}
       >
         {/* Top Title Header */}
         <header className="text-center space-y-2">
@@ -1129,11 +1002,10 @@ export default function PublicRequestBarangPage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("request")}
-                className={`flex-1 min-w-[180px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
-                  activeTab === "request"
-                    ? "bg-blue-600 text-white shadow-xs"
-                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-                }`}
+                className={`flex-1 min-w-[180px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${activeTab === "request"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  }`}
               >
                 <ClipboardList className="w-4 h-4 shrink-0" />
                 <span>Form Request Barang</span>
@@ -1145,22 +1017,20 @@ export default function PublicRequestBarangPage() {
                   setActiveTab("in-use");
                   loadInUse(true);
                 }}
-                className={`flex-1 min-w-[200px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${
-                  activeTab === "in-use"
-                    ? "bg-amber-600 text-white shadow-xs"
-                    : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
-                }`}
+                className={`flex-1 min-w-[200px] inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition cursor-pointer ${activeTab === "in-use"
+                  ? "bg-amber-600 text-white shadow-xs"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                  }`}
               >
                 <Clock className="w-4 h-4 shrink-0" />
                 <span>Barang Sedang Digunakan</span>
                 <span
-                  className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold ${
-                    activeTab === "in-use"
-                      ? "bg-white/20 text-white"
-                      : activeNeedFinishCount > 0
-                        ? "bg-amber-100 text-amber-800 border border-amber-300"
-                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
-                  }`}
+                  className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold ${activeTab === "in-use"
+                    ? "bg-white/20 text-white"
+                    : activeNeedFinishCount > 0
+                      ? "bg-amber-100 text-amber-800 border border-amber-300"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                    }`}
                 >
                   {activeNeedFinishCount}
                 </span>
@@ -1174,11 +1044,10 @@ export default function PublicRequestBarangPage() {
             {inUseNotification && (
               <div
                 role="status"
-                className={`p-4 rounded-xl border text-xs sm:text-sm flex items-center justify-between gap-3 ${
-                  inUseNotification.type === "success"
-                    ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
-                    : "bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200"
-                }`}
+                className={`p-4 rounded-xl border text-xs sm:text-sm flex items-center justify-between gap-3 ${inUseNotification.type === "success"
+                  ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200"
+                  : "bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200"
+                  }`}
               >
                 <div className="flex items-center gap-2">
                   {inUseNotification.type === "success" ? (
@@ -1405,7 +1274,7 @@ export default function PublicRequestBarangPage() {
                                 if (d.unit_serial_numbers) {
                                   try {
                                     parsedSns = JSON.parse(d.unit_serial_numbers);
-                                  } catch {}
+                                  } catch { }
                                 }
 
                                 return (
@@ -1497,7 +1366,7 @@ export default function PublicRequestBarangPage() {
                                           if (ci.serial_numbers) {
                                             try {
                                               ciSns = JSON.parse(ci.serial_numbers);
-                                            } catch {}
+                                            } catch { }
                                           }
                                           return (
                                             <span
@@ -1519,15 +1388,14 @@ export default function PublicRequestBarangPage() {
 
                           <td className="py-3 px-4 text-center align-top">
                             <span
-                              className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold ${
-                                tx.status === "SUDAH_KEMBALI"
-                                  ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
-                                  : tx.status === "MENUNGGU_PENGEMBALIAN"
-                                    ? "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300"
-                                    : tx.status === "SEBAGIAN_KEMBALI"
-                                      ? "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
-                                      : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
-                              }`}
+                              className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold ${tx.status === "SUDAH_KEMBALI"
+                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                : tx.status === "MENUNGGU_PENGEMBALIAN"
+                                  ? "bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300"
+                                  : tx.status === "SEBAGIAN_KEMBALI"
+                                    ? "bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300"
+                                    : "bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300"
+                                }`}
                             >
                               {tx.status}
                             </span>
@@ -1537,16 +1405,16 @@ export default function PublicRequestBarangPage() {
                             <div className="flex items-center justify-center">
                               {(tx.status === "SEDANG_DIGUNAKAN" ||
                                 tx.status === "SEBAGIAN_KEMBALI") && (
-                                <button
-                                  type="button"
-                                  onClick={() => setFinishTx(tx)}
-                                  className="inline-flex items-center px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 font-bold text-[11px] shadow-xs transition cursor-pointer"
-                                  title="Selesaikan kegiatan & data pemakaian client serta sisa pengembalian"
-                                >
-                                  <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                                  Selesai
-                                </button>
-                              )}
+                                  <button
+                                    type="button"
+                                    onClick={() => setFinishTx(tx)}
+                                    className="inline-flex items-center px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 font-bold text-[11px] shadow-xs transition cursor-pointer"
+                                    title="Selesaikan kegiatan & data pemakaian client serta sisa pengembalian"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                                    Selesai
+                                  </button>
+                                )}
                               {tx.status === "MENUNGGU_PENGEMBALIAN" && (
                                 <span
                                   className="inline-flex items-center px-2.5 py-1 rounded-lg bg-orange-50 text-orange-700 dark:bg-orange-950/60 dark:text-orange-300 font-bold text-[11px] border border-orange-200/80 dark:border-orange-800"
@@ -1906,11 +1774,10 @@ export default function PublicRequestBarangPage() {
                         return (
                           <div
                             key={option}
-                            className={`flex items-center gap-2.5 min-h-[48px] px-3 py-2 rounded-lg border transition ${
-                              checked
-                                ? "border-blue-600 bg-blue-50/70 dark:bg-blue-950/30"
-                                : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                            }`}
+                            className={`flex items-center gap-2.5 min-h-[48px] px-3 py-2 rounded-lg border transition ${checked
+                              ? "border-blue-600 bg-blue-50/70 dark:bg-blue-950/30"
+                              : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                              }`}
                           >
                             <input
                               type="radio"
@@ -1975,11 +1842,10 @@ export default function PublicRequestBarangPage() {
                         return (
                           <div
                             key={loc}
-                            className={`flex items-center gap-3 min-h-[48px] px-3.5 py-2 rounded-lg border transition ${
-                              checked
-                                ? "border-blue-600 bg-blue-50/70 dark:bg-blue-950/30"
-                                : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
-                            }`}
+                            className={`flex items-center gap-3 min-h-[48px] px-3.5 py-2 rounded-lg border transition ${checked
+                              ? "border-blue-600 bg-blue-50/70 dark:bg-blue-950/30"
+                              : "border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800"
+                              }`}
                           >
                             <input
                               type="radio"

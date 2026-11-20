@@ -4,6 +4,17 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.43",
+      "date": "2026-11-20T16:51:29+07:00",
+      "title": "Menghapus Kartu Quick Login Redundan di Halaman Login",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Menghapus kartu Masuk Kembali Tanpa Ketik Ulang di bagian atas form /login dan /request-barang karena kredensial tersimpan dan pengingat Ingat Saya sudah otomatis terisi pada form di bawahnya"
+        }
+      ]
+    },
+    {
       "version": "1.2.42",
       "date": "2026-11-20T16:30:10+07:00",
       "title": "Edit In-Place Dokumen Arsip dan Riwayat Pengeditan Berdasarkan Akun Login",
