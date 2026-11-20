@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { Suspense, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { ArrowLeft, FolderClock, Sliders } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, Edit3, FolderClock, Loader2, Sliders, X } from "lucide-react";
 import { CreateUnifiedDocumentPage } from "@/components/tools/pages/CreateUnifiedDocumentPage";
 import { ToastContainer, ToastMessage } from "@/components/tools/Toast";
 import { useCurrentUser } from "@/context/UserContext";
@@ -21,13 +22,44 @@ import type { PermitBarangDocument, PermitBarangTemplate } from "@/types/permitB
 import { DEFAULT_PERMIT_BARANG_TEMPLATE } from "@/types/permitBarang";
 import { permitBarangStorage } from "@/services/permitBarangStorage";
 import type { BankPaymentVoucherDocument } from "@/types/bankPaymentVoucher";
+import { bankPaymentVoucherStorage } from "@/services/bankPaymentVoucherStorage";
 
-export default function DocumentsRoute() {
+type DocTab = "create" | "create-st" | "create-ba" | "create-pm" | "create-bpv";
+
+interface ActiveEditMeta {
+  typeLabel: string;
+  number: string;
+  id: string;
+}
+
+function stripAuditAndIdentityForDuplicate<T extends object>(doc: T): T {
+  return {
+    ...doc,
+    id: "",
+    letterNumber: undefined,
+    sequenceNumber: undefined,
+    voucherSequence: "",
+    rfoNumber: undefined,
+    createdAt: "",
+    updatedAt: "",
+    createdBy: undefined,
+    createdByName: undefined,
+    createdByRole: undefined,
+    lastEditedAt: undefined,
+    lastEditedById: undefined,
+    lastEditedByName: undefined,
+    lastEditedByUsername: undefined,
+    lastEditedByRole: undefined,
+    editHistory: undefined,
+  } as T;
+}
+
+function DocumentsRouteContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { currentUser } = useCurrentUser();
   const isSuperAdmin = currentUser?.role === "admin";
-  const [activeTab, setActiveTab] = useState<
-    "create" | "create-st" | "create-ba" | "create-pm" | "create-bpv"
-  >("create-ba");
+  const [activeTab, setActiveTab] = useState<DocTab>("create-ba");
 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [template, setTemplate] = useState<RFOTemplate>(DEFAULT_RFO_TEMPLATE);
@@ -47,6 +79,27 @@ export default function DocumentsRoute() {
   const [editingPermitBarang, setEditingPermitBarang] = useState<PermitBarangDocument | null>(null);
   const [editingBankPaymentVoucher, setEditingBankPaymentVoucher] =
     useState<BankPaymentVoucherDocument | null>(null);
+
+  const [activeEditMeta, setActiveEditMeta] = useState<ActiveEditMeta | null>(null);
+  const [resolvedParamKey, setResolvedParamKey] = useState<string>("");
+
+  const modeParam = searchParams.get("mode");
+  const typeParam = searchParams.get("type");
+  const idParam = searchParams.get("id");
+  const paramKey =
+    (modeParam === "edit" || modeParam === "duplicate") && typeParam && idParam
+      ? `${modeParam}:${typeParam}:${idParam}`
+      : "";
+  const isWaitingForTargetDoc = Boolean(paramKey && resolvedParamKey !== paramKey);
+
+  const clearAllEditingStates = useCallback(() => {
+    setEditingRFO(null);
+    setEditingSuratTugas(null);
+    setEditingBeritaAcara(null);
+    setEditingPermitBarang(null);
+    setEditingBankPaymentVoucher(null);
+    setActiveEditMeta(null);
+  }, []);
 
   const loadTemplates = useCallback(async () => {
     const [rfoTpl, stTpl, baTpl, pmTpl] = await Promise.all([
@@ -69,19 +122,163 @@ export default function DocumentsRoute() {
     loadTemplates();
   });
 
-  const addToast = (type: ToastMessage["type"], title: string, message?: string) => {
+  const addToast = useCallback((type: ToastMessage["type"], title: string, message?: string) => {
     const id = Date.now().toString() + Math.random().toString(36).substring(2, 6);
     setToasts((prev) => [...prev, { id, type, title, message }]);
-  };
+  }, []);
 
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
+  // Load target document from archive when ?mode=edit|duplicate&type=...&id=...
+  useEffect(() => {
+    if (!paramKey) {
+      clearAllEditingStates();
+      setResolvedParamKey("");
+      return;
+    }
+
+    let cancelled = false;
+    const isEditMode = modeParam === "edit";
+
+    const loadTargetDocument = async () => {
+      clearAllEditingStates();
+
+      try {
+        if (typeParam === "rfo") {
+          const doc = await storageService.getRFOById(idParam!);
+          if (cancelled) return;
+          if (!doc) {
+            addToast("error", "Dokumen Tidak Ditemukan", `Arsip RFO (${idParam}) tidak ditemukan.`);
+            setResolvedParamKey("");
+            router.replace("/tools/documents");
+            return;
+          }
+          setActiveTab("create");
+          setEditingRFO(isEditMode ? doc : stripAuditAndIdentityForDuplicate(doc));
+          if (isEditMode) {
+            setActiveEditMeta({
+              typeLabel: "RFO",
+              number: doc.ticketNo ? `#${doc.ticketNo}` : doc.id,
+              id: doc.id,
+            });
+          }
+          setResolvedParamKey(paramKey);
+          return;
+        }
+
+        if (typeParam === "surat-tugas") {
+          const doc = await suratTugasStorage.getSuratTugasById(idParam!);
+          if (cancelled) return;
+          if (!doc) {
+            addToast("error", "Dokumen Tidak Ditemukan", `Arsip Surat Tugas (${idParam}) tidak ditemukan.`);
+            setResolvedParamKey("");
+            router.replace("/tools/documents");
+            return;
+          }
+          setActiveTab("create-st");
+          setEditingSuratTugas(isEditMode ? doc : stripAuditAndIdentityForDuplicate(doc));
+          if (isEditMode) {
+            setActiveEditMeta({
+              typeLabel: "Surat Tugas",
+              number: doc.letterNumber || doc.id,
+              id: doc.id,
+            });
+          }
+          setResolvedParamKey(paramKey);
+          return;
+        }
+
+        if (typeParam === "berita-acara") {
+          const doc = await beritaAcaraStorage.getBeritaAcaraById(idParam!);
+          if (cancelled) return;
+          if (!doc) {
+            addToast("error", "Dokumen Tidak Ditemukan", `Arsip Berita Acara (${idParam}) tidak ditemukan.`);
+            setResolvedParamKey("");
+            router.replace("/tools/documents");
+            return;
+          }
+          setActiveTab("create-ba");
+          setEditingBeritaAcara(isEditMode ? doc : stripAuditAndIdentityForDuplicate(doc));
+          if (isEditMode) {
+            setActiveEditMeta({
+              typeLabel: "Berita Acara",
+              number: doc.letterNumber || doc.id,
+              id: doc.id,
+            });
+          }
+          setResolvedParamKey(paramKey);
+          return;
+        }
+
+        if (typeParam === "permit-barang") {
+          const doc = await permitBarangStorage.getPermitBarangById(idParam!);
+          if (cancelled) return;
+          if (!doc) {
+            addToast("error", "Dokumen Tidak Ditemukan", `Arsip Permit Barang (${idParam}) tidak ditemukan.`);
+            setResolvedParamKey("");
+            router.replace("/tools/documents");
+            return;
+          }
+          setActiveTab("create-pm");
+          setEditingPermitBarang(isEditMode ? doc : stripAuditAndIdentityForDuplicate(doc));
+          if (isEditMode) {
+            setActiveEditMeta({
+              typeLabel: "Permit Barang",
+              number: doc.letterNumber || doc.subject || doc.id,
+              id: doc.id,
+            });
+          }
+          setResolvedParamKey(paramKey);
+          return;
+        }
+
+        if (typeParam === "bank-voucher") {
+          const doc = await bankPaymentVoucherStorage.getVoucherById(idParam!);
+          if (cancelled) return;
+          if (!doc) {
+            addToast("error", "Dokumen Tidak Ditemukan", `Arsip Payment Voucher (${idParam}) tidak ditemukan.`);
+            setResolvedParamKey("");
+            router.replace("/tools/documents");
+            return;
+          }
+          setActiveTab("create-bpv");
+          setEditingBankPaymentVoucher(
+            isEditMode ? doc : stripAuditAndIdentityForDuplicate(doc)
+          );
+          if (isEditMode) {
+            setActiveEditMeta({
+              typeLabel: "Payment Voucher",
+              number: doc.voucherNumber || doc.id,
+              id: doc.id,
+            });
+          }
+          setResolvedParamKey(paramKey);
+          return;
+        }
+
+        addToast("error", "Jenis Dokumen Tidak Dikenal", `Tipe '${typeParam}' tidak valid.`);
+        setResolvedParamKey("");
+        router.replace("/tools/documents");
+      } catch {
+        if (cancelled) return;
+        addToast("error", "Gagal Memuat Dokumen", "Terjadi kesalahan saat membuka dokumen arsip.");
+        setResolvedParamKey("");
+        router.replace("/tools/documents");
+      }
+    };
+
+    loadTargetDocument();
+    return () => {
+      cancelled = true;
+    };
+  }, [paramKey, modeParam, typeParam, idParam, clearAllEditingStates, addToast, router]);
+
   const toolUser = currentUser
     ? {
         id: currentUser.id,
-        username: currentUser.email.split("@")[0],
+        username: currentUser.username || currentUser.email.split("@")[0],
         name: currentUser.nama,
         role: "admin" as const,
         position: currentUser.role,
@@ -97,6 +294,35 @@ export default function DocumentsRoute() {
         avatarColor: "from-blue-600 to-indigo-600",
         createdAt: new Date().toISOString(),
       };
+
+  const handleAfterDocumentSaved = (
+    docLabel: string,
+    wasEdit: boolean,
+    editLogText: string,
+    createLogText: string
+  ) => {
+    clearAllEditingStates();
+    setResolvedParamKey("");
+
+    fetch("/api/logs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nama_lengkap: currentUser?.nama || "NOC User",
+        email: currentUser?.email,
+        tipe: "DOCUMENT",
+        aktifitas: wasEdit ? `${editLogText} (${docLabel})` : createLogText,
+      }),
+    }).catch(() => {});
+
+    if (wasEdit) {
+      setTimeout(() => {
+        router.push("/tools/documents/history");
+      }, 450);
+    } else if (modeParam === "duplicate") {
+      router.replace("/tools/documents");
+    }
+  };
 
   return (
     <div className="space-y-4 animate-fadeIn">
@@ -136,95 +362,142 @@ export default function DocumentsRoute() {
         </div>
       </div>
 
+      {/* Mode Edit Banner */}
+      {activeEditMeta && (
+        <div className="px-4 py-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 shadow-2xs">
+          <div className="flex items-start gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/60 border border-amber-300 dark:border-amber-700 flex items-center justify-center text-amber-700 dark:text-amber-300 shrink-0 mt-0.5">
+              <Edit3 className="w-4 h-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                Mode Edit Dokumen Arsip &mdash; {activeEditMeta.typeLabel}{" "}
+                <span className="font-mono text-blue-700 dark:text-blue-300">
+                  ({activeEditMeta.number})
+                </span>
+              </p>
+              <p className="text-[11px] text-amber-800 dark:text-amber-300/90 mt-0.5">
+                Perubahan akan memperbarui dokumen ini secara langsung (tidak membuat file baru) dan mencatat akun{" "}
+                <strong>{currentUser?.nama || toolUser.name}</strong> ke riwayat edit.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              clearAllEditingStates();
+              setResolvedParamKey("");
+              router.push("/tools/documents/history");
+            }}
+            className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-amber-100 dark:hover:bg-slate-800 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700 text-xs font-bold inline-flex items-center gap-1.5 shrink-0 cursor-pointer transition"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>Batal Edit &amp; Kembali ke Arsip</span>
+          </button>
+        </div>
+      )}
+
       <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
-        <CreateUnifiedDocumentPage
-          activeTab={activeTab}
-          setActiveTab={(tab: any) => {
-            if (
-              tab === "create" ||
-              tab === "create-st" ||
-              tab === "create-ba" ||
-              tab === "create-pm" ||
-              tab === "create-bpv"
-            ) {
-              setActiveTab(tab);
+        {isWaitingForTargetDoc ? (
+          <div className="py-24 px-6 flex flex-col items-center justify-center gap-3 text-slate-500">
+            <Loader2 className="w-7 h-7 animate-spin text-blue-600" />
+            <p className="text-xs font-semibold">
+              Memuat data dokumen dari arsip...
+            </p>
+          </div>
+        ) : (
+          <CreateUnifiedDocumentPage
+            activeTab={activeTab}
+            setActiveTab={(tab: any) => {
+              if (
+                tab === "create" ||
+                tab === "create-st" ||
+                tab === "create-ba" ||
+                tab === "create-pm" ||
+                tab === "create-bpv"
+              ) {
+                if (tab !== activeTab && paramKey) {
+                  clearAllEditingStates();
+                  setResolvedParamKey("");
+                  router.replace("/tools/documents");
+                }
+                setActiveTab(tab);
+              }
+            }}
+            template={template}
+            editingRFO={editingRFO}
+            onRFOSaved={() =>
+              handleAfterDocumentSaved(
+                activeEditMeta?.number || editingRFO?.ticketNo || editingRFO?.id || "RFO",
+                Boolean(activeEditMeta || editingRFO?.id),
+                "Mengedit dokumen RFO",
+                "Menerbitkan Laporan Gangguan RFO"
+              )
             }
-          }}
-          template={template}
-          editingRFO={editingRFO}
-          onRFOSaved={() => {
-            setEditingRFO(null);
-            addToast("success", "RFO Berhasil Disimpan", "Dokumen telah tersimpan di arsip.");
-            fetch("/api/logs", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                nama_lengkap: currentUser?.nama || "NOC User",
-                email: currentUser?.email,
-                tipe: "DOCUMENT",
-                aktifitas: "Menerbitkan Laporan Gangguan RFO",
-              }),
-            }).catch(() => {});
-          }}
-          suratTugasTemplate={suratTugasTemplate}
-          editingSuratTugas={editingSuratTugas}
-          onSuratTugasSaved={() => {
-            setEditingSuratTugas(null);
-            addToast("success", "Surat Tugas Berhasil Disimpan", "Dokumen telah tersimpan di arsip.");
-            fetch("/api/logs", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                nama_lengkap: currentUser?.nama || "NOC User",
-                email: currentUser?.email,
-                tipe: "DOCUMENT",
-                aktifitas: "Menerbitkan Surat Tugas Teknisi Resmi",
-              }),
-            }).catch(() => {});
-          }}
-          beritaAcaraTemplate={beritaAcaraTemplate}
-          editingBeritaAcara={editingBeritaAcara}
-          onBeritaAcaraSaved={() => {
-            setEditingBeritaAcara(null);
-            addToast("success", "Berita Acara Berhasil Disimpan", "Dokumen telah tersimpan di arsip.");
-            fetch("/api/logs", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                nama_lengkap: currentUser?.nama || "NOC User",
-                email: currentUser?.email,
-                tipe: "DOCUMENT",
-                aktifitas: "Menerbitkan Berita Acara Uji Terima / Aktivasi",
-              }),
-            }).catch(() => {});
-          }}
-          permitBarangTemplate={permitBarangTemplate}
-          editingPermitBarang={editingPermitBarang}
-          onPermitBarangSaved={() => {
-            setEditingPermitBarang(null);
-            addToast("success", "Permit Barang Berhasil Disimpan", "Dokumen telah tersimpan di arsip.");
-            fetch("/api/logs", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                nama_lengkap: currentUser?.nama || "NOC User",
-                email: currentUser?.email,
-                tipe: "DOCUMENT",
-                aktifitas: "Menerbitkan Permit Masuk/Keluar Barang Data Center",
-              }),
-            }).catch(() => {});
-          }}
-          editingBankPaymentVoucher={editingBankPaymentVoucher}
-          onBankPaymentVoucherSaved={() => {
-            setEditingBankPaymentVoucher(null);
-            addToast("success", "Voucher Kas/Bank Berhasil Disimpan", "Dokumen telah tersimpan di arsip.");
-          }}
-          addToast={addToast}
-          currentUser={toolUser}
-        />
+            suratTugasTemplate={suratTugasTemplate}
+            editingSuratTugas={editingSuratTugas}
+            onSuratTugasSaved={() =>
+              handleAfterDocumentSaved(
+                activeEditMeta?.number || editingSuratTugas?.letterNumber || "Surat Tugas",
+                Boolean(activeEditMeta || editingSuratTugas?.id),
+                "Mengedit dokumen Surat Tugas",
+                "Menerbitkan Surat Tugas Teknisi Resmi"
+              )
+            }
+            beritaAcaraTemplate={beritaAcaraTemplate}
+            editingBeritaAcara={editingBeritaAcara}
+            onBeritaAcaraSaved={() =>
+              handleAfterDocumentSaved(
+                activeEditMeta?.number || editingBeritaAcara?.letterNumber || "Berita Acara",
+                Boolean(activeEditMeta || editingBeritaAcara?.id),
+                "Mengedit dokumen Berita Acara",
+                "Menerbitkan Berita Acara Uji Terima / Aktivasi"
+              )
+            }
+            permitBarangTemplate={permitBarangTemplate}
+            editingPermitBarang={editingPermitBarang}
+            onPermitBarangSaved={() =>
+              handleAfterDocumentSaved(
+                activeEditMeta?.number || editingPermitBarang?.letterNumber || "Permit Barang",
+                Boolean(activeEditMeta || editingPermitBarang?.id),
+                "Mengedit dokumen Permit Barang",
+                "Menerbitkan Permit Masuk/Keluar Barang Data Center"
+              )
+            }
+            editingBankPaymentVoucher={editingBankPaymentVoucher}
+            onBankPaymentVoucherSaved={() =>
+              handleAfterDocumentSaved(
+                activeEditMeta?.number ||
+                  editingBankPaymentVoucher?.voucherNumber ||
+                  "Payment Voucher",
+                Boolean(activeEditMeta || editingBankPaymentVoucher?.id),
+                "Mengedit dokumen Payment Voucher",
+                "Menerbitkan Bank Payment Voucher"
+              )
+            }
+            addToast={addToast}
+            currentUser={toolUser}
+          />
+        )}
       </div>
 
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>
+  );
+}
+
+export default function DocumentsRoute() {
+  return (
+    <Suspense
+      fallback={
+        <div className="py-24 flex flex-col items-center justify-center gap-3 text-slate-500">
+          <Loader2 className="w-7 h-7 animate-spin text-blue-600" />
+          <p className="text-xs font-semibold">Menyiapkan editor dokumen...</p>
+        </div>
+      }
+    >
+      <DocumentsRouteContent />
+    </Suspense>
   );
 }

@@ -1,4 +1,5 @@
 import type { UserRole } from './auth';
+import type { DocumentEditAuditFields } from './documentAudit';
 
 export interface BeritaAcaraPersonnel {
   id: string;
@@ -14,7 +15,7 @@ export interface BeritaAcaraAttachment {
   fileName?: string;
 }
 
-export interface BeritaAcaraDocument {
+export interface BeritaAcaraDocument extends DocumentEditAuditFields {
   id: string;
   letterNumber: string; // e.g. BA/121/X/2026/JDP
   sequenceNumber: number; // e.g. 120, 121
@@ -42,7 +43,7 @@ export interface BeritaAcaraDocument {
   updatedAt: string; // ISO
   createdBy?: string;
   createdByName?: string;
-  createdByRole?: UserRole;
+  createdByRole?: UserRole | string;
 }
 
 export interface BeritaAcaraDraft {

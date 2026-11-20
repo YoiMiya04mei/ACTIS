@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import type { DocumentEditEntry } from "@/types/documentAudit";
 import {
   ALL_SHARED_STORAGE_KEYS,
   isSharedDocumentKey,
@@ -7,11 +8,15 @@ import {
   getSampleIdsForKey,
   parseTimestampMs,
   type DeletedTombstone,
+  type SharedDocumentKey,
 } from "@/lib/sharedDocumentKeys";
 
 export interface SharedActor {
   id?: string | null;
   nama?: string | null;
+  username?: string | null;
+  email?: string | null;
+  role?: string | null;
 }
 
 export interface SharedStorageEntryResult<T = unknown> {
@@ -36,9 +41,204 @@ type DocRecord = {
   id: string;
   createdAt?: string;
   updatedAt?: string;
+  createdBy?: string;
+  createdByName?: string;
+  createdByRole?: string;
+  lastEditedAt?: string | null;
+  lastEditedById?: string | null;
+  lastEditedByName?: string | null;
+  lastEditedByUsername?: string | null;
+  lastEditedByRole?: string | null;
+  editHistory?: DocumentEditEntry[];
+  [key: string]: unknown;
 };
 
 const MAX_TOMBSTONES = 500;
+const MAX_EDIT_HISTORY = 50;
+
+function normalizeFieldForDiff(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+const DOC_DIFF_GROUPS: Record<
+  SharedDocumentKey,
+  Array<{ label: string; fields: string[] }>
+> = {
+  jdp_rfo_documents_v1: [
+    { label: "Tanggal RFO", fields: ["rfoDate"] },
+    { label: "Waktu Gangguan", fields: ["startTime", "endTime"] },
+    { label: "Root Cause", fields: ["rootCause"] },
+    { label: "Tindakan", fields: ["actionTaken"] },
+    { label: "Deskripsi Gangguan", fields: ["disruptionDescription"] },
+    { label: "No. Tiket", fields: ["ticketNo"] },
+    { label: "Pelanggan", fields: ["customerName"] },
+  ],
+  jdp_surat_tugas_documents_v1: [
+    { label: "Nomor Surat", fields: ["letterNumber"] },
+    { label: "Tanggal Surat", fields: ["createdDate"] },
+    { label: "Periode Visit", fields: ["startDate", "endDate"] },
+    { label: "Lokasi Visit", fields: ["visitLocation"] },
+    { label: "Daftar Personil", fields: ["personnel"] },
+    { label: "Teks Surat", fields: ["openingText", "closingText"] },
+    { label: "Penandatangan", fields: ["signerName", "signerPosition"] },
+  ],
+  jdp_berita_acara_documents_v1: [
+    { label: "Nomor Surat", fields: ["letterNumber"] },
+    { label: "Tanggal Surat", fields: ["createdDate"] },
+    { label: "Periode Pelaksanaan", fields: ["startDate", "endDate"] },
+    { label: "Lokasi Visit", fields: ["visitLocation"] },
+    { label: "Kepentingan", fields: ["purpose"] },
+    { label: "Tim Bertugas", fields: ["personnel"] },
+    { label: "Foto Dokumentasi", fields: ["attachments", "attachmentLabel"] },
+    { label: "Teks Surat", fields: ["openingText", "closingText"] },
+    { label: "Penandatangan", fields: ["signerName", "signerPosition"] },
+  ],
+  jdp_permit_barang_documents_v1: [
+    { label: "Nomor Surat", fields: ["letterNumber"] },
+    { label: "Perihal / Jenis Permit", fields: ["subject", "permitType"] },
+    { label: "Tujuan Penerima", fields: ["recipientTitle", "recipientAddress", "recipientCity"] },
+    { label: "Data Pemohon", fields: ["applicantName", "applicantPosition", "applicantPhone"] },
+    { label: "Waktu Pelaksanaan", fields: ["permitDate", "permitTime"] },
+    { label: "Aktifitas", fields: ["activity"] },
+    { label: "Lokasi", fields: ["location"] },
+    { label: "Daftar Perangkat", fields: ["devices"] },
+    { label: "Teks Surat", fields: ["openingText", "closingText"] },
+    { label: "Penandatangan", fields: ["signerName", "signerPosition"] },
+  ],
+  jdp_bank_payment_voucher_documents_v1: [
+    { label: "Nomor Voucher", fields: ["voucherNumber"] },
+    { label: "Tanggal Voucher", fields: ["voucherDate"] },
+    { label: "Pay To", fields: ["payTo"] },
+    { label: "Rincian Transaksi & Total", fields: ["items", "totalAmount"] },
+    { label: "Data Rekening Bank", fields: ["bankName", "bankAccount", "bankAccountName"] },
+    { label: "Prepared By / TTD", fields: ["preparedByName", "preparedBySignature"] },
+    {
+      label: "Persetujuan",
+      fields: ["approvedByName", "processedName", "recordedByName", "acknowledgedByName"],
+    },
+  ],
+};
+
+export function sanitizeEditHistory(raw: unknown): DocumentEditEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const clean: DocumentEditEntry[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const entry = item as Record<string, unknown>;
+    const editedAt = typeof entry.editedAt === "string" ? entry.editedAt.trim() : "";
+    const editedByName =
+      typeof entry.editedByName === "string" ? entry.editedByName.trim() : "";
+    if (!editedAt || !editedByName) continue;
+
+    clean.push({
+      editedAt,
+      editedById: typeof entry.editedById === "string" ? entry.editedById : null,
+      editedByName,
+      editedByUsername:
+        typeof entry.editedByUsername === "string" ? entry.editedByUsername : null,
+      editedByEmail: typeof entry.editedByEmail === "string" ? entry.editedByEmail : null,
+      editedByRole: typeof entry.editedByRole === "string" ? entry.editedByRole : null,
+      summary: typeof entry.summary === "string" ? entry.summary : undefined,
+    });
+  }
+  return clean.slice(0, MAX_EDIT_HISTORY);
+}
+
+export function buildDocumentEditSummary(
+  key: SharedDocumentKey,
+  prev: Record<string, unknown>,
+  next: Record<string, unknown>
+): string {
+  const groups = DOC_DIFF_GROUPS[key] || [];
+  const changedLabels: string[] = [];
+
+  for (const group of groups) {
+    const changed = group.fields.some(
+      (field) => normalizeFieldForDiff(prev[field]) !== normalizeFieldForDiff(next[field])
+    );
+    if (changed) {
+      changedLabels.push(group.label);
+    }
+  }
+
+  return changedLabels.length > 0
+    ? `Ubah: ${changedLabels.join(", ")}`
+    : "Memperbarui isi dokumen";
+}
+
+export function applyDocumentAuditOnUpsert(
+  key: SharedDocumentKey,
+  existingDoc: DocRecord | undefined,
+  incomingDoc: DocRecord,
+  actor: SharedActor | undefined,
+  nowIso: string
+): { record: DocRecord; isEdit: boolean; editSummary: string | null } {
+  const actorName = (actor?.nama || "").trim() || "Pengguna ACTIS";
+  const actorUsername = actor?.username ? actor.username.trim() : null;
+  const actorEmail = actor?.email ? actor.email.trim() : null;
+  const actorRole = actor?.role ? actor.role.trim() : null;
+  const actorId = actor?.id || null;
+
+  if (existingDoc) {
+    const priorHistory = sanitizeEditHistory(existingDoc.editHistory);
+    const editSummary = buildDocumentEditSummary(key, existingDoc, incomingDoc);
+
+    const newEntry: DocumentEditEntry = {
+      editedAt: nowIso,
+      editedById: actorId,
+      editedByName: actorName,
+      editedByUsername: actorUsername,
+      editedByEmail: actorEmail,
+      editedByRole: actorRole,
+      summary: editSummary,
+    };
+
+    const nextHistory = [newEntry, ...priorHistory].slice(0, MAX_EDIT_HISTORY);
+
+    const record: DocRecord = {
+      ...incomingDoc,
+      id: existingDoc.id,
+      createdAt: existingDoc.createdAt || incomingDoc.createdAt || nowIso,
+      createdBy: existingDoc.createdBy ?? incomingDoc.createdBy,
+      createdByName: existingDoc.createdByName || incomingDoc.createdByName || actorName,
+      createdByRole:
+        existingDoc.createdByRole || incomingDoc.createdByRole || actorRole || undefined,
+      updatedAt: nowIso,
+      lastEditedAt: nowIso,
+      lastEditedById: actorId,
+      lastEditedByName: actorName,
+      lastEditedByUsername: actorUsername,
+      lastEditedByRole: actorRole,
+      editHistory: nextHistory,
+    };
+
+    return { record, isEdit: true, editSummary };
+  }
+
+  const record: DocRecord = {
+    ...incomingDoc,
+    createdAt: incomingDoc.createdAt || nowIso,
+    createdBy: actorId || incomingDoc.createdBy,
+    createdByName: (actor?.nama || "").trim() || incomingDoc.createdByName || "Pengguna ACTIS",
+    createdByRole: actorRole || incomingDoc.createdByRole,
+    updatedAt: nowIso,
+    lastEditedAt: null,
+    lastEditedById: null,
+    lastEditedByName: null,
+    lastEditedByUsername: null,
+    lastEditedByRole: null,
+    editHistory: [],
+  };
+
+  return { record, isEdit: false, editSummary: null };
+}
 
 function parseJsonSafe<T>(raw: string | null | undefined, fallback: T): T {
   if (!raw || typeof raw !== "string") return fallback;
@@ -151,7 +351,12 @@ export async function upsertDocumentItem(
   key: string,
   item: DocRecord,
   actor?: SharedActor
-): Promise<SharedStorageEntryResult<DocRecord[]>> {
+): Promise<
+  SharedStorageEntryResult<DocRecord[]> & {
+    isEdit: boolean;
+    editSummary: string | null;
+  }
+> {
   if (!isSharedDocumentKey(key)) {
     throw new Error(`Invalid shared document key: ${key}`);
   }
@@ -173,12 +378,12 @@ export async function upsertDocumentItem(
       (t) => t.id !== item.id
     );
 
-    const existingDoc = safeDocs.find((d) => d.id === item.id);
-    const normalizedItem: DocRecord = {
-      ...item,
-      createdAt: item.createdAt || existingDoc?.createdAt || nowIso,
-      updatedAt: nowIso,
-    };
+    const existingDoc = safeDocs.find((d) => d && d.id === item.id);
+    const {
+      record: normalizedItem,
+      isEdit,
+      editSummary,
+    } = applyDocumentAuditOnUpsert(key, existingDoc, item, actor, nowIso);
 
     const nextDocs = [
       normalizedItem,
@@ -225,6 +430,8 @@ export async function upsertDocumentItem(
       deletedIds: tombstones.map((t) => t.id),
       updatedBy: saved.updated_by || null,
       updatedAt: saved.updated_at.toISOString(),
+      isEdit,
+      editSummary,
     };
   });
 }

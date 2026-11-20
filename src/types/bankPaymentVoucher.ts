@@ -1,3 +1,5 @@
+import type { DocumentEditAuditFields } from './documentAudit';
+
 export interface BankPaymentVoucherItem {
   id: string;
   accNo?: string;
@@ -6,7 +8,7 @@ export interface BankPaymentVoucherItem {
   amount: number;
 }
 
-export interface BankPaymentVoucherDocument {
+export interface BankPaymentVoucherDocument extends DocumentEditAuditFields {
   id: string;
   voucherNumber: string; // e.g. "VO-           /IX/2026" or "VO-001/IX/2026"
   voucherPrefix?: string; // e.g. "VO-"

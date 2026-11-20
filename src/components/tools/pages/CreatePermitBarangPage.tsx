@@ -213,7 +213,8 @@ export const CreatePermitBarangPage: React.FC<CreatePermitBarangPageProps> = ({
   // Sync initialEditData when editing from history
   useEffect(() => {
     if (initialEditData) {
-      setEditingId(initialEditData.id);
+      const hasDocId = Boolean(initialEditData.id);
+      setEditingId(hasDocId ? initialEditData.id : null);
       setPermitType(initialEditData.permitType || 'keluar');
       setCreatedDate(initialEditData.createdDate || toDateInputString());
       setLetterLocation(initialEditData.letterLocation || 'Sukabumi');
@@ -231,9 +232,17 @@ export const CreatePermitBarangPage: React.FC<CreatePermitBarangPageProps> = ({
       setDevices(initialEditData.devices || []);
       setSignerName(initialEditData.signerName || 'Rio Prayoga');
       setSignerPosition(initialEditData.signerPosition || 'Direktur');
-      if (initialEditData.openingText) setCustomOpening(initialEditData.openingText);
-      if (initialEditData.closingText) setCustomClosing(initialEditData.closingText);
+      setCustomOpening(initialEditData.openingText || '');
+      setCustomClosing(initialEditData.closingText || '');
+      if (hasDocId) {
+        setSequenceNumber(initialEditData.sequenceNumber || 101);
+      } else {
+        permitBarangStorage.getNextSequenceNumber().then((next) => {
+          setSequenceNumber(next);
+        });
+      }
     } else {
+      setEditingId(null);
       permitBarangStorage.getNextSequenceNumber().then((next) => {
         setSequenceNumber(next);
       });
@@ -374,7 +383,10 @@ export const CreatePermitBarangPage: React.FC<CreatePermitBarangPageProps> = ({
   const currentDoc: PermitBarangDocument = useMemo(() => {
     return {
       id: editingId || `PM-${Date.now()}`,
-      letterNumber: generatePermitBarangNumber(sequenceNumber, createdDate),
+      letterNumber:
+        editingId && initialEditData?.letterNumber
+          ? initialEditData.letterNumber
+          : generatePermitBarangNumber(sequenceNumber, createdDate),
       sequenceNumber,
       createdDate,
       letterLocation,
@@ -1106,7 +1118,7 @@ export const CreatePermitBarangPage: React.FC<CreatePermitBarangPageProps> = ({
                 className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer active:scale-95"
               >
                 <Save className="w-4 h-4" />
-                <span>Simpan Surat</span>
+                <span>{editingId ? 'Simpan Perubahan' : 'Simpan Surat'}</span>
               </button>
             </div>
           </div>

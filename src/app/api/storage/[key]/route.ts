@@ -86,6 +86,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const actor = {
     id: auth.user.id,
     nama: auth.user.nama,
+    username: auth.user.username || auth.user.email.split("@")[0] || null,
+    email: auth.user.email,
+    role: auth.user.role,
   };
 
   try {
@@ -167,8 +170,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
         email: auth.user.email,
         ip_address: clientIp,
         tipe: "DOCUMENT_GENERATE",
-        aktifitas: `Menyimpan dokumen [${key}]`,
-        detail: `ID: ${item.id} (v${result.version})`,
+        aktifitas: result.isEdit
+          ? `Mengedit dokumen [${key}]`
+          : `Menyimpan dokumen [${key}]`,
+        detail: result.isEdit
+          ? `ID: ${item.id} • ${result.editSummary || "Perubahan dokumen"} (v${result.version})`
+          : `ID: ${item.id} (v${result.version})`,
         user_agent: userAgent,
       }).catch(() => {});
       return NextResponse.json({ success: true, ...result }, { headers: NO_CACHE_HEADERS });

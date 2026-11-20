@@ -72,7 +72,7 @@ export default function DocumentHistoryRoute() {
   const toolUser = currentUser
     ? {
         id: currentUser.id,
-        username: currentUser.email.split("@")[0],
+        username: currentUser.username || currentUser.email.split("@")[0],
         name: currentUser.nama,
         role: "admin" as const,
         position: currentUser.role,
@@ -134,34 +134,34 @@ export default function DocumentHistoryRoute() {
           beritaAcaraTemplate={beritaAcaraTemplate}
           permitBarangTemplate={permitBarangTemplate}
           onEditRFO={(doc) => {
-            router.push("/tools/documents");
+            router.push(`/tools/documents?mode=edit&type=rfo&id=${encodeURIComponent(doc.id)}`);
           }}
           onDuplicateRFO={(doc) => {
-            router.push("/tools/documents");
+            router.push(`/tools/documents?mode=duplicate&type=rfo&id=${encodeURIComponent(doc.id)}`);
           }}
           onEditSuratTugas={(doc) => {
-            router.push("/tools/documents");
+            router.push(`/tools/documents?mode=edit&type=surat-tugas&id=${encodeURIComponent(doc.id)}`);
           }}
           onDuplicateSuratTugas={(doc) => {
-            router.push("/tools/documents");
+            router.push(`/tools/documents?mode=duplicate&type=surat-tugas&id=${encodeURIComponent(doc.id)}`);
           }}
           onEditBeritaAcara={(doc) => {
-            router.push("/tools/documents");
+            router.push(`/tools/documents?mode=edit&type=berita-acara&id=${encodeURIComponent(doc.id)}`);
           }}
           onDuplicateBeritaAcara={(doc) => {
-            router.push("/tools/documents");
+            router.push(`/tools/documents?mode=duplicate&type=berita-acara&id=${encodeURIComponent(doc.id)}`);
           }}
           onEditPermitBarang={(doc) => {
-            router.push("/tools/documents");
+            router.push(`/tools/documents?mode=edit&type=permit-barang&id=${encodeURIComponent(doc.id)}`);
           }}
           onDuplicatePermitBarang={(doc) => {
-            router.push("/tools/documents");
+            router.push(`/tools/documents?mode=duplicate&type=permit-barang&id=${encodeURIComponent(doc.id)}`);
           }}
           onEditBankPaymentVoucher={(doc) => {
-            router.push("/tools/documents");
+            router.push(`/tools/documents?mode=edit&type=bank-voucher&id=${encodeURIComponent(doc.id)}`);
           }}
           onDuplicateBankPaymentVoucher={(doc) => {
-            router.push("/tools/documents");
+            router.push(`/tools/documents?mode=duplicate&type=bank-voucher&id=${encodeURIComponent(doc.id)}`);
           }}
           addToast={addToast}
           currentUser={toolUser}

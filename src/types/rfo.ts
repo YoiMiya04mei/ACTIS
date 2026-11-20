@@ -1,6 +1,7 @@
 import type { UserRole } from './auth';
+import type { DocumentEditAuditFields } from './documentAudit';
 
-export interface RFODocument {
+export interface RFODocument extends DocumentEditAuditFields {
   id: string;
   rfoNumber?: string;
   rfoDate: string; // YYYY-MM-DD
@@ -17,7 +18,7 @@ export interface RFODocument {
   updatedAt: string; // ISO
   createdBy?: string; // User ID
   createdByName?: string; // Full Name of author
-  createdByRole?: UserRole; // Role of author
+  createdByRole?: UserRole | string; // Role of author
 }
 
 export interface RFOTemplate {

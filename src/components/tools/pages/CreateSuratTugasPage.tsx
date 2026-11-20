@@ -103,7 +103,7 @@ export const CreateSuratTugasPage: React.FC<CreateSuratTugasPageProps> = ({
   );
 
   // Editing state
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(initialEditData?.id || null);
 
   // UI state
   const [mobileTab, setMobileTab] = useState<'form' | 'preview'>('form');
@@ -123,8 +123,8 @@ export const CreateSuratTugasPage: React.FC<CreateSuratTugasPageProps> = ({
   // Initialize or load next sequence number
   useEffect(() => {
     if (initialEditData) {
-      setEditingId(initialEditData.id);
-      setSequenceNumber(initialEditData.sequenceNumber || 121);
+      const hasDocId = Boolean(initialEditData.id);
+      setEditingId(hasDocId ? initialEditData.id : null);
       setCreatedDate(initialEditData.createdDate || toDateInputString());
       setLetterLocation(initialEditData.letterLocation || 'Sukabumi');
       setStartDate(initialEditData.startDate);
@@ -143,11 +143,25 @@ export const CreateSuratTugasPage: React.FC<CreateSuratTugasPageProps> = ({
         DEFAULT_SURAT_TUGAS_OPENING_TEXT
       );
 
-      if (initialEditData.letterNumber) {
-        setIsManualNumber(true);
-        setCustomLetterNumber(initialEditData.letterNumber);
+      if (hasDocId) {
+        setSequenceNumber(initialEditData.sequenceNumber || 121);
+        if (initialEditData.letterNumber) {
+          setIsManualNumber(true);
+          setCustomLetterNumber(initialEditData.letterNumber);
+        } else {
+          setIsManualNumber(false);
+          setCustomLetterNumber('');
+        }
+      } else {
+        // Duplicate mode: generate a fresh automatic number
+        setIsManualNumber(false);
+        setCustomLetterNumber('');
+        loadNextSequence();
       }
     } else {
+      setEditingId(null);
+      setIsManualNumber(false);
+      setCustomLetterNumber('');
       loadNextSequence();
     }
   }, [initialEditData]);
@@ -868,7 +882,7 @@ export const CreateSuratTugasPage: React.FC<CreateSuratTugasPageProps> = ({
                 className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer active:scale-95"
               >
                 <Save className="w-4 h-4" />
-                <span>Simpan Surat</span>
+                <span>{editingId ? 'Simpan Perubahan' : 'Simpan Surat'}</span>
               </button>
             </div>
           </div>
@@ -955,7 +969,7 @@ export const CreateSuratTugasPage: React.FC<CreateSuratTugasPageProps> = ({
               className="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
             >
               <Save className="w-3.5 h-3.5" />
-              <span>Simpan Surat</span>
+              <span>{editingId ? 'Simpan Perubahan' : 'Simpan Surat'}</span>
             </button>
           </div>
         </div>

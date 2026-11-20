@@ -4,6 +4,25 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.42",
+      "date": "2026-11-20T16:30:10+07:00",
+      "title": "Edit In-Place Dokumen Arsip dan Riwayat Pengeditan Berdasarkan Akun Login",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Mengaktifkan edit langsung (in-place) dokumen dari Arsip & Riwayat Dokumen untuk semua jenis surat (RFO, Surat Tugas, Berita Acara, Permit Barang, Payment Voucher) tanpa membuat duplikat baru"
+        },
+        {
+          "type": "feat",
+          "text": "Menambahkan pencatatan riwayat edit server-authoritative berdasarkan akun login (nama, username, role, waktu WIB, dan ringkasan perubahan) beserta badge dan modal Riwayat Edit di halaman Arsip"
+        },
+        {
+          "type": "fix",
+          "text": "Memperbaiki fungsi Duplikasi Dokumen dan menjaga identitas pembuat awal pada Berita Acara serta nomor surat asli pada Permit Barang saat diedit"
+        }
+      ]
+    },
+    {
       "version": "1.2.41",
       "date": "2026-11-18T21:44:21+07:00",
       "title": "Menu Dashboard Dapat Diceklis dan Unceklis di Level Akses serta Landing Route Dinamis",

@@ -1,4 +1,5 @@
 import type { UserRole } from './auth';
+import type { DocumentEditAuditFields } from './documentAudit';
 
 export interface PermitBarangDevice {
   id: string;
@@ -10,7 +11,7 @@ export interface PermitBarangDevice {
 
 export type PermitType = 'keluar' | 'masuk' | 'custom';
 
-export interface PermitBarangDocument {
+export interface PermitBarangDocument extends DocumentEditAuditFields {
   id: string;
   letterNumber?: string; // Optional reference number e.g. PM/101/XII/2025/JDP
   sequenceNumber?: number;
@@ -60,7 +61,7 @@ export interface PermitBarangDocument {
   updatedAt: string; // ISO
   createdBy?: string;
   createdByName?: string;
-  createdByRole?: UserRole;
+  createdByRole?: UserRole | string;
 }
 
 export interface PermitBarangDraft {

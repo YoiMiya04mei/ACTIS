@@ -93,7 +93,7 @@ export const CreateRFOPage: React.FC<CreateRFOPageProps> = ({
   const [ticketNo, setTicketNo] = useState<string>('');
 
   // Editing state
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(initialEditData?.id || null);
 
   // Draft state & banner
   const [hasUnfinishedDraft, setHasUnfinishedDraft] = useState<boolean>(false);
@@ -114,7 +114,7 @@ export const CreateRFOPage: React.FC<CreateRFOPageProps> = ({
   // Check initial edit data or load draft on mount
   useEffect(() => {
     if (initialEditData) {
-      setEditingId(initialEditData.id);
+      setEditingId(initialEditData.id || null);
       setStartTime(initialEditData.startTime);
       setEndTime(initialEditData.endTime);
       setRfoDate(initialEditData.rfoDate || toDateInputString());
@@ -125,6 +125,7 @@ export const CreateRFOPage: React.FC<CreateRFOPageProps> = ({
       return;
     }
 
+    setEditingId(null);
     // Set default times (e.g. today 18:15 to 22:05 or current time)
     const now = new Date();
     const threeHoursAgo = new Date(now.getTime() - 3.5 * 60 * 60 * 1000);
@@ -206,6 +207,7 @@ export const CreateRFOPage: React.FC<CreateRFOPageProps> = ({
   const currentRFO: RFODocument = useMemo(() => {
     return {
       id: editingId || `RFO-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(100 + Math.random() * 900)}`,
+      rfoNumber: initialEditData?.rfoNumber,
       rfoDate: rfoDate || toDateInputString(),
       startTime,
       endTime,
@@ -215,6 +217,7 @@ export const CreateRFOPage: React.FC<CreateRFOPageProps> = ({
       actionTaken,
       disruptionDescription,
       ticketNo,
+      customerName: initialEditData?.customerName,
       createdAt: initialEditData?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       createdBy: initialEditData?.createdBy || currentUser?.id,
@@ -254,12 +257,16 @@ export const CreateRFOPage: React.FC<CreateRFOPageProps> = ({
 
     try {
       await storageService.saveRFO(currentRFO);
-      await storageService.clearDraft();
-      setHasUnfinishedDraft(false);
+      if (!editingId) {
+        await storageService.clearDraft();
+        setHasUnfinishedDraft(false);
+      }
       addToast(
         'success',
-        'RFO Berhasil Disimpan',
-        `Dokumen RFO telah tercatat di arsip History.`
+        editingId ? 'RFO Diperbarui' : 'RFO Berhasil Disimpan',
+        editingId
+          ? 'Perubahan dokumen RFO telah disimpan ke arsip.'
+          : 'Dokumen RFO telah tercatat di arsip History.'
       );
       if (onSaved) {
         onSaved();
@@ -688,7 +695,7 @@ export const CreateRFOPage: React.FC<CreateRFOPageProps> = ({
                 className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer active:scale-95"
               >
                 <Save className="w-4 h-4" />
-                <span>{editingId ? 'Simpan' : 'Simpan RFO'}</span>
+                <span>{editingId ? 'Simpan Perubahan' : 'Simpan RFO'}</span>
               </button>
             </div>
           </div>

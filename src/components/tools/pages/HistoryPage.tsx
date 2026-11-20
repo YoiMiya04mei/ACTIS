@@ -23,12 +23,14 @@ import {
   PackageCheck,
   CreditCard,
   FileSpreadsheet,
+  History,
 } from 'lucide-react';
 import type { RFODocument, RFOTemplate, ActiveTab } from '@/types/rfo';
 import type { SuratTugasDocument, SuratTugasTemplate } from '@/types/suratTugas';
 import type { BeritaAcaraDocument, BeritaAcaraTemplate } from '@/types/beritaAcara';
 import type { PermitBarangDocument, PermitBarangTemplate } from '@/types/permitBarang';
 import type { BankPaymentVoucherDocument } from '@/types/bankPaymentVoucher';
+import type { DocumentEditEntry } from '@/types/documentAudit';
 import type { UserAccount } from '@/types/auth';
 import type { ToastMessage } from '@/components/tools/Toast';
 import { authService } from '@/services/authService';
@@ -82,11 +84,37 @@ export interface UnifiedDocumentItem {
   createdAt: string;
   creator?: string;
   creatorRole?: string;
+  updatedAt?: string;
+  lastEditedAt?: string | null;
+  lastEditedByName?: string | null;
+  lastEditedByUsername?: string | null;
+  lastEditedByRole?: string | null;
+  editHistory: DocumentEditEntry[];
   rawRFO?: RFODocument;
   rawSuratTugas?: SuratTugasDocument;
   rawBeritaAcara?: BeritaAcaraDocument;
   rawPermitBarang?: PermitBarangDocument;
   rawBankPaymentVoucher?: BankPaymentVoucherDocument;
+}
+
+function normalizeDocEditMeta(doc: {
+  updatedAt?: string;
+  lastEditedAt?: string | null;
+  lastEditedByName?: string | null;
+  lastEditedByUsername?: string | null;
+  lastEditedByRole?: string | null;
+  editHistory?: DocumentEditEntry[];
+}) {
+  const history = Array.isArray(doc.editHistory) ? doc.editHistory : [];
+  const latest = history[0];
+  return {
+    updatedAt: doc.updatedAt,
+    lastEditedAt: doc.lastEditedAt || latest?.editedAt || null,
+    lastEditedByName: doc.lastEditedByName || latest?.editedByName || null,
+    lastEditedByUsername: doc.lastEditedByUsername || latest?.editedByUsername || null,
+    lastEditedByRole: doc.lastEditedByRole || latest?.editedByRole || null,
+    editHistory: history,
+  };
 }
 
 interface HistoryPageProps {
@@ -163,6 +191,12 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
     number: string;
   } | null>(null);
 
+  // Edit History Modal Target
+  const [editHistoryModalTarget, setEditHistoryModalTarget] = useState<{
+    id: string;
+    type: UnifiedDocType;
+  } | null>(null);
+
   // Downloading State indicator
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
@@ -225,6 +259,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
         createdAt: r.createdAt || r.rfoDate || new Date().toISOString(),
         creator: r.createdByName || 'Staff NOC',
         creatorRole: r.createdByRole || 'engineer',
+        ...normalizeDocEditMeta(r),
         rawRFO: r,
       });
     });
@@ -245,6 +280,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
         createdAt: st.createdAt || st.createdDate || new Date().toISOString(),
         creator: st.createdByName || 'Staff NOC',
         creatorRole: st.createdByRole || 'engineer',
+        ...normalizeDocEditMeta(st),
         rawSuratTugas: st,
       });
     });
@@ -266,6 +302,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
         createdAt: ba.createdAt || ba.createdDate || new Date().toISOString(),
         creator: ba.createdByName || 'Staff NOC',
         creatorRole: ba.createdByRole || 'engineer',
+        ...normalizeDocEditMeta(ba),
         rawBeritaAcara: ba,
       });
     });
@@ -288,6 +325,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
         createdAt: pm.createdAt || pm.createdDate || new Date().toISOString(),
         creator: pm.createdByName || 'Staff NOC',
         creatorRole: pm.createdByRole || 'engineer',
+        ...normalizeDocEditMeta(pm),
         rawPermitBarang: pm,
       });
     });
@@ -306,6 +344,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
         createdAt: bpv.createdAt || bpv.voucherDate || new Date().toISOString(),
         creator: bpv.createdByName || bpv.preparedByName || 'Super Admin',
         creatorRole: bpv.createdByRole || 'admin',
+        ...normalizeDocEditMeta(bpv),
         rawBankPaymentVoucher: bpv,
       });
     });
@@ -317,6 +356,16 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
       return sortBy === 'newest' ? timeB - timeA : timeA - timeB;
     });
   }, [rfos, suratTugasList, beritaAcaraList, permitBarangList, bankVoucherList, sortBy]);
+
+  // Active Edit History Modal item (keeps synced live with unifiedItems)
+  const activeEditHistoryItem = useMemo(() => {
+    if (!editHistoryModalTarget) return null;
+    return (
+      unifiedItems.find(
+        (u) => u.id === editHistoryModalTarget.id && u.type === editHistoryModalTarget.type
+      ) || null
+    );
+  }, [editHistoryModalTarget, unifiedItems]);
 
   // Distinct Creator Options
   const creatorOptions = useMemo(() => {
@@ -344,8 +393,11 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
         const matchesSubtitle = item.subtitle ? item.subtitle.toLowerCase().includes(q) : false;
         const matchesCreator = item.creator ? item.creator.toLowerCase().includes(q) : false;
         const matchesType = item.typeLabel.toLowerCase().includes(q);
+        const matchesEditor =
+          (item.lastEditedByName ? item.lastEditedByName.toLowerCase().includes(q) : false) ||
+          item.editHistory.some((e) => e.editedByName.toLowerCase().includes(q));
 
-        if (!matchesNumber && !matchesTitle && !matchesSubtitle && !matchesCreator && !matchesType) {
+        if (!matchesNumber && !matchesTitle && !matchesSubtitle && !matchesCreator && !matchesType && !matchesEditor) {
           return false;
         }
       }
@@ -1146,7 +1198,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                       </p>
                     )}
 
-                    {/* Creation Metadata: Tanggal & Waktu Pembuatan serta Pembuat */}
+                    {/* Creation Metadata: Tanggal & Waktu Pembuatan, Pembuat & Riwayat Edit */}
                     <div className="flex flex-wrap items-center gap-2 pt-1.5 border-t border-slate-100 mt-1">
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-slate-50 text-slate-700 border border-slate-200">
                         <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
@@ -1157,6 +1209,30 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                         <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                         <span>Oleh: <strong className="font-semibold text-slate-900">{item.creator}</strong> {item.creatorRole ? `(${item.creatorRole})` : ''}</span>
                       </span>
+
+                      {(item.editHistory.length > 0 || item.lastEditedByName) && (
+                        <button
+                          type="button"
+                          onClick={() => setEditHistoryModalTarget({ id: item.id, type: item.type })}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition-colors cursor-pointer"
+                          title="Klik untuk melihat seluruh riwayat pengeditan dokumen"
+                        >
+                          <History className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span>
+                            Diedit:{' '}
+                            <strong className="font-semibold text-amber-950">
+                              {item.lastEditedByName || '-'}
+                            </strong>
+                            {item.lastEditedByRole ? ` (${item.lastEditedByRole})` : ''}
+                            {(item.lastEditedAt || item.updatedAt)
+                              ? ` • ${formatCreationTimestamp(item.lastEditedAt || item.updatedAt)}`
+                              : ''}
+                          </span>
+                          <span className="px-1.5 py-0.2 rounded-full bg-amber-200/80 text-amber-950 text-[10px] font-bold">
+                            {item.editHistory.length > 0 ? `${item.editHistory.length}x` : '1x'} &bull; Riwayat
+                          </span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -1285,7 +1361,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
               </div>
             </div>
 
-            {/* Modal Subheader: Metadata Waktu Pembuatan & Pembuat */}
+            {/* Modal Subheader: Metadata Waktu Pembuatan, Pembuat & Riwayat Edit */}
             <div className="no-print px-3.5 py-2 sm:px-5 sm:py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center gap-x-4 sm:gap-x-5 gap-y-1 text-[11px] sm:text-xs text-slate-600 shrink-0">
               <span className="flex items-center gap-1.5 text-blue-700 font-medium">
                 <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
@@ -1296,6 +1372,25 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                 <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                 <span>Oleh: <strong className="text-slate-900 font-semibold">{selectedRFO.createdByName || 'Staff NOC'}</strong> {selectedRFO.createdByRole ? `(${selectedRFO.createdByRole})` : ''}</span>
               </span>
+              {((selectedRFO.editHistory && selectedRFO.editHistory.length > 0) || selectedRFO.lastEditedByName) && (
+                <>
+                  <span className="text-slate-300 hidden sm:inline">•</span>
+                  <button
+                    type="button"
+                    onClick={() => setEditHistoryModalTarget({ id: selectedRFO.id, type: 'rfo' })}
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-medium cursor-pointer transition-colors"
+                  >
+                    <History className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>
+                      Terakhir diedit: <strong>{selectedRFO.lastEditedByName || selectedRFO.editHistory?.[0]?.editedByName || '-'}</strong>
+                      {' '}({formatCreationTimestamp(selectedRFO.lastEditedAt || selectedRFO.editHistory?.[0]?.editedAt || selectedRFO.updatedAt)})
+                    </span>
+                    <span className="font-bold text-amber-900">
+                      Lihat Riwayat ({selectedRFO.editHistory?.length || 1})
+                    </span>
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Modal Body: A4 Paper Document */}
@@ -1357,7 +1452,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
               </div>
             </div>
 
-            {/* Modal Subheader: Metadata Waktu Pembuatan & Pembuat */}
+            {/* Modal Subheader: Metadata Waktu Pembuatan, Pembuat & Riwayat Edit */}
             <div className="no-print px-3.5 py-2 sm:px-5 sm:py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center gap-x-4 sm:gap-x-5 gap-y-1 text-[11px] sm:text-xs text-slate-600 shrink-0">
               <span className="flex items-center gap-1.5 text-blue-700 font-medium">
                 <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
@@ -1368,6 +1463,25 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                 <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                 <span>Oleh: <strong className="text-slate-900 font-semibold">{selectedSuratTugas.createdByName || 'Staff NOC'}</strong> {selectedSuratTugas.createdByRole ? `(${selectedSuratTugas.createdByRole})` : ''}</span>
               </span>
+              {((selectedSuratTugas.editHistory && selectedSuratTugas.editHistory.length > 0) || selectedSuratTugas.lastEditedByName) && (
+                <>
+                  <span className="text-slate-300 hidden sm:inline">•</span>
+                  <button
+                    type="button"
+                    onClick={() => setEditHistoryModalTarget({ id: selectedSuratTugas.id, type: 'surat-tugas' })}
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-medium cursor-pointer transition-colors"
+                  >
+                    <History className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>
+                      Terakhir diedit: <strong>{selectedSuratTugas.lastEditedByName || selectedSuratTugas.editHistory?.[0]?.editedByName || '-'}</strong>
+                      {' '}({formatCreationTimestamp(selectedSuratTugas.lastEditedAt || selectedSuratTugas.editHistory?.[0]?.editedAt || selectedSuratTugas.updatedAt)})
+                    </span>
+                    <span className="font-bold text-amber-900">
+                      Lihat Riwayat ({selectedSuratTugas.editHistory?.length || 1})
+                    </span>
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Modal Body: A4 Paper Document */}
@@ -1468,7 +1582,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
               </div>
             </div>
 
-            {/* Modal Subheader: Metadata Waktu Pembuatan & Pembuat */}
+            {/* Modal Subheader: Metadata Waktu Pembuatan, Pembuat & Riwayat Edit */}
             <div className="no-print px-3.5 py-2 sm:px-5 sm:py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center gap-x-4 sm:gap-x-5 gap-y-1 text-[11px] sm:text-xs text-slate-600 shrink-0">
               <span className="flex items-center gap-1.5 text-blue-700 font-medium">
                 <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
@@ -1479,6 +1593,25 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                 <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                 <span>Oleh: <strong className="text-slate-900 font-semibold">{selectedBeritaAcara.createdByName || 'Staff NOC'}</strong> {selectedBeritaAcara.createdByRole ? `(${selectedBeritaAcara.createdByRole})` : ''}</span>
               </span>
+              {((selectedBeritaAcara.editHistory && selectedBeritaAcara.editHistory.length > 0) || selectedBeritaAcara.lastEditedByName) && (
+                <>
+                  <span className="text-slate-300 hidden sm:inline">•</span>
+                  <button
+                    type="button"
+                    onClick={() => setEditHistoryModalTarget({ id: selectedBeritaAcara.id, type: 'berita-acara' })}
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-medium cursor-pointer transition-colors"
+                  >
+                    <History className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>
+                      Terakhir diedit: <strong>{selectedBeritaAcara.lastEditedByName || selectedBeritaAcara.editHistory?.[0]?.editedByName || '-'}</strong>
+                      {' '}({formatCreationTimestamp(selectedBeritaAcara.lastEditedAt || selectedBeritaAcara.editHistory?.[0]?.editedAt || selectedBeritaAcara.updatedAt)})
+                    </span>
+                    <span className="font-bold text-amber-900">
+                      Lihat Riwayat ({selectedBeritaAcara.editHistory?.length || 1})
+                    </span>
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Modal Body: A4 Paper Document */}
@@ -1583,7 +1716,7 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
               </div>
             </div>
 
-            {/* Modal Subheader: Metadata Waktu Pembuatan & Pembuat */}
+            {/* Modal Subheader: Metadata Waktu Pembuatan, Pembuat & Riwayat Edit */}
             <div className="no-print px-3.5 py-2 sm:px-5 sm:py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center gap-x-4 sm:gap-x-5 gap-y-1 text-[11px] sm:text-xs text-slate-600 shrink-0">
               <span className="flex items-center gap-1.5 text-blue-700 font-medium">
                 <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
@@ -1594,6 +1727,25 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                 <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                 <span>Oleh: <strong className="text-slate-900 font-semibold">{selectedPermitBarang.createdByName || 'Staff NOC'}</strong> {selectedPermitBarang.createdByRole ? `(${selectedPermitBarang.createdByRole})` : ''}</span>
               </span>
+              {((selectedPermitBarang.editHistory && selectedPermitBarang.editHistory.length > 0) || selectedPermitBarang.lastEditedByName) && (
+                <>
+                  <span className="text-slate-300 hidden sm:inline">•</span>
+                  <button
+                    type="button"
+                    onClick={() => setEditHistoryModalTarget({ id: selectedPermitBarang.id, type: 'permit-barang' })}
+                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-medium cursor-pointer transition-colors"
+                  >
+                    <History className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>
+                      Terakhir diedit: <strong>{selectedPermitBarang.lastEditedByName || selectedPermitBarang.editHistory?.[0]?.editedByName || '-'}</strong>
+                      {' '}({formatCreationTimestamp(selectedPermitBarang.lastEditedAt || selectedPermitBarang.editHistory?.[0]?.editedAt || selectedPermitBarang.updatedAt)})
+                    </span>
+                    <span className="font-bold text-amber-900">
+                      Lihat Riwayat ({selectedPermitBarang.editHistory?.length || 1})
+                    </span>
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Modal Body: A4 Paper Document */}
@@ -1666,9 +1818,9 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
               </div>
             </div>
 
-            {/* Modal Subheader: Metadata Waktu Pembuatan & Total */}
+            {/* Modal Subheader: Metadata Waktu Pembuatan, Riwayat Edit & Total */}
             <div className="no-print px-3.5 py-2 sm:px-5 sm:py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-[11px] sm:text-xs text-slate-600 shrink-0">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-2.5">
                 <span className="flex items-center gap-1.5 text-indigo-700 font-medium">
                   <Clock className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                   <span>Dibuat: <strong className="text-slate-900 font-semibold">{formatCreationTimestamp(selectedBankPaymentVoucher.createdAt)}</strong></span>
@@ -1678,6 +1830,25 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                   <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                   <span>Disiapkan: <strong className="text-slate-900 font-semibold">{selectedBankPaymentVoucher.preparedByName || selectedBankPaymentVoucher.payTo}</strong></span>
                 </span>
+                {((selectedBankPaymentVoucher.editHistory && selectedBankPaymentVoucher.editHistory.length > 0) || selectedBankPaymentVoucher.lastEditedByName) && (
+                  <>
+                    <span className="text-slate-300 hidden sm:inline">•</span>
+                    <button
+                      type="button"
+                      onClick={() => setEditHistoryModalTarget({ id: selectedBankPaymentVoucher.id, type: 'bank-voucher' })}
+                      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-medium cursor-pointer transition-colors"
+                    >
+                      <History className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span>
+                        Terakhir diedit: <strong>{selectedBankPaymentVoucher.lastEditedByName || selectedBankPaymentVoucher.editHistory?.[0]?.editedByName || '-'}</strong>
+                        {' '}({formatCreationTimestamp(selectedBankPaymentVoucher.lastEditedAt || selectedBankPaymentVoucher.editHistory?.[0]?.editedAt || selectedBankPaymentVoucher.updatedAt)})
+                      </span>
+                      <span className="font-bold text-amber-900">
+                        Lihat Riwayat ({selectedBankPaymentVoucher.editHistory?.length || 1})
+                      </span>
+                    </button>
+                  </>
+                )}
               </div>
               <div className="font-mono font-bold text-indigo-900">
                 Total: {formatRupiahFull(selectedBankPaymentVoucher.totalAmount)}
@@ -1692,6 +1863,139 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                   id="bank-payment-voucher-paper-doc"
                 />
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= EDIT HISTORY TIMELINE MODAL ================= */}
+      {activeEditHistoryItem && (
+        <div className="no-print fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3 bg-white shrink-0">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
+                  <History className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-slate-900 truncate">
+                    Riwayat Edit Dokumen
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500 mt-0.5">
+                    {renderTypeBadge(activeEditHistoryItem.type)}
+                    <span className="font-mono font-bold text-slate-800">
+                      {activeEditHistoryItem.number}
+                    </span>
+                    <span className="text-slate-300">&bull;</span>
+                    <span>Total {activeEditHistoryItem.editHistory.length}x edit</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditHistoryModalTarget(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer shrink-0"
+                aria-label="Tutup riwayat edit"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Timeline Body */}
+            <div className="p-5 overflow-y-auto space-y-3 bg-slate-50/70 flex-1">
+              {activeEditHistoryItem.editHistory.length === 0 ? (
+                <div className="p-4 rounded-xl bg-white border border-slate-200 text-xs text-slate-600">
+                  Terakhir diperbarui oleh{' '}
+                  <strong>{activeEditHistoryItem.lastEditedByName || '-'}</strong>{' '}
+                  pada{' '}
+                  <strong>
+                    {formatCreationTimestamp(
+                      activeEditHistoryItem.lastEditedAt || activeEditHistoryItem.updatedAt
+                    )}
+                  </strong>.
+                </div>
+              ) : (
+                activeEditHistoryItem.editHistory.map((entry, idx) => {
+                  const editNum = activeEditHistoryItem.editHistory.length - idx;
+                  return (
+                    <div
+                      key={`${entry.editedAt}-${idx}`}
+                      className="p-3.5 rounded-xl bg-white border border-slate-200 shadow-2xs space-y-2"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-200">
+                            Edit #{editNum}
+                          </span>
+                          {idx === 0 && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                              Terbaru
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-blue-600 shrink-0" />
+                          {formatCreationTimestamp(entry.editedAt)}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-800">
+                        <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <strong className="font-bold text-slate-900">{entry.editedByName}</strong>
+                        {entry.editedByUsername && (
+                          <span className="text-[11px] font-mono text-slate-500">
+                            @{entry.editedByUsername}
+                          </span>
+                        )}
+                        {entry.editedByRole && (
+                          <span className="px-2 py-0.2 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                            {entry.editedByRole}
+                          </span>
+                        )}
+                      </div>
+
+                      {entry.summary && (
+                        <p className="text-[11px] text-slate-600 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-200/80">
+                          {entry.summary}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+
+              {/* Original Creation Entry */}
+              <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 space-y-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    Dokumen Pertama Kali Dibuat
+                  </span>
+                  <span className="text-[11px] font-medium text-emerald-800 flex items-center gap-1">
+                    <Clock className="w-3 h-3 shrink-0" />
+                    {formatCreationTimestamp(activeEditHistoryItem.createdAt)}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-emerald-950">
+                  <UserCheck className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                  <strong className="font-bold">{activeEditHistoryItem.creator || 'Staff NOC'}</strong>
+                  {activeEditHistoryItem.creatorRole && (
+                    <span className="px-2 py-0.2 rounded-full text-[10px] font-semibold bg-white text-emerald-800 border border-emerald-200">
+                      {activeEditHistoryItem.creatorRole}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="px-5 py-3 border-t border-slate-200 flex justify-end bg-white shrink-0">
+              <button
+                type="button"
+                onClick={() => setEditHistoryModalTarget(null)}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold cursor-pointer transition"
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>

@@ -62,6 +62,14 @@ export const CreateUnifiedDocumentPage: React.FC<CreateUnifiedDocumentPageProps>
   addToast,
   currentUser,
 }) => {
+  const isEditingExisting = Boolean(
+    editingRFO?.id ||
+      editingSuratTugas?.id ||
+      editingBeritaAcara?.id ||
+      editingPermitBarang?.id ||
+      editingBankPaymentVoucher?.id
+  );
+
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 overflow-hidden bg-slate-50">
       {/* Top Document Type Selector Header Bar */}
@@ -152,7 +160,10 @@ export const CreateUnifiedDocumentPage: React.FC<CreateUnifiedDocumentPageProps>
         <div className="flex items-center gap-2 text-xs shrink-0">
           <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-lg bg-slate-50 border border-slate-200 text-slate-700">
             <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-            <span>Dibuat: <strong className="text-slate-900 font-bold">{currentUser?.name || 'Staff NOC'}</strong></span>
+            <span>
+              {isEditingExisting ? 'Diedit:' : 'Dibuat:'}{' '}
+              <strong className="text-slate-900 font-bold">{currentUser?.name || 'Staff NOC'}</strong>
+            </span>
           </div>
           <div className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-slate-700">
             <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />

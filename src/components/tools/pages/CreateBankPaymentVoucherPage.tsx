@@ -155,7 +155,7 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
   // Sync initialEditData when editing from history
   useEffect(() => {
     if (initialEditData) {
-      setEditingId(initialEditData.id);
+      setEditingId(initialEditData.id || null);
       setPayTo(initialEditData.payTo || '');
       setVoucherDate(initialEditData.voucherDate || toDateInputString());
       setVoucherPrefix(initialEditData.voucherPrefix || 'VO-');
@@ -181,6 +181,8 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
       if (initialEditData.companyName) setCompanyName(initialEditData.companyName);
       if (initialEditData.companyAddress) setCompanyAddress(initialEditData.companyAddress);
       if (initialEditData.companyCountry) setCompanyCountry(initialEditData.companyCountry);
+    } else {
+      setEditingId(null);
     }
   }, [initialEditData]);
 
@@ -224,6 +226,7 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
       companyCountry,
       createdAt: initialEditData?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      createdBy: initialEditData?.createdBy || authUser?.id || currentUser?.id,
       createdByName: initialEditData?.createdByName || authUser?.nama || currentUser?.name || 'Permadi Pratama',
       createdByRole: initialEditData?.createdByRole || authUser?.role || currentUser?.position || 'user',
     };
@@ -374,8 +377,10 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
       if (success) {
         addToast(
           'success',
-          'Voucher Berhasil Disimpan',
-          `Dokumen ${currentDoc.voucherNumber} berhasil diarsipkan ke Arsip Dokumen.`
+          editingId ? 'Voucher Diperbarui' : 'Voucher Berhasil Disimpan',
+          editingId
+            ? `Perubahan voucher ${currentDoc.voucherNumber} telah disimpan ke arsip.`
+            : `Dokumen ${currentDoc.voucherNumber} berhasil diarsipkan ke Arsip Dokumen.`
         );
         if (onSaved) {
           onSaved();
@@ -495,6 +500,11 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
               <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 uppercase tracking-wider">
                 Voucher
               </span>
+              {editingId && (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 uppercase tracking-wider">
+                  Mode Edit
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-slate-500 truncate hidden md:block">
               Buat dan terbitkan voucher pembayaran bank, otomatis menghitung total &amp; terbilang
@@ -562,7 +572,7 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
             title="Simpan voucher ke arsip dokumen"
           >
             <Save className="w-3.5 h-3.5" />
-            <span>Simpan</span>
+            <span>{editingId ? 'Simpan Perubahan' : 'Simpan'}</span>
           </button>
         </div>
       </div>

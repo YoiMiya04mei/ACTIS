@@ -1,4 +1,5 @@
 import type { UserRole } from './auth';
+import type { DocumentEditAuditFields } from './documentAudit';
 
 export interface SuratTugasPersonnel {
   id: string;
@@ -7,7 +8,7 @@ export interface SuratTugasPersonnel {
   position?: string;
 }
 
-export interface SuratTugasDocument {
+export interface SuratTugasDocument extends DocumentEditAuditFields {
   id: string;
   letterNumber: string; // e.g. ST/120/IX/2026/JDP
   sequenceNumber: number; // e.g. 120, 121
@@ -33,7 +34,7 @@ export interface SuratTugasDocument {
   updatedAt: string; // ISO
   createdBy?: string;
   createdByName?: string;
-  createdByRole?: UserRole;
+  createdByRole?: UserRole | string;
 }
 
 export interface SuratTugasDraft {
