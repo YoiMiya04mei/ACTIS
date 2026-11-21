@@ -26,6 +26,9 @@ import {
   Hash,
   Activity,
   SlidersHorizontal,
+  ChevronRight,
+  ChevronDown,
+  X,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
 import { useDialog } from "@/context/DialogContext";
@@ -33,8 +36,13 @@ import {
   SubnetSummary,
   IpamGlobalSummary,
   UsedIpDetail,
+  IpSubnetSegment,
   parseCidr,
+  buildIpSubnetSegments,
+  matchesIpSegmentSearch,
 } from "@/lib/ipamUtils";
+
+type DetailAvailabilityFilter = "ALL" | "USED" | "IDLE";
 
 export default function IpamPage() {
   const { currentUser } = useCurrentUser();
@@ -47,9 +55,11 @@ export default function IpamPage() {
   const [subnets, setSubnets] = useState<SubnetSummary[]>([]);
   const [unmanagedIps, setUnmanagedIps] = useState<UsedIpDetail[]>([]);
 
-  // Filtering & Search
-  const [selectedPrefixCidr, setSelectedPrefixCidr] = useState<string>("ALL");
+  // Filtering & Search (default empty: click a prefix row to reveal used & idle details)
+  const [selectedPrefixCidr, setSelectedPrefixCidr] = useState<string>("");
+  const [prefixSearchQuery, setPrefixSearchQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [availabilityFilter, setAvailabilityFilter] = useState<DetailAvailabilityFilter>("ALL");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<"ALL" | "ACTIVE" | "RESERVED">("ALL");
 
   // Add Prefix Modal
@@ -91,6 +101,17 @@ export default function IpamPage() {
     setTimeout(() => {
       setCopiedText(null);
     }, 2000);
+  };
+
+  const handleSelectPrefix = (cidr: string) => {
+    if (selectedPrefixCidr === cidr) {
+      setSelectedPrefixCidr("");
+      return;
+    }
+    setSelectedPrefixCidr(cidr);
+    setAvailabilityFilter("ALL");
+    setSelectedStatusFilter("ALL");
+    setSearchQuery("");
   };
 
   const handleAddPrefix = async (e: React.FormEvent) => {
@@ -136,7 +157,7 @@ export default function IpamPage() {
         throw new Error(data.error || "Gagal menghapus prefix");
       }
       if (selectedPrefixCidr === cidr) {
-        setSelectedPrefixCidr("ALL");
+        setSelectedPrefixCidr("");
       }
       await fetchIpamData();
     } catch (err: any) {
@@ -158,7 +179,7 @@ export default function IpamPage() {
       if (!res.ok || !data.success) {
         throw new Error(data.error || "Gagal mereset prefix");
       }
-      setSelectedPrefixCidr("ALL");
+      setSelectedPrefixCidr("");
       await fetchIpamData();
     } catch (err: any) {
       void alertDialog(err.message || "Gagal mereset prefix");
@@ -171,37 +192,67 @@ export default function IpamPage() {
     return parseCidr(newPrefixCidr.trim());
   }, [newPrefixCidr]);
 
-  // Aggregate used IPs based on active tab selection
-  const displayedUsedIps = useMemo(() => {
-    let list: (UsedIpDetail & { parentSubnet?: string })[] = [];
+  // Filter master subnet list
+  const filteredSubnets = useMemo(() => {
+    const q = prefixSearchQuery.trim().toLowerCase();
+    if (!q) return subnets;
+    return subnets.filter(
+      (s) =>
+        s.cidr.toLowerCase().includes(q) ||
+        s.description.toLowerCase().includes(q) ||
+        s.firstUsable.toLowerCase().includes(q) ||
+        s.lastUsable.toLowerCase().includes(q) ||
+        s.netmask.toLowerCase().includes(q)
+    );
+  }, [subnets, prefixSearchQuery]);
 
-    if (selectedPrefixCidr === "ALL") {
-      subnets.forEach((s) => {
-        s.usedIps.forEach((u) => list.push({ ...u, parentSubnet: s.cidr }));
-      });
-    } else if (selectedPrefixCidr === "UNMANAGED") {
-      unmanagedIps.forEach((u) => list.push({ ...u, parentSubnet: "Luar Prefix" }));
-    } else {
-      const targetSubnet = subnets.find((s) => s.cidr === selectedPrefixCidr);
-      if (targetSubnet) {
-        targetSubnet.usedIps.forEach((u) =>
-          list.push({ ...u, parentSubnet: targetSubnet.cidr })
-        );
+  // Active selected subnet summary (when clicking a subnet row)
+  const selectedSubnet = useMemo(() => {
+    if (!selectedPrefixCidr || selectedPrefixCidr === "UNMANAGED") return null;
+    return subnets.find((s) => s.cidr === selectedPrefixCidr) || null;
+  }, [subnets, selectedPrefixCidr]);
+
+  // Build phpIPAM-style interleaved IDLE ranges + USED IPs for the selected subnet
+  const rawSubnetSegments = useMemo(() => {
+    if (!selectedSubnet) return [] as IpSubnetSegment[];
+    return buildIpSubnetSegments(selectedSubnet);
+  }, [selectedSubnet]);
+
+  const idleRangeBlockCount = useMemo(
+    () => rawSubnetSegments.filter((seg) => seg.type === "IDLE").length,
+    [rawSubnetSegments]
+  );
+
+  const displayedSubnetSegments = useMemo(() => {
+    return rawSubnetSegments.filter((seg) => {
+      if (availabilityFilter === "USED" && seg.type !== "USED") return false;
+      if (availabilityFilter === "IDLE" && seg.type !== "IDLE") return false;
+
+      if (seg.type === "USED") {
+        if (selectedStatusFilter === "ACTIVE" && seg.detail.source !== "POP_SITE") return false;
+        if (selectedStatusFilter === "RESERVED" && seg.detail.source !== "ORDER_QUEUE") return false;
+      } else if (availabilityFilter === "ALL" && selectedStatusFilter !== "ALL") {
+        // When explicitly filtering allocation type (Aktif / Reservasi), focus on matching Used rows
+        return false;
       }
-    }
 
-    // Apply status filter
+      return matchesIpSegmentSearch(seg, searchQuery);
+    });
+  }, [rawSubnetSegments, availabilityFilter, selectedStatusFilter, searchQuery]);
+
+  // Filtered list for UNMANAGED ("Luar Prefix") view
+  const displayedUnmanagedIps = useMemo(() => {
+    if (selectedPrefixCidr !== "UNMANAGED") return [];
+    let list = unmanagedIps.map((u) => ({ ...u, parentSubnet: "Luar Prefix" }));
     if (selectedStatusFilter === "ACTIVE") {
       list = list.filter((item) => item.source === "POP_SITE");
     } else if (selectedStatusFilter === "RESERVED") {
       list = list.filter((item) => item.source === "ORDER_QUEUE");
     }
-
-    // Apply search filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      list = list.filter((item) => {
-        return (
+      list = list.filter(
+        (item) =>
           item.ip.toLowerCase().includes(q) ||
           item.siteId.toLowerCase().includes(q) ||
           item.namaPic.toLowerCase().includes(q) ||
@@ -209,23 +260,24 @@ export default function IpamPage() {
           (item.vlan && item.vlan.toString().includes(q)) ||
           (item.server && item.server.toLowerCase().includes(q)) ||
           (item.infrastruktur && item.infrastruktur.toLowerCase().includes(q))
-        );
-      });
+      );
     }
-
     return list;
-  }, [subnets, unmanagedIps, selectedPrefixCidr, selectedStatusFilter, searchQuery]);
+  }, [unmanagedIps, selectedPrefixCidr, selectedStatusFilter, searchQuery]);
+
+  const totalAllUsedIpsCount = useMemo(
+    () => subnets.reduce((acc, s) => acc + s.usedIps.length, 0) + unmanagedIps.length,
+    [subnets, unmanagedIps]
+  );
 
   // Export CSV handler
   const handleExportCsv = () => {
-    if (displayedUsedIps.length === 0) {
-      void alertDialog("Tidak ada data IP untuk diexport.");
-      return;
-    }
+    const escapeCsv = (val: unknown) => `"${String(val ?? "").replace(/"/g, '""')}"`;
 
     const headers = [
-      "Alamat IP",
+      "Alamat IP / Range",
       "Status",
+      "Jumlah IP",
       "Subnet Prefix",
       "Site ID",
       "Nama PIC",
@@ -240,32 +292,110 @@ export default function IpamPage() {
       "Terakhir Diperbarui",
     ];
 
-    const rows = displayedUsedIps.map((u) => [
-      `"${u.ip}"`,
-      `"${u.source === "POP_SITE" ? "Aktif" : "Reservasi Antrean"}"`,
-      `"${u.parentSubnet || "-"}"`,
-      `"${u.siteId}"`,
-      `"${u.namaPic.replace(/"/g, '""')}"`,
-      `"${(u.namaPerusahaan || "-").replace(/"/g, '""')}"`,
-      `"${u.kategoriLayanan}"`,
-      `"${u.subLayanan || "-"}"`,
-      `"${u.vlan || "-"}"`,
-      `"${u.server || "-"}"`,
-      `"${u.infrastruktur || "-"}"`,
-      `"${u.mediaKoneksi || "-"}"`,
-      `"${u.statusLayanan}"`,
-      `"${u.updatedAt ? new Date(u.updatedAt).toLocaleString("id-ID") : "-"}"`,
-    ]);
+    let rows: string[][] = [];
+
+    if (selectedSubnet) {
+      rows = displayedSubnetSegments.map((seg) => {
+        if (seg.type === "IDLE") {
+          const ipLabel =
+            seg.startIp === seg.endIp ? seg.startIp : `${seg.startIp} - ${seg.endIp}`;
+          return [
+            escapeCsv(ipLabel),
+            escapeCsv("Idle / Tersedia"),
+            escapeCsv(seg.count),
+            escapeCsv(selectedSubnet.cidr),
+            escapeCsv("-"),
+            escapeCsv("-"),
+            escapeCsv("-"),
+            escapeCsv("-"),
+            escapeCsv("-"),
+            escapeCsv("-"),
+            escapeCsv("-"),
+            escapeCsv("-"),
+            escapeCsv("-"),
+            escapeCsv("Available"),
+            escapeCsv("-"),
+          ];
+        }
+        const u = seg.detail;
+        return [
+          escapeCsv(u.ip),
+          escapeCsv(u.source === "POP_SITE" ? "Terpakai (Aktif)" : "Reservasi Antrean"),
+          escapeCsv(1),
+          escapeCsv(selectedSubnet.cidr),
+          escapeCsv(u.siteId),
+          escapeCsv(u.namaPic),
+          escapeCsv(u.namaPerusahaan || "-"),
+          escapeCsv(u.kategoriLayanan),
+          escapeCsv(u.subLayanan || "-"),
+          escapeCsv(u.vlan || "-"),
+          escapeCsv(u.server || "-"),
+          escapeCsv(u.infrastruktur || "-"),
+          escapeCsv(u.mediaKoneksi || "-"),
+          escapeCsv(u.statusLayanan),
+          escapeCsv(u.updatedAt ? new Date(u.updatedAt).toLocaleString("id-ID") : "-"),
+        ];
+      });
+    } else if (selectedPrefixCidr === "UNMANAGED") {
+      rows = displayedUnmanagedIps.map((u) => [
+        escapeCsv(u.ip),
+        escapeCsv(u.source === "POP_SITE" ? "Terpakai (Aktif)" : "Reservasi Antrean"),
+        escapeCsv(1),
+        escapeCsv("Luar Prefix"),
+        escapeCsv(u.siteId),
+        escapeCsv(u.namaPic),
+        escapeCsv(u.namaPerusahaan || "-"),
+        escapeCsv(u.kategoriLayanan),
+        escapeCsv(u.subLayanan || "-"),
+        escapeCsv(u.vlan || "-"),
+        escapeCsv(u.server || "-"),
+        escapeCsv(u.infrastruktur || "-"),
+        escapeCsv(u.mediaKoneksi || "-"),
+        escapeCsv(u.statusLayanan),
+        escapeCsv(u.updatedAt ? new Date(u.updatedAt).toLocaleString("id-ID") : "-"),
+      ]);
+    } else {
+      const allRows: (UsedIpDetail & { parentSubnet: string })[] = [];
+      subnets.forEach((s) => s.usedIps.forEach((u) => allRows.push({ ...u, parentSubnet: s.cidr })));
+      unmanagedIps.forEach((u) => allRows.push({ ...u, parentSubnet: "Luar Prefix" }));
+      rows = allRows.map((u) => [
+        escapeCsv(u.ip),
+        escapeCsv(u.source === "POP_SITE" ? "Terpakai (Aktif)" : "Reservasi Antrean"),
+        escapeCsv(1),
+        escapeCsv(u.parentSubnet),
+        escapeCsv(u.siteId),
+        escapeCsv(u.namaPic),
+        escapeCsv(u.namaPerusahaan || "-"),
+        escapeCsv(u.kategoriLayanan),
+        escapeCsv(u.subLayanan || "-"),
+        escapeCsv(u.vlan || "-"),
+        escapeCsv(u.server || "-"),
+        escapeCsv(u.infrastruktur || "-"),
+        escapeCsv(u.mediaKoneksi || "-"),
+        escapeCsv(u.statusLayanan),
+        escapeCsv(u.updatedAt ? new Date(u.updatedAt).toLocaleString("id-ID") : "-"),
+      ]);
+    }
+
+    if (rows.length === 0) {
+      void alertDialog("Tidak ada data IP untuk diexport.");
+      return;
+    }
 
     const csvContent =
-      "data:text/csv;charset=utf-8," +
-      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+      "data:text/csv;charset=utf-8,\uFEFF" +
+      [headers.map(escapeCsv).join(","), ...rows.map((e) => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
+    const suffix = selectedSubnet
+      ? `_${selectedSubnet.cidr.replace("/", "_")}`
+      : selectedPrefixCidr === "UNMANAGED"
+      ? "_Luar_Prefix"
+      : "";
     link.setAttribute(
       "download",
-      `IPAM_Prefix_Public_${new Date().toISOString().split("T")[0]}.csv`
+      `IPAM_Prefix_Public${suffix}_${new Date().toISOString().split("T")[0]}.csv`
     );
     document.body.appendChild(link);
     link.click();
@@ -327,7 +457,7 @@ export default function IpamPage() {
           <button
             type="button"
             onClick={handleExportCsv}
-            disabled={displayedUsedIps.length === 0}
+            disabled={loading || (totalAllUsedIpsCount === 0 && !selectedSubnet)}
             className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition shadow-xs cursor-pointer flex items-center disabled:opacity-50"
             title="Download Rekapitulasi CSV"
           >
@@ -444,245 +574,52 @@ export default function IpamPage() {
         </div>
       </div>
 
-      {/* SUBNET CARDS GRID (phpIPAM Subnet Overviews) */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <h2 className="text-sm font-black text-slate-900 dark:text-slate-100 flex items-center">
-            <Network className="w-4 h-4 mr-2 text-blue-600" />
-            Daftar Subnet Prefix IP Public ({subnets.length})
-          </h2>
-          <span className="text-[11px] text-slate-400">
-            Klik subnet untuk melihat rincian alokasi & rekomendasi IP
-          </span>
-        </div>
+      {/* MASTER SUBNET PREFIX LIST TABLE */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div className="p-4 sm:px-5 border-b border-slate-200/80 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-black text-slate-900 dark:text-slate-100 flex items-center">
+              <Network className="w-4 h-4 mr-2 text-blue-600" />
+              Daftar Subnet Prefix IP Public ({subnets.length})
+            </h2>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Klik baris subnet untuk menampilkan rincian berapa IP yang terpakai &amp; range IP yang masih Idle.
+            </p>
+          </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-          {subnets.map((subnet) => {
-            const isSelected = selectedPrefixCidr === subnet.cidr;
-            const barColor = getUsageBarColor(subnet.usagePct);
-            const badgeColor = getUsageBadgeColor(subnet.usagePct);
-
-            return (
-              <div
-                key={subnet.cidr}
-                onClick={() => setSelectedPrefixCidr(isSelected ? "ALL" : subnet.cidr)}
-                className={`p-4 rounded-2xl bg-white dark:bg-slate-900 border transition-all cursor-pointer shadow-xs hover:shadow-md ${
-                  isSelected
-                    ? "border-blue-500 dark:border-blue-400 ring-2 ring-blue-500/20"
-                    : "border-slate-200/90 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
-                }`}
-              >
-                {/* Header Subnet & Badge */}
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center space-x-2">
-                      <span className="font-mono font-black text-base text-slate-900 dark:text-slate-100">
-                        {subnet.cidr}
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeColor}`}
-                      >
-                        {subnet.usagePct}% Terpakai
-                      </span>
-                    </div>
-                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
-                      {subnet.description}
-                    </p>
-                  </div>
-
-                  {isAdmin && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeletePrefix(subnet.cidr);
-                      }}
-                      className="p-1.5 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition cursor-pointer"
-                      title="Hapus Prefix Ini"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                {/* phpIPAM Usage Progress Bar */}
-                <div className="space-y-1 mt-3">
-                  <div className="flex items-center justify-between text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                    <span>
-                      {subnet.usedIpsCount} / {subnet.usableHosts} Host
-                    </span>
-                    <span className="text-slate-400 font-mono text-[10px]">
-                      Sisa: {subnet.freeIpsCount} IP
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-500 ${barColor}`}
-                      style={{ width: `${Math.min(100, subnet.usagePct)}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Technical Subnet Specs */}
-                <div className="mt-3.5 pt-3 border-t border-slate-100 dark:border-slate-800/80 grid grid-cols-2 gap-2 text-[11px]">
-                  <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Rentang Host:</span>
-                    <span className="font-mono text-slate-700 dark:text-slate-300 text-[10px] truncate block">
-                      {subnet.firstUsable} - {subnet.lastUsable}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block font-medium">Netmask:</span>
-                    <span className="font-mono text-slate-700 dark:text-slate-300 text-[10px]">
-                      {subnet.netmask}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Next Available IP Box */}
-                {subnet.nextAvailableIp && (
-                  <div className="mt-3 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 flex items-center justify-between">
-                    <div className="flex items-center space-x-1.5 overflow-hidden">
-                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold shrink-0">
-                        Next IP:
-                      </span>
-                      <span className="font-mono font-bold text-xs text-slate-800 dark:text-slate-200 truncate">
-                        {subnet.nextAvailableIp}
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCopy(subnet.nextAvailableIp!);
-                      }}
-                      className="px-2 py-0.5 rounded-md text-[10px] font-bold text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/60 transition flex items-center shrink-0 cursor-pointer"
-                    >
-                      {copiedText === subnet.nextAvailableIp ? (
-                        <>
-                          <Check className="w-3 h-3 mr-1 text-emerald-600" /> Disalin
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="w-3 h-3 mr-1" /> Salin
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* FILTER & TAB BAR FOR IP DETAILS */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm p-4 sm:p-5 space-y-4">
-        {/* Row 1: Subnet Tabs */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-1.5 overflow-x-auto pb-1">
-            <span className="text-xs font-bold text-slate-400 dark:text-slate-500 mr-1 flex items-center">
-              <Filter className="w-3.5 h-3.5 mr-1" /> Filter Prefix:
-            </span>
-
-            <button
-              type="button"
-              onClick={() => setSelectedPrefixCidr("ALL")}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                selectedPrefixCidr === "ALL"
-                  ? "bg-blue-600 text-white shadow-xs"
-                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-              }`}
-            >
-              Semua Prefix ({subnets.reduce((acc, s) => acc + s.usedIpsCount, 0)})
-            </button>
-
-            {subnets.map((s) => (
-              <button
-                key={s.cidr}
-                type="button"
-                onClick={() => setSelectedPrefixCidr(s.cidr)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition font-mono cursor-pointer ${
-                  selectedPrefixCidr === s.cidr
-                    ? "bg-blue-600 text-white shadow-xs"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-                }`}
-              >
-                {s.cidr} ({s.usedIpsCount})
-              </button>
-            ))}
-
+          <div className="flex flex-wrap items-center gap-2">
             {unmanagedIps.length > 0 && (
               <button
                 type="button"
-                onClick={() => setSelectedPrefixCidr("UNMANAGED")}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                onClick={() => handleSelectPrefix("UNMANAGED")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 border ${
                   selectedPrefixCidr === "UNMANAGED"
-                    ? "bg-rose-600 text-white shadow-xs"
-                    : "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                    ? "bg-rose-600 text-white border-rose-600 shadow-xs"
+                    : "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/50"
                 }`}
               >
+                <ShieldAlert className="w-3.5 h-3.5" />
                 Luar Prefix ({unmanagedIps.length})
               </button>
             )}
-          </div>
 
-          {/* Search Box */}
-          <div className="relative w-full lg:w-72 shrink-0">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-              <Search className="w-4 h-4" />
+            <div className="relative w-full sm:w-64">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <Search className="w-3.5 h-3.5" />
+              </div>
+              <input
+                type="text"
+                value={prefixSearchQuery}
+                onChange={(e) => setPrefixSearchQuery(e.target.value)}
+                placeholder="Cari CIDR, deskripsi, netmask..."
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50/70 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+              />
             </div>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari IP, PIC, Site ID, VLAN..."
-              className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50/60 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
-            />
           </div>
         </div>
 
-        {/* Row 2: Status Toggle (All / Active POP Site / Order Queue) */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-          <div className="flex items-center space-x-2">
-            <span className="text-[11px] font-bold text-slate-400">Tipe Alokasi:</span>
-            <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
-              {[
-                { label: "Semua", val: "ALL" },
-                { label: "Aktif (POP & Enterprise)", val: "ACTIVE" },
-                { label: "Reservasi (Antrean)", val: "RESERVED" },
-              ].map((opt) => (
-                <button
-                  key={opt.val}
-                  type="button"
-                  onClick={() => setSelectedStatusFilter(opt.val as any)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
-                    selectedStatusFilter === opt.val
-                      ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs"
-                      : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            Menampilkan{" "}
-            <span className="font-bold text-slate-800 dark:text-slate-200">
-              {displayedUsedIps.length} IP
-            </span>{" "}
-            tercatat
-          </div>
-        </div>
-      </div>
-
-      {/* TABLE OF ASSIGNED / USED IPs */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm overflow-hidden">
         {loading ? (
-          <div className="py-20 text-center">
+          <div className="py-16 text-center">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent"></div>
             <p className="mt-3 text-sm text-slate-500 font-medium">Menghitung alokasi IP public...</p>
           </div>
@@ -692,27 +629,620 @@ export default function IpamPage() {
             <p className="font-bold mt-2">Gagal Memuat Data IPAM</p>
             <p className="text-xs mt-1">{error}</p>
           </div>
-        ) : displayedUsedIps.length === 0 ? (
-          <div className="py-16 text-center px-4 space-y-3">
-            <CheckCircle2 className="w-12 h-12 mx-auto text-emerald-500" />
-            <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
-              Tidak Ada IP Terpakai pada Filter Ini
-            </h3>
-            <p className="text-xs text-slate-500 max-w-md mx-auto">
-              {selectedPrefixCidr !== "ALL"
-                ? `Subnet prefix ${selectedPrefixCidr} masih memiliki 100% host bebas untuk dialokasikan.`
-                : "Belum ada alokasi IP public yang sesuai dengan pencarian atau filter Anda."}
-            </p>
+        ) : filteredSubnets.length === 0 ? (
+          <div className="py-12 text-center text-xs text-slate-500">
+            Tidak ada subnet prefix IP Public yang cocok dengan pencarian Anda.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
                 <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  <th className="py-3 px-4">Subnet Prefix &amp; Deskripsi</th>
+                  <th className="py-3 px-4">Rentang Host Usable</th>
+                  <th className="py-3 px-4">Netmask</th>
+                  <th className="py-3 px-4 text-right">Terpakai</th>
+                  <th className="py-3 px-4 text-right">Idle (Free)</th>
+                  <th className="py-3 px-4">Utilisasi</th>
+                  <th className="py-3 px-4">Next IP</th>
+                  <th className="py-3 px-4 text-center">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-medium text-slate-700 dark:text-slate-300">
+                {filteredSubnets.map((subnet) => {
+                  const isSelected = selectedPrefixCidr === subnet.cidr;
+                  const barColor = getUsageBarColor(subnet.usagePct);
+                  const badgeColor = getUsageBadgeColor(subnet.usagePct);
+
+                  return (
+                    <tr
+                      key={subnet.cidr}
+                      onClick={() => handleSelectPrefix(subnet.cidr)}
+                      className={`transition cursor-pointer ${
+                        isSelected
+                          ? "bg-blue-50/90 dark:bg-blue-950/45 ring-1 ring-inset ring-blue-500/40"
+                          : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
+                      }`}
+                    >
+                      {/* Prefix & Description */}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <span
+                            className={`p-1 rounded-lg transition ${
+                              isSelected
+                                ? "bg-blue-600 text-white"
+                                : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                            }`}
+                          >
+                            {isSelected ? (
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            )}
+                          </span>
+                          <div className="min-w-0">
+                            <span className="font-mono font-black text-sm text-slate-900 dark:text-slate-100 block">
+                              {subnet.cidr}
+                            </span>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate max-w-xs">
+                              {subnet.description}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Host Range */}
+                      <td className="py-3 px-4 font-mono text-[11px] text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                        {subnet.firstUsable} - {subnet.lastUsable}
+                      </td>
+
+                      {/* Netmask */}
+                      <td className="py-3 px-4 font-mono text-[11px] text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        {subnet.netmask}
+                      </td>
+
+                      {/* Used */}
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <span className="font-mono font-bold text-amber-700 dark:text-amber-400">
+                          {subnet.usedIpsCount.toLocaleString("id-ID")}
+                        </span>
+                        <span className="text-[10px] text-slate-400 ml-1">
+                          / {subnet.usableHosts.toLocaleString("id-ID")}
+                        </span>
+                      </td>
+
+                      {/* Idle / Free */}
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                          {subnet.freeIpsCount.toLocaleString("id-ID")} IP
+                        </span>
+                      </td>
+
+                      {/* Usage Bar */}
+                      <td className="py-3 px-4 min-w-[140px]">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all duration-500 ${barColor}`}
+                              style={{ width: `${Math.min(100, subnet.usagePct)}%` }}
+                            />
+                          </div>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${badgeColor}`}
+                          >
+                            {subnet.usagePct}%
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Next Available IP */}
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        {subnet.nextAvailableIp ? (
+                          <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80">
+                            <span className="font-mono font-bold text-[11px] text-slate-800 dark:text-slate-200">
+                              {subnet.nextAvailableIp}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCopy(subnet.nextAvailableIp!);
+                              }}
+                              className="text-blue-600 dark:text-blue-400 hover:text-blue-700 cursor-pointer"
+                              title={`Salin ${subnet.nextAvailableIp}`}
+                            >
+                              {copiedText === subnet.nextAvailableIp ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] font-bold text-rose-500">Penuh</span>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1.5">
+                          <span
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
+                              isSelected
+                                ? "bg-blue-600 text-white"
+                                : "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300"
+                            }`}
+                          >
+                            {isSelected ? "Dibuka" : "Lihat IP"}
+                          </span>
+
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeletePrefix(subnet.cidr);
+                              }}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition cursor-pointer"
+                              title="Hapus Prefix Ini"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* CLICK-TO-INSPECT HINT OR PHPIPAM DETAIL PANEL */}
+      {!loading && !error && !selectedPrefixCidr && (
+        <div className="p-4 rounded-2xl bg-slate-50/90 dark:bg-slate-900/60 border border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-300">
+          <div className="flex items-center gap-2.5">
+            <Info className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <span>
+              Pilih dan klik salah satu baris <strong>Subnet Prefix</strong> pada tabel di atas untuk menampilkan jumlah IP yang sudah terpakai beserta blok range IP yang masih <strong>Idle</strong>.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* DETAIL BREAKDOWN FOR SELECTED SUBNET (phpIPAM-STYLE INTERLEAVED TABLE) */}
+      {!loading && !error && selectedSubnet && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-blue-200/90 dark:border-blue-900/70 shadow-sm overflow-hidden animate-fadeIn">
+          {/* Selected Subnet Summary Strip */}
+          <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-50 to-blue-50/40 dark:from-slate-900 dark:to-blue-950/20 border-b border-slate-200/80 dark:border-slate-800 space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-blue-600 text-white">
+                    Subnet Dipilih
+                  </span>
+                  <h3 className="font-mono font-black text-lg text-slate-900 dark:text-slate-100">
+                    {selectedSubnet.cidr}
+                  </h3>
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    &bull; {selectedSubnet.description}
+                  </span>
+                </div>
+                <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                  Rentang Host: {selectedSubnet.firstUsable} - {selectedSubnet.lastUsable} &bull; Netmask: {selectedSubnet.netmask}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-xs">
+                  <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase block">
+                    IP Terpakai
+                  </span>
+                  <span className="font-mono font-black text-sm text-amber-800 dark:text-amber-200">
+                    {selectedSubnet.usedIpsCount.toLocaleString("id-ID")} IP
+                  </span>
+                </div>
+
+                <div className="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs">
+                  <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase block">
+                    IP Idle (Tersedia)
+                  </span>
+                  <span className="font-mono font-black text-sm text-emerald-800 dark:text-emerald-200">
+                    {selectedSubnet.freeIpsCount.toLocaleString("id-ID")} IP
+                  </span>
+                </div>
+
+                <div className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">
+                    Utilisasi ({selectedSubnet.usableHosts} Host)
+                  </span>
+                  <span className="font-mono font-black text-sm text-slate-800 dark:text-slate-100">
+                    {selectedSubnet.usagePct}%
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedPrefixCidr("")}
+                  className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition cursor-pointer"
+                  title="Tutup Rincian Subnet"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Filter & Search Toolbar (phpIPAM style) */}
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 pt-3 border-t border-slate-200/70 dark:border-slate-800">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setAvailabilityFilter("ALL")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      availabilityFilter === "ALL"
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    Semua (Terpakai &amp; Idle)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAvailabilityFilter("USED")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      availabilityFilter === "USED"
+                        ? "bg-amber-600 text-white shadow-xs"
+                        : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    Terpakai ({selectedSubnet.usedIps.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAvailabilityFilter("IDLE")}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      availabilityFilter === "IDLE"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/50"
+                    }`}
+                  >
+                    Idle ({idleRangeBlockCount} Blok &bull; {selectedSubnet.freeIpsCount.toLocaleString("id-ID")} IP)
+                  </button>
+                </div>
+
+                {availabilityFilter !== "IDLE" && (
+                  <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
+                    {[
+                      { label: "Semua Tipe", val: "ALL" },
+                      { label: "Aktif", val: "ACTIVE" },
+                      { label: "Reservasi", val: "RESERVED" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.val}
+                        type="button"
+                        onClick={() => setSelectedStatusFilter(opt.val as any)}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                          selectedStatusFilter === opt.val
+                            ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs"
+                            : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="relative w-full lg:w-72 shrink-0">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <Search className="w-4 h-4" />
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Cari IP, range idle, PIC, Site ID..."
+                  className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Interleaved phpIPAM Table */}
+          {displayedSubnetSegments.length === 0 ? (
+            <div className="py-14 text-center px-4 space-y-2">
+              <Search className="w-8 h-8 mx-auto text-slate-400" />
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                Tidak Ada Baris IP yang Cocok
+              </h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Ubah kata kunci pencarian atau filter status untuk melihat data IP terpakai dan blok Idle pada prefix {selectedSubnet.cidr}.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    <th className="py-3 px-4">Alamat IP / Range Idle</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Pelanggan &amp; PIC / Keterangan</th>
+                    <th className="py-3 px-4">Site ID / Ref Tiket</th>
+                    <th className="py-3 px-4">Kategori Layanan</th>
+                    <th className="py-3 px-4">VLAN</th>
+                    <th className="py-3 px-4">Server / BRAS</th>
+                    <th className="py-3 px-4">Infrastruktur</th>
+                    <th className="py-3 px-4 text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-medium text-slate-700 dark:text-slate-300">
+                  {displayedSubnetSegments.map((seg) => {
+                    if (seg.type === "IDLE") {
+                      const rangeLabel =
+                        seg.startIp === seg.endIp
+                          ? seg.startIp
+                          : `${seg.startIp} - ${seg.endIp}`;
+                      return (
+                        <tr
+                          key={seg.key}
+                          className="bg-emerald-50/90 dark:bg-emerald-950/45 hover:bg-emerald-100/80 dark:hover:bg-emerald-900/50 text-emerald-900 dark:text-emerald-200 border-l-4 border-l-emerald-500 transition"
+                        >
+                          <td className="py-2.5 px-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-xs text-emerald-800 dark:text-emerald-200">
+                                {rangeLabel}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-200/80 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-100">
+                                ({seg.count.toLocaleString("id-ID")})
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-4 whitespace-nowrap">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-100 dark:bg-emerald-900/70 text-emerald-800 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700 inline-flex items-center">
+                              <span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-emerald-500" />
+                              Idle / Tersedia
+                            </span>
+                          </td>
+                          <td
+                            colSpan={6}
+                            className="py-2.5 px-4 text-[11px] font-medium text-emerald-800/90 dark:text-emerald-300"
+                          >
+                            {seg.count.toLocaleString("id-ID")} IP host bebas tersedia dalam subnet {selectedSubnet.cidr} &bull; Rekomendasi host pertama:{" "}
+                            <span className="font-mono font-bold">{seg.startIp}</span>
+                          </td>
+                          <td className="py-2.5 px-4 text-center whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(seg.startIp)}
+                              className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition inline-flex items-center gap-1 cursor-pointer shadow-xs"
+                              title={`Salin IP ${seg.startIp}`}
+                            >
+                              {copiedText === seg.startIp ? (
+                                <>
+                                  <Check className="w-3 h-3" /> Disalin
+                                </>
+                              ) : (
+                                <>
+                                  <Copy className="w-3 h-3" /> Salin {seg.startIp}
+                                </>
+                              )}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    const item = seg.detail;
+                    const isPopSite = item.source === "POP_SITE";
+
+                    return (
+                      <tr
+                        key={seg.key}
+                        className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition"
+                      >
+                        {/* IP Address */}
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-mono font-bold text-blue-600 dark:text-blue-400 text-xs">
+                              {item.ip}
+                            </span>
+                            {item.isSubnetBlock && (
+                              <span
+                                className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                                title={`Bagian dari blok alokasi ${item.rawCidr}`}
+                              >
+                                Blok
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(item.ip)}
+                              className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
+                              title="Salin IP"
+                            >
+                              {copiedText === item.ip ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                        </td>
+
+                        {/* Status */}
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border inline-flex items-center ${
+                              isPopSite
+                                ? "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                                : "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                                isPopSite ? "bg-amber-500" : "bg-blue-500"
+                              }`}
+                            />
+                            {isPopSite ? "Terpakai (Aktif)" : "Reservasi Antrean"}
+                          </span>
+                        </td>
+
+                        {/* Pelanggan & PIC */}
+                        <td className="py-3 px-4">
+                          <div>
+                            <span className="font-bold text-slate-900 dark:text-slate-100 block">
+                              {item.namaPic}
+                            </span>
+                            {item.namaPerusahaan && (
+                              <span className="text-[10px] text-slate-400 block truncate max-w-xs">
+                                {item.namaPerusahaan}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* Site ID / Ticket Number */}
+                        <td className="py-3 px-4 font-mono font-bold text-xs whitespace-nowrap">
+                          <Link
+                            href={
+                              isPopSite
+                                ? item.kategoriLayanan === "Enterprise"
+                                  ? `/enterprise/${item.siteDbId}`
+                                  : `/pop-sites/${item.siteDbId}`
+                                : `/orders/${item.siteDbId}/progress`
+                            }
+                            className="text-blue-600 dark:text-blue-400 hover:underline flex items-center"
+                          >
+                            {item.siteId}
+                            <ArrowUpRight className="w-3 h-3 ml-0.5" />
+                          </Link>
+                        </td>
+
+                        {/* Kategori Layanan */}
+                        <td className="py-3 px-4 whitespace-nowrap">
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                              item.kategoriLayanan === "Enterprise"
+                                ? "bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
+                                : "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                            }`}
+                          >
+                            {item.kategoriLayanan}
+                            {item.subLayanan ? ` • ${item.subLayanan}` : ""}
+                          </span>
+                        </td>
+
+                        {/* VLAN */}
+                        <td className="py-3 px-4 font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">
+                          {item.vlan ? `VLAN ${item.vlan}` : "-"}
+                        </td>
+
+                        {/* Server / BRAS */}
+                        <td className="py-3 px-4 text-[11px] text-slate-600 dark:text-slate-300">
+                          {item.server || "-"}
+                        </td>
+
+                        {/* Infrastruktur */}
+                        <td className="py-3 px-4 text-[11px] text-slate-600 dark:text-slate-300">
+                          {item.infrastruktur || "-"}
+                        </td>
+
+                        {/* Action */}
+                        <td className="py-3 px-4 text-center whitespace-nowrap">
+                          <Link
+                            href={
+                              isPopSite
+                                ? item.kategoriLayanan === "Enterprise"
+                                  ? `/enterprise/${item.siteDbId}`
+                                  : `/pop-sites/${item.siteDbId}`
+                                : `/orders/${item.siteDbId}/progress`
+                            }
+                            className="px-2.5 py-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/60 rounded-lg transition inline-flex items-center"
+                          >
+                            Buka <ExternalLink className="w-3 h-3 ml-1" />
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* DETAIL VIEW FOR UNMANAGED IPs ("Luar Prefix") */}
+      {!loading && !error && selectedPrefixCidr === "UNMANAGED" && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-rose-200/90 dark:border-rose-900/70 shadow-sm overflow-hidden animate-fadeIn">
+          <div className="p-4 sm:p-5 bg-rose-50/50 dark:bg-rose-950/20 border-b border-rose-200/70 dark:border-rose-900/50 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-black text-rose-800 dark:text-rose-200 flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4" />
+                IP Public di Luar Prefix Terdaftar ({displayedUnmanagedIps.length})
+              </h3>
+              <p className="text-[11px] text-rose-700/80 dark:text-rose-300/80 mt-0.5">
+                IP berikut tercatat terpakai pada sirkuit namun belum masuk ke blok CIDR yang terdaftar di IPAM.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center bg-white dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                {[
+                  { label: "Semua", val: "ALL" },
+                  { label: "Aktif", val: "ACTIVE" },
+                  { label: "Reservasi", val: "RESERVED" },
+                ].map((opt) => (
+                  <button
+                    key={opt.val}
+                    type="button"
+                    onClick={() => setSelectedStatusFilter(opt.val as any)}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                      selectedStatusFilter === opt.val
+                        ? "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900"
+                        : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <Search className="w-3.5 h-3.5" />
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Cari IP, PIC, Site ID..."
+                  className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs bg-white dark:bg-slate-800 outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedPrefixCidr("")}
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-slate-800 cursor-pointer"
+                title="Tutup"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   <th className="py-3 px-4">Alamat IP Public</th>
                   <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-4">Subnet Prefix</th>
-                  <th className="py-3 px-4">Pelanggan & PIC</th>
+                  <th className="py-3 px-4">Pelanggan &amp; PIC</th>
                   <th className="py-3 px-4">Site ID / Ref Tiket</th>
                   <th className="py-3 px-4">Kategori Layanan</th>
                   <th className="py-3 px-4">VLAN</th>
@@ -722,82 +1252,32 @@ export default function IpamPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-medium text-slate-700 dark:text-slate-300">
-                {displayedUsedIps.map((item, idx) => {
+                {displayedUnmanagedIps.map((item, idx) => {
                   const isPopSite = item.source === "POP_SITE";
-
                   return (
                     <tr
                       key={`${item.ip}-${item.siteId}-${idx}`}
                       className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition"
                     >
-                      {/* IP Address */}
-                      <td className="py-3 px-4">
-                        <div className="flex items-center space-x-2">
-                          <span className="font-mono font-bold text-blue-600 dark:text-blue-400 text-xs">
-                            {item.ip}
-                          </span>
-                          {item.isSubnetBlock && (
-                            <span
-                              className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-purple-50 dark:bg-purple-950/70 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
-                              title={`Bagian dari blok alokasi ${item.rawCidr}`}
-                            >
-                              Blok
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(item.ip)}
-                            className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition cursor-pointer"
-                            title="Salin IP"
-                          >
-                            {copiedText === item.ip ? (
-                              <Check className="w-3 h-3 text-emerald-600" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                          </button>
-                        </div>
+                      <td className="py-3 px-4 whitespace-nowrap font-mono font-bold text-rose-600 dark:text-rose-400">
+                        {item.ip}
                       </td>
-
-                      {/* Status */}
-                      <td className="py-3 px-4">
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border inline-flex items-center ${
-                            isPopSite
-                              ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                              : "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
-                              isPopSite ? "bg-emerald-500" : "bg-blue-500"
-                            }`}
-                          />
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800">
                           {isPopSite ? "Terpakai (Aktif)" : "Reservasi Antrean"}
                         </span>
                       </td>
-
-                      {/* Parent Subnet */}
-                      <td className="py-3 px-4 font-mono text-[11px] text-slate-600 dark:text-slate-400">
-                        {item.parentSubnet || "-"}
-                      </td>
-
-                      {/* Pelanggan & PIC */}
                       <td className="py-3 px-4">
-                        <div>
-                          <span className="font-bold text-slate-900 dark:text-slate-100 block">
-                            {item.namaPic}
+                        <span className="font-bold text-slate-900 dark:text-slate-100 block">
+                          {item.namaPic}
+                        </span>
+                        {item.namaPerusahaan && (
+                          <span className="text-[10px] text-slate-400 block">
+                            {item.namaPerusahaan}
                           </span>
-                          {item.namaPerusahaan && (
-                            <span className="text-[10px] text-slate-400 block truncate max-w-xs">
-                              {item.namaPerusahaan}
-                            </span>
-                          )}
-                        </div>
+                        )}
                       </td>
-
-                      {/* Site ID / Ticket Number */}
-                      <td className="py-3 px-4 font-mono font-bold text-xs">
+                      <td className="py-3 px-4 font-mono font-bold">
                         <Link
                           href={
                             isPopSite
@@ -806,43 +1286,18 @@ export default function IpamPage() {
                                 : `/pop-sites/${item.siteDbId}`
                               : `/orders/${item.siteDbId}/progress`
                           }
-                          className="text-blue-600 dark:text-blue-400 hover:underline flex items-center"
+                          className="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center"
                         >
                           {item.siteId}
                           <ArrowUpRight className="w-3 h-3 ml-0.5" />
                         </Link>
                       </td>
-
-                      {/* Kategori Layanan */}
-                      <td className="py-3 px-4">
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
-                            item.kategoriLayanan === "Enterprise"
-                              ? "bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800"
-                              : "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                          }`}
-                        >
-                          {item.kategoriLayanan}
-                          {item.subLayanan ? ` • ${item.subLayanan}` : ""}
-                        </span>
-                      </td>
-
-                      {/* VLAN */}
-                      <td className="py-3 px-4 font-mono text-xs font-bold text-indigo-600 dark:text-indigo-400">
+                      <td className="py-3 px-4">{item.kategoriLayanan}</td>
+                      <td className="py-3 px-4 font-mono text-indigo-600 dark:text-indigo-400">
                         {item.vlan ? `VLAN ${item.vlan}` : "-"}
                       </td>
-
-                      {/* Server / BRAS */}
-                      <td className="py-3 px-4 text-[11px] text-slate-600 dark:text-slate-300">
-                        {item.server || "-"}
-                      </td>
-
-                      {/* Infrastruktur */}
-                      <td className="py-3 px-4 text-[11px] text-slate-600 dark:text-slate-300">
-                        {item.infrastruktur || "-"}
-                      </td>
-
-                      {/* Action */}
+                      <td className="py-3 px-4 text-[11px]">{item.server || "-"}</td>
+                      <td className="py-3 px-4 text-[11px]">{item.infrastruktur || "-"}</td>
                       <td className="py-3 px-4 text-center">
                         <Link
                           href={
@@ -852,7 +1307,7 @@ export default function IpamPage() {
                                 : `/pop-sites/${item.siteDbId}`
                               : `/orders/${item.siteDbId}/progress`
                           }
-                          className="px-2.5 py-1 text-[11px] font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-950/60 rounded-lg transition inline-flex items-center"
+                          className="px-2.5 py-1 text-[11px] font-bold text-blue-600 hover:underline inline-flex items-center"
                         >
                           Buka <ExternalLink className="w-3 h-3 ml-1" />
                         </Link>
@@ -863,8 +1318,8 @@ export default function IpamPage() {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* MODAL TAMBAH PREFIX BARU */}
       {showAddModal && (

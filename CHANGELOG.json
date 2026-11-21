@@ -4,6 +4,25 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.44",
+      "date": "2026-11-21T11:23:04+07:00",
+      "title": "Tampilan Tabel List Subnet IPAM & Server VLAN dengan Rincian Terpakai dan Idle Saat Diklik",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Mengubah tampilan daftar Subnet Prefix IP Public (/ipam) dan Pool VLAN per Server (/vlan) menjadi tabel list ringkas yang terintegrasi dengan pencarian dan ringkasan kapasitas"
+        },
+        {
+          "type": "feat",
+          "text": "Menambahkan pola click-to-inspect bergaya phpIPAM pada halaman IPAM dan VLAN Management: saat baris prefix atau server diklik, ditampilkan rincian jumlah IP/VLAN terpakai beserta pengelompokan blok range yang masih Idle/Available secara berurutan"
+        },
+        {
+          "type": "feat",
+          "text": "Menambahkan helper buildIpSubnetSegments dan buildVlanPoolSegments beserta pencarian range Idle dan ekspor CSV lengkap untuk status terpakai maupun idle"
+        }
+      ]
+    },
+    {
       "version": "1.2.43",
       "date": "2026-11-20T16:51:29+07:00",
       "title": "Menghapus Kartu Quick Login Redundan di Halaman Login",

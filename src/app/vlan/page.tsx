@@ -27,6 +27,8 @@ import {
   Sparkles,
   AlertCircle,
   X,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
 import { useDialog } from "@/context/DialogContext";
@@ -39,13 +41,17 @@ import {
   UsedVlanDetail,
   UnassignedVlanCircuit,
   VlanGlobalSummary,
+  VlanPoolSegment,
   normalizeServerKey,
+  buildVlanPoolSegments,
+  matchesVlanSegmentSearch,
 } from "@/lib/vlanUtils";
 
-type ViewTab = "UNAVAILABLE" | "AVAILABLE_GRID" | "UNASSIGNED";
+type ViewTab = "UNIFIED" | "USED_ONLY" | "IDLE_ONLY" | "AVAILABLE_GRID";
 type GridStatusFilter = "ALL" | "AVAILABLE" | "UNAVAILABLE";
 
 const BLOCK_SIZE = 200;
+const UNASSIGNED_VIEW_KEY = "__UNASSIGNED__";
 
 export default function VlanManagementPage() {
   const { currentUser } = useCurrentUser();
@@ -59,9 +65,10 @@ export default function VlanManagementPage() {
   const [usedVlans, setUsedVlans] = useState<UsedVlanDetail[]>([]);
   const [unassignedCircuits, setUnassignedCircuits] = useState<UnassignedVlanCircuit[]>([]);
 
-  // Active workspace controls
-  const [activeTab, setActiveTab] = useState<ViewTab>("UNAVAILABLE");
-  const [selectedServer, setSelectedServer] = useState<string>("ALL");
+  // Active workspace controls (default empty: click a server row to inspect Used + Idle VLANs)
+  const [activeTab, setActiveTab] = useState<ViewTab>("UNIFIED");
+  const [selectedServer, setSelectedServer] = useState<string>("");
+  const [serverSearchQuery, setServerSearchQuery] = useState("");
   const [selectedService, setSelectedService] = useState<string>("ALL");
   const [onlyDuplicates, setOnlyDuplicates] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -136,28 +143,33 @@ export default function VlanManagementPage() {
     }, 1800);
   };
 
-  // Sync gridServer & range defaults when user selects a server card
-  const handleSelectServerCard = (serverSummary: ServerVlanSummary) => {
-    const isDeselecting = selectedServer === serverSummary.serverName;
+  // Select or collapse a server row in master table list
+  const handleSelectServerRow = (serverSummary: ServerVlanSummary, initialTab: ViewTab = "UNIFIED") => {
+    const isDeselecting =
+      selectedServer === serverSummary.serverName && activeTab === initialTab && initialTab === "UNIFIED";
     if (isDeselecting) {
-      setSelectedServer("ALL");
-    } else {
-      setSelectedServer(serverSummary.serverName);
-      setGridServer(serverSummary.serverName);
-      setCheckerServer(serverSummary.serverName);
-      setRangeStart(serverSummary.startVlan);
-      setRangeEnd(serverSummary.endVlan);
-      setBlockPage(0);
+      setSelectedServer("");
       setInspectedVlan(null);
+      return;
     }
+    setSelectedServer(serverSummary.serverName);
+    setGridServer(serverSummary.serverName);
+    setCheckerServer(serverSummary.serverName);
+    setRangeStart(serverSummary.startVlan);
+    setRangeEnd(serverSummary.endVlan);
+    setBlockPage(0);
+    setInspectedVlan(null);
+    setSelectedService("ALL");
+    setOnlyDuplicates(false);
+    setSearchQuery("");
+    setActiveTab(initialTab);
   };
 
-  // Switch to Grid/Available tab ensuring a concrete server is selected
   const handleSwitchTab = (tab: ViewTab) => {
     setActiveTab(tab);
     if (tab === "AVAILABLE_GRID") {
       const targetName =
-        selectedServer !== "ALL"
+        selectedServer && selectedServer !== UNASSIGNED_VIEW_KEY
           ? selectedServer
           : gridServer || servers[0]?.serverName || "";
       if (targetName) {
@@ -171,6 +183,60 @@ export default function VlanManagementPage() {
       }
     }
   };
+
+  // Filtered master server list
+  const filteredMasterServers = useMemo(() => {
+    const q = serverSearchQuery.trim().toLowerCase();
+    if (!q) return servers;
+    return servers.filter(
+      (s) =>
+        s.serverName.toLowerCase().includes(q) ||
+        s.description.toLowerCase().includes(q) ||
+        `${s.startVlan}-${s.endVlan}`.includes(q)
+    );
+  }, [servers, serverSearchQuery]);
+
+  // Concrete selected server summary (when a server row is clicked)
+  const selectedServerSummary = useMemo(() => {
+    if (!selectedServer || selectedServer === UNASSIGNED_VIEW_KEY) return null;
+    const key = normalizeServerKey(selectedServer);
+    return servers.find((s) => normalizeServerKey(s.serverName) === key) || null;
+  }, [servers, selectedServer]);
+
+  // All occupied circuits for selected server (unfiltered by service/search so IDLE gaps stay accurate!)
+  const selectedServerAllUsedVlans = useMemo(() => {
+    if (!selectedServerSummary) return [];
+    const targetKey = normalizeServerKey(selectedServerSummary.serverName);
+    return usedVlans.filter((u) => normalizeServerKey(u.server) === targetKey);
+  }, [usedVlans, selectedServerSummary]);
+
+  // Full interleaved phpIPAM-style segments for selected server
+  const rawServerSegments = useMemo(() => {
+    if (!selectedServerSummary) return [] as VlanPoolSegment[];
+    return buildVlanPoolSegments(selectedServerSummary, selectedServerAllUsedVlans);
+  }, [selectedServerSummary, selectedServerAllUsedVlans]);
+
+  const serverIdleRangeBlockCount = useMemo(
+    () => rawServerSegments.filter((seg) => seg.type === "IDLE").length,
+    [rawServerSegments]
+  );
+
+  // Filtered segments shown in the table (UNIFIED / USED_ONLY / IDLE_ONLY)
+  const displayedServerSegments = useMemo(() => {
+    return rawServerSegments.filter((seg) => {
+      if (activeTab === "USED_ONLY" && seg.type !== "USED") return false;
+      if (activeTab === "IDLE_ONLY" && seg.type !== "IDLE") return false;
+
+      if (seg.type === "USED") {
+        if (selectedService !== "ALL" && seg.detail.serviceLabel !== selectedService) return false;
+        if (onlyDuplicates && !seg.detail.isDuplicate) return false;
+      } else {
+        if (onlyDuplicates) return false;
+      }
+
+      return matchesVlanSegmentSearch(seg, searchQuery);
+    });
+  }, [rawServerSegments, activeTab, selectedService, onlyDuplicates, searchQuery]);
 
   // Quick Checker evaluation
   const checkerResult = useMemo(() => {
@@ -190,10 +256,13 @@ export default function VlanManagementPage() {
     };
   }, [checkerServer, checkerVlan, usedVlans]);
 
-  // Filtered Unavailable rows
+  // Filtered Used VLANs across all servers or selected server (for CSV fallback when no server clicked)
   const filteredUsedVlans = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    const targetKey = selectedServer === "ALL" ? null : normalizeServerKey(selectedServer);
+    const targetKey =
+      !selectedServer || selectedServer === UNASSIGNED_VIEW_KEY
+        ? null
+        : normalizeServerKey(selectedServer);
 
     return usedVlans.filter((item) => {
       if (targetKey && normalizeServerKey(item.server) !== targetKey) return false;
@@ -220,10 +289,8 @@ export default function VlanManagementPage() {
   // Filtered Unassigned VLAN circuits
   const filteredUnassigned = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    const targetKey = selectedServer === "ALL" ? null : normalizeServerKey(selectedServer);
 
     return unassignedCircuits.filter((item) => {
-      if (targetKey && normalizeServerKey(item.server) !== targetKey) return false;
       if (selectedService !== "ALL" && item.serviceLabel !== selectedService) return false;
       if (q) {
         const hit =
@@ -236,7 +303,7 @@ export default function VlanManagementPage() {
       }
       return true;
     });
-  }, [unassignedCircuits, selectedServer, selectedService, searchQuery]);
+  }, [unassignedCircuits, selectedService, searchQuery]);
 
   // Active Server summary & map for Grid / Available view
   const activeGridServerSummary = useMemo(() => {
@@ -412,6 +479,38 @@ export default function VlanManagementPage() {
   const handleExportCsv = () => {
     const escapeCsv = (val: unknown) => `"${String(val ?? "").replace(/"/g, '""')}"`;
 
+    const downloadCsv = (filename: string, headers: string[], rows: string[]) => {
+      const csv = "\uFEFF" + [headers.map(escapeCsv).join(","), ...rows].join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    };
+
+    if (selectedServer === UNASSIGNED_VIEW_KEY) {
+      const headers = ["Site ID", "Pelanggan & PIC", "Kategori Layanan", "Server / Interkoneksi", "Status Sirkuit"];
+      const rows = filteredUnassigned.map((c) =>
+        [
+          escapeCsv(c.siteId),
+          escapeCsv(c.namaPerusahaan || c.namaPic),
+          escapeCsv(c.serviceLabel),
+          escapeCsv(c.server || "-"),
+          escapeCsv(c.statusLayanan),
+        ].join(",")
+      );
+      downloadCsv(
+        `VLAN_Tanpa_VLAN_${new Date().toISOString().slice(0, 10)}.csv`,
+        headers,
+        rows
+      );
+      return;
+    }
+
     if (activeTab === "AVAILABLE_GRID" && activeGridServerSummary) {
       const headers = ["VLAN ID", "Server", "Status", "Site ID", "Pelanggan & PIC", "Kategori Layanan"];
       const rows = gridMatchingVlans.map((v) => {
@@ -437,18 +536,76 @@ export default function VlanManagementPage() {
         ].join(",");
       });
 
-      const csv = "\uFEFF" + [headers.map(escapeCsv).join(","), ...rows].join("\n");
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `VLAN_Pool_${activeGridServerSummary.serverName.replace(/[^a-zA-Z0-9_-]/g, "_")}_${new Date()
-        .toISOString()
-        .slice(0, 10)}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      downloadCsv(
+        `VLAN_Pool_${activeGridServerSummary.serverName.replace(/[^a-zA-Z0-9_-]/g, "_")}_${new Date()
+          .toISOString()
+          .slice(0, 10)}.csv`,
+        headers,
+        rows
+      );
+      return;
+    }
+
+    if (selectedServerSummary) {
+      const headers = [
+        "VLAN ID / Range",
+        "Status",
+        "Jumlah VLAN",
+        "Server / BRAS",
+        "Site ID",
+        "Perusahaan",
+        "PIC",
+        "Kategori Layanan",
+        "IP Public",
+        "IP Private",
+        "Status Layanan",
+        "Duplikat",
+      ];
+      const rows = displayedServerSegments.map((seg) => {
+        if (seg.type === "IDLE") {
+          const vlanLabel =
+            seg.startVlan === seg.endVlan
+              ? String(seg.startVlan)
+              : `${seg.startVlan} - ${seg.endVlan}`;
+          return [
+            escapeCsv(vlanLabel),
+            escapeCsv("Idle / Available"),
+            escapeCsv(seg.count),
+            escapeCsv(selectedServerSummary.serverName),
+            escapeCsv("-"),
+            escapeCsv("-"),
+            escapeCsv("-"),
+            escapeCsv("-"),
+            escapeCsv("-"),
+            escapeCsv("-"),
+            escapeCsv("Available"),
+            escapeCsv("-"),
+          ].join(",");
+        }
+        const u = seg.detail;
+        return [
+          escapeCsv(u.vlan),
+          escapeCsv("Terpakai / Unavailable"),
+          escapeCsv(1),
+          escapeCsv(u.server),
+          escapeCsv(u.siteId),
+          escapeCsv(u.namaPerusahaan || "-"),
+          escapeCsv(u.namaPic),
+          escapeCsv(u.serviceLabel),
+          escapeCsv(u.ipPublic || "-"),
+          escapeCsv(u.ipPrivate || "-"),
+          escapeCsv(u.statusLayanan),
+          escapeCsv(u.isDuplicate ? `Ya (${u.duplicateTotal}x)` : "Tidak"),
+        ].join(",");
+      });
+
+      downloadCsv(
+        `VLAN_${selectedServerSummary.serverName.replace(/[^a-zA-Z0-9_-]/g, "_")}_${new Date()
+          .toISOString()
+          .slice(0, 10)}.csv`,
+        headers,
+        rows
+      );
       return;
     }
 
@@ -485,16 +642,11 @@ export default function VlanManagementPage() {
       ].join(",")
     );
 
-    const csv = "\uFEFF" + [headers.map(escapeCsv).join(","), ...rows].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `VLAN_Management_Unavailable_${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    downloadCsv(
+      `VLAN_Management_Unavailable_${new Date().toISOString().slice(0, 10)}.csv`,
+      headers,
+      rows
+    );
   };
 
   const getUsageBarColor = (pct: number) => {
@@ -708,7 +860,11 @@ export default function VlanManagementPage() {
               {(summary?.totalUnassignedCircuits || 0) > 0 ? (
                 <button
                   type="button"
-                  onClick={() => handleSwitchTab("UNASSIGNED")}
+                  onClick={() => {
+                    setSelectedServer(UNASSIGNED_VIEW_KEY);
+                    setSearchQuery("");
+                    setSelectedService("ALL");
+                  }}
                   className="text-amber-600 dark:text-amber-400 font-bold hover:underline cursor-pointer"
                 >
                   {summary?.totalUnassignedCircuits} tanpa VLAN
@@ -820,800 +976,1045 @@ export default function VlanManagementPage() {
         </div>
       </div>
 
-      {/* SERVER CARDS GRID */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between px-1">
-          <h2 className="text-sm font-black text-slate-900 dark:text-slate-100 flex items-center">
-            <Server className="w-4 h-4 mr-2 text-indigo-600" />
-            Daftar Pool VLAN per Server ({servers.length})
-          </h2>
-          <span className="text-[11px] text-slate-400">
-            Klik kartu server untuk memfilter detail VLAN & melihat peta slot tersedia
-          </span>
-        </div>
+      {/* MASTER TABLE LIST: DAFTAR POOL VLAN PER SERVER */}
+      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div className="p-4 sm:px-5 border-b border-slate-200/80 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-black text-slate-900 dark:text-slate-100 flex items-center">
+              <Server className="w-4 h-4 mr-2 text-indigo-600" />
+              Daftar Pool VLAN per Server ({servers.length})
+            </h2>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Klik baris server untuk menampilkan berapa VLAN yang sudah terpakai &amp; range VLAN yang masih Idle.
+            </p>
+          </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-          {servers.map((srv) => {
-            const isSelected = selectedServer === srv.serverName;
-            const barColor = getUsageBarColor(srv.usagePct);
-            const badgeColor = getUsageBadgeColor(srv.usagePct);
-
-            return (
-              <div
-                key={srv.serverName}
-                onClick={() => handleSelectServerCard(srv)}
-                className={`p-4 rounded-2xl bg-white dark:bg-slate-900 border transition-all cursor-pointer shadow-xs hover:shadow-md ${
-                  isSelected
-                    ? "border-indigo-500 dark:border-indigo-400 ring-2 ring-indigo-500/20"
-                    : "border-slate-200/90 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-black text-sm text-slate-900 dark:text-slate-100 truncate">
-                        {srv.serverName}
-                      </span>
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeColor}`}
-                      >
-                        {srv.usagePct}% Terpakai
-                      </span>
-                    </div>
-                    <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-                      {srv.description}
-                    </p>
-                  </div>
-
-                  {isAdmin && (
-                    <div className="flex items-center space-x-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openRangeModal(srv);
-                        }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition cursor-pointer"
-                        title="Atur Range VLAN Server"
-                      >
-                        <SlidersHorizontal className="w-3.5 h-3.5" />
-                      </button>
-                      {srv.hasCustomRange && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleResetServerRange(srv.serverName);
-                          }}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition cursor-pointer"
-                          title="Reset ke Range 1 - 4094"
-                        >
-                          <RotateCcw className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Usage Bar */}
-                <div className="space-y-1 mt-3">
-                  <div className="flex items-center justify-between text-[11px] font-semibold text-slate-600 dark:text-slate-300">
-                    <span>
-                      <strong className="text-amber-700 dark:text-amber-400">
-                        {srv.unavailableCount}
-                      </strong>{" "}
-                      / {srv.totalCapacity.toLocaleString("id-ID")} Unavailable
-                    </span>
-                    <span className="text-emerald-600 dark:text-emerald-400 font-mono text-[10px] font-bold">
-                      Available: {srv.availableCount.toLocaleString("id-ID")}
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-500 ${barColor}`}
-                      style={{ width: `${Math.min(100, srv.usagePct)}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Service Breakdown Pills */}
-                <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex flex-wrap items-center gap-1.5 text-[10px]">
-                  <span className="px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold">
-                    POP: {srv.serviceBreakdown.popSite}
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 font-bold">
-                    LocalLoop: {srv.serviceBreakdown.localLoop}
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 font-bold">
-                    Content: {srv.serviceBreakdown.content}
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-bold">
-                    Ent. Dedicated: {srv.serviceBreakdown.enterpriseDedicated}
-                  </span>
-                  {srv.duplicateVlanCount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 font-bold">
-                      Bentrok: {srv.duplicateVlanCount}
-                    </span>
-                  )}
-                  {srv.outOfRangeCount > 0 && (
-                    <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold">
-                      Luar Range: {srv.outOfRangeCount}
-                    </span>
-                  )}
-                </div>
-
-                {/* Next Available VLAN Box */}
-                <div className="mt-3 p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 flex items-center justify-between gap-2">
-                  <div className="flex items-center space-x-1.5 overflow-hidden">
-                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold shrink-0">
-                      Next Available:
-                    </span>
-                    <span className="font-mono font-bold text-xs text-slate-800 dark:text-slate-200 truncate">
-                      {srv.nextAvailableVlan !== null ? `VLAN ${srv.nextAvailableVlan}` : "Penuh"}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center space-x-1 shrink-0">
-                    {srv.nextAvailableVlan !== null && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCopy(
-                            String(srv.nextAvailableVlan),
-                            `srv-${srv.serverName}-${srv.nextAvailableVlan}`
-                          );
-                        }}
-                        className="px-2 py-0.5 rounded-md text-[10px] font-bold text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 transition flex items-center cursor-pointer"
-                      >
-                        {copiedKey === `srv-${srv.serverName}-${srv.nextAvailableVlan}` ? (
-                          <>
-                            <Check className="w-3 h-3 mr-1 text-emerald-600" /> Disalin
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3 h-3 mr-1" /> Salin
-                          </>
-                        )}
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedServer(srv.serverName);
-                        setGridServer(srv.serverName);
-                        setRangeStart(srv.startVlan);
-                        setRangeEnd(srv.endVlan);
-                        setBlockPage(0);
-                        setActiveTab("AVAILABLE_GRID");
-                      }}
-                      className="px-2 py-0.5 rounded-md text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition cursor-pointer"
-                    >
-                      Peta VLAN
-                    </button>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* FILTER & TAB CONTROL PANEL */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm p-4 sm:p-5 space-y-4">
-        {/* View Mode Tabs & Search */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => handleSwitchTab("UNAVAILABLE")}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                activeTab === "UNAVAILABLE"
-                  ? "bg-amber-600 text-white shadow-xs"
-                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-              }`}
-            >
-              <List className="w-3.5 h-3.5" />
-              VLAN Unavailable ({filteredUsedVlans.length})
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSwitchTab("AVAILABLE_GRID")}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                activeTab === "AVAILABLE_GRID"
-                  ? "bg-emerald-600 text-white shadow-xs"
-                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
-              }`}
-            >
-              <Grid className="w-3.5 h-3.5" />
-              Peta & VLAN Available
-            </button>
-
+          <div className="flex flex-wrap items-center gap-2">
             {unassignedCircuits.length > 0 && (
               <button
                 type="button"
-                onClick={() => handleSwitchTab("UNASSIGNED")}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                  activeTab === "UNASSIGNED"
-                    ? "bg-rose-600 text-white shadow-xs"
-                    : "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                onClick={() => {
+                  setSelectedServer((prev) =>
+                    prev === UNASSIGNED_VIEW_KEY ? "" : UNASSIGNED_VIEW_KEY
+                  );
+                  setSearchQuery("");
+                  setSelectedService("ALL");
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border cursor-pointer ${
+                  selectedServer === UNASSIGNED_VIEW_KEY
+                    ? "bg-rose-600 text-white border-rose-600 shadow-xs"
+                    : "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/50"
                 }`}
               >
                 <AlertCircle className="w-3.5 h-3.5" />
                 Sirkuit Tanpa VLAN ({unassignedCircuits.length})
               </button>
             )}
-          </div>
 
-          {/* Search Input */}
-          <div className="relative w-full lg:w-80 shrink-0">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-              <Search className="w-4 h-4" />
+            <div className="relative w-full sm:w-64">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <Search className="w-3.5 h-3.5" />
+              </div>
+              <input
+                type="text"
+                value={serverSearchQuery}
+                onChange={(e) => setServerSearchQuery(e.target.value)}
+                placeholder="Cari nama server atau range..."
+                className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs focus:ring-2 focus:ring-indigo-500 outline-none bg-slate-50/70 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+              />
             </div>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setBlockPage(0);
-              }}
-              placeholder={
-                activeTab === "AVAILABLE_GRID"
-                  ? "Cari nomor VLAN, Site ID, Pelanggan..."
-                  : "Cari VLAN, Server, PIC, Site ID, IP..."
-              }
-              className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs focus:ring-2 focus:ring-indigo-500 outline-none bg-slate-50/60 dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
-            />
           </div>
         </div>
 
-        {/* Filter Row: Server & Eligible Service Categories */}
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-bold text-slate-400 flex items-center">
-              <Filter className="w-3.5 h-3.5 mr-1" /> Server:
+        {loading ? (
+          <div className="py-16 text-center">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-600 border-t-transparent"></div>
+            <p className="mt-3 text-sm text-slate-500 font-medium">
+              Memetakan alokasi VLAN dari data sirkuit teraktivasi...
+            </p>
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center text-rose-600">
+            <AlertTriangle className="w-8 h-8 mx-auto" />
+            <p className="font-bold mt-2">Gagal Memuat Data VLAN Management</p>
+            <p className="text-xs mt-1">{error}</p>
+          </div>
+        ) : filteredMasterServers.length === 0 ? (
+          <div className="py-12 text-center text-xs text-slate-500">
+            Tidak ada server pool VLAN yang cocok dengan pencarian Anda.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  <th className="py-3 px-4">Server / BRAS &amp; Deskripsi</th>
+                  <th className="py-3 px-4">Rentang Pool</th>
+                  <th className="py-3 px-4 text-right">Terpakai</th>
+                  <th className="py-3 px-4 text-right">Idle (Available)</th>
+                  <th className="py-3 px-4">Utilisasi</th>
+                  <th className="py-3 px-4">Next Available</th>
+                  <th className="py-3 px-4 text-center">Aksi</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-medium text-slate-700 dark:text-slate-300">
+                {filteredMasterServers.map((srv) => {
+                  const isSelected = selectedServer === srv.serverName;
+                  const barColor = getUsageBarColor(srv.usagePct);
+                  const badgeColor = getUsageBadgeColor(srv.usagePct);
+
+                  return (
+                    <tr
+                      key={srv.serverName}
+                      onClick={() => handleSelectServerRow(srv, "UNIFIED")}
+                      className={`transition cursor-pointer ${
+                        isSelected
+                          ? "bg-indigo-50/90 dark:bg-indigo-950/45 ring-1 ring-inset ring-indigo-500/40"
+                          : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
+                      }`}
+                    >
+                      {/* Server & Description */}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <span
+                            className={`p-1 rounded-lg transition shrink-0 ${
+                              isSelected
+                                ? "bg-indigo-600 text-white"
+                                : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+                            }`}
+                          >
+                            {isSelected ? (
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            )}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="font-black text-sm text-slate-900 dark:text-slate-100">
+                                {srv.serverName}
+                              </span>
+                              {srv.hasCustomRange && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                                  Custom Range
+                                </span>
+                              )}
+                              {srv.duplicateVlanCount > 0 && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300">
+                                  Bentrok: {srv.duplicateVlanCount}
+                                </span>
+                              )}
+                              {srv.outOfRangeCount > 0 && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                  Luar Range: {srv.outOfRangeCount}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400 block truncate max-w-xs">
+                              {srv.description}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Pool Range */}
+                      <td className="py-3 px-4 font-mono text-[11px] text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                        <span className="block font-bold">
+                          {srv.startVlan} - {srv.endVlan}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          {srv.totalCapacity.toLocaleString("id-ID")} slot
+                        </span>
+                      </td>
+
+                      {/* Unavailable Count */}
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <span className="font-mono font-bold text-amber-700 dark:text-amber-400">
+                          {srv.unavailableCount.toLocaleString("id-ID")}
+                        </span>
+                        <span className="text-[10px] text-slate-400 ml-1">
+                          / {srv.totalCapacity.toLocaleString("id-ID")}
+                        </span>
+                      </td>
+
+                      {/* Available / Idle Count */}
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                          {srv.availableCount.toLocaleString("id-ID")} VLAN
+                        </span>
+                      </td>
+
+                      {/* Utilization */}
+                      <td className="py-3 px-4 min-w-[140px]">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full transition-all duration-500 ${barColor}`}
+                              style={{ width: `${Math.min(100, srv.usagePct)}%` }}
+                            />
+                          </div>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${badgeColor}`}
+                          >
+                            {srv.usagePct}%
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Next Available VLAN */}
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        {srv.nextAvailableVlan !== null ? (
+                          <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80">
+                            <span className="font-mono font-bold text-[11px] text-slate-800 dark:text-slate-200">
+                              VLAN {srv.nextAvailableVlan}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCopy(
+                                  String(srv.nextAvailableVlan),
+                                  `srv-${srv.serverName}-${srv.nextAvailableVlan}`
+                                );
+                              }}
+                              className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 cursor-pointer"
+                              title={`Salin VLAN ${srv.nextAvailableVlan}`}
+                            >
+                              {copiedKey === `srv-${srv.serverName}-${srv.nextAvailableVlan}` ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] font-bold text-rose-500">Penuh</span>
+                        )}
+                      </td>
+
+                      {/* Row Actions */}
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1">
+                          <span
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
+                              isSelected
+                                ? "bg-indigo-600 text-white"
+                                : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300"
+                            }`}
+                          >
+                            {isSelected ? "Dibuka" : "Lihat VLAN"}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectServerRow(srv, "AVAILABLE_GRID");
+                            }}
+                            className="px-2 py-1 rounded-lg text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition cursor-pointer"
+                            title="Buka Peta Grid Tile VLAN"
+                          >
+                            Peta
+                          </button>
+
+                          {isAdmin && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openRangeModal(srv);
+                                }}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 transition cursor-pointer"
+                                title="Atur Range VLAN Server"
+                              >
+                                <SlidersHorizontal className="w-3.5 h-3.5" />
+                              </button>
+                              {srv.hasCustomRange && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleResetServerRange(srv.serverName);
+                                  }}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition cursor-pointer"
+                                  title="Reset ke Range 1 - 4094"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* CLICK-TO-INSPECT HINT WHEN NO SERVER SELECTED */}
+      {!loading && !error && !selectedServer && (
+        <div className="p-4 rounded-2xl bg-slate-50/90 dark:bg-slate-900/60 border border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-300">
+          <div className="flex items-center gap-2.5">
+            <Tags className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
+            <span>
+              Pilih dan klik salah satu baris <strong>Server / BRAS</strong> pada tabel di atas untuk menampilkan jumlah VLAN yang sudah terpakai beserta rentang VLAN yang masih <strong>Idle</strong>.
             </span>
+          </div>
+        </div>
+      )}
 
-            {activeTab === "AVAILABLE_GRID" ? (
-              <select
-                value={activeGridServerSummary?.serverName || ""}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  setGridServer(val);
-                  setSelectedServer(val);
-                  const found = servers.find((s) => s.serverName === val);
-                  if (found) {
-                    setRangeStart(found.startVlan);
-                    setRangeEnd(found.endVlan);
+      {/* DETAIL VIEW FOR SELECTED SERVER (UNIFIED / USED / IDLE / GRID) */}
+      {!loading && !error && selectedServerSummary && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-indigo-200/90 dark:border-indigo-900/70 shadow-sm overflow-hidden animate-fadeIn">
+          {/* Selected Server Summary Banner */}
+          <div className="p-4 sm:p-5 bg-gradient-to-r from-slate-50 to-indigo-50/40 dark:from-slate-900 dark:to-indigo-950/20 border-b border-slate-200/80 dark:border-slate-800 space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div className="space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-indigo-600 text-white">
+                    Server Dipilih
+                  </span>
+                  <h3 className="font-black text-lg text-slate-900 dark:text-slate-100">
+                    {selectedServerSummary.serverName}
+                  </h3>
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    &bull; {selectedServerSummary.description}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                  <span className="font-mono font-bold text-slate-500 dark:text-slate-400 mr-1">
+                    Pool VLAN {selectedServerSummary.startVlan} - {selectedServerSummary.endVlan}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold">
+                    POP: {selectedServerSummary.serviceBreakdown.popSite}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-teal-50 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300 font-bold">
+                    LocalLoop: {selectedServerSummary.serviceBreakdown.localLoop}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 font-bold">
+                    Content: {selectedServerSummary.serviceBreakdown.content}
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 font-bold">
+                    Ent. Dedicated: {selectedServerSummary.serviceBreakdown.enterpriseDedicated}
+                  </span>
+                  {selectedServerSummary.duplicateVlanCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 font-bold">
+                      Bentrok: {selectedServerSummary.duplicateVlanCount}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div className="px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-xs">
+                  <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase block">
+                    VLAN Terpakai
+                  </span>
+                  <span className="font-mono font-black text-sm text-amber-800 dark:text-amber-200">
+                    {selectedServerSummary.unavailableCount.toLocaleString("id-ID")} VLAN
+                  </span>
+                </div>
+
+                <div className="px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-xs">
+                  <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase block">
+                    VLAN Idle (Available)
+                  </span>
+                  <span className="font-mono font-black text-sm text-emerald-800 dark:text-emerald-200">
+                    {selectedServerSummary.availableCount.toLocaleString("id-ID")} VLAN
+                  </span>
+                </div>
+
+                <div className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase block">
+                    Utilisasi ({selectedServerSummary.totalCapacity.toLocaleString("id-ID")} Slot)
+                  </span>
+                  <span className="font-mono font-black text-sm text-slate-800 dark:text-slate-100">
+                    {selectedServerSummary.usagePct}%
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedServer("");
+                    setInspectedVlan(null);
+                  }}
+                  className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition cursor-pointer"
+                  title="Tutup Rincian Server"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* View Tabs & Search */}
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 pt-3 border-t border-slate-200/70 dark:border-slate-800">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleSwitchTab("UNIFIED")}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === "UNIFIED"
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  <List className="w-3.5 h-3.5" />
+                  Semua (Terpakai &amp; Idle)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSwitchTab("USED_ONLY")}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === "USED_ONLY"
+                      ? "bg-amber-600 text-white shadow-xs"
+                      : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  Terpakai ({selectedServerAllUsedVlans.length})
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSwitchTab("IDLE_ONLY")}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === "IDLE_ONLY"
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "bg-white dark:bg-slate-800 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/50"
+                  }`}
+                >
+                  Idle ({serverIdleRangeBlockCount} Blok &bull;{" "}
+                  {selectedServerSummary.availableCount.toLocaleString("id-ID")} VLAN)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSwitchTab("AVAILABLE_GRID")}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                    activeTab === "AVAILABLE_GRID"
+                      ? "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 shadow-xs"
+                      : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  <Grid className="w-3.5 h-3.5" />
+                  Peta Grid VLAN
+                </button>
+              </div>
+
+              <div className="relative w-full lg:w-80 shrink-0">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <Search className="w-4 h-4" />
+                </div>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setBlockPage(0);
+                  }}
+                  placeholder={
+                    activeTab === "AVAILABLE_GRID"
+                      ? "Cari nomor VLAN, Site ID, Pelanggan..."
+                      : "Cari VLAN, range idle, PIC, Site ID, IP..."
                   }
-                  setBlockPage(0);
-                  setInspectedVlan(null);
-                }}
-                className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-emerald-500"
-              >
-                {servers.map((s) => (
-                  <option key={s.serverName} value={s.serverName}>
-                    {s.serverName} (Available: {s.availableCount.toLocaleString("id-ID")} |
-                    Unavailable: {s.unavailableCount})
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <select
-                value={selectedServer}
-                onChange={(e) => setSelectedServer(e.target.value)}
-                className="px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-indigo-500"
-              >
-                <option value="ALL">Semua Server ({servers.length})</option>
-                {servers.map((s) => (
-                  <option key={s.serverName} value={s.serverName}>
-                    {s.serverName} ({s.unavailableCount} VLAN)
-                  </option>
-                ))}
-              </select>
-            )}
+                  className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 text-xs focus:ring-2 focus:ring-indigo-500 outline-none bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 placeholder:text-slate-400"
+                />
+              </div>
+            </div>
 
-            <span className="text-[11px] font-bold text-slate-400 ml-1">Layanan:</span>
-            <div className="flex flex-wrap items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
-              {[{ label: "Semua", val: "ALL" }, ...ELIGIBLE_VLAN_SERVICES.map((s) => ({ label: s, val: s }))].map(
-                (opt) => (
+            {/* Service & Duplicate Sub-filter Row */}
+            {activeTab !== "IDLE_ONLY" && (
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-bold text-slate-400 flex items-center">
+                    <Filter className="w-3.5 h-3.5 mr-1" /> Layanan:
+                  </span>
+                  <div className="flex flex-wrap items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
+                    {[
+                      { label: "Semua", val: "ALL" },
+                      ...ELIGIBLE_VLAN_SERVICES.map((s) => ({ label: s, val: s })),
+                    ].map((opt) => (
+                      <button
+                        key={opt.val}
+                        type="button"
+                        onClick={() => {
+                          setSelectedService(opt.val);
+                          setBlockPage(0);
+                        }}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
+                          selectedService === opt.val
+                            ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs"
+                            : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {selectedServerSummary.duplicateVlanCount > 0 && activeTab !== "AVAILABLE_GRID" && (
+                    <button
+                      type="button"
+                      onClick={() => setOnlyDuplicates((prev) => !prev)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
+                        onlyDuplicates
+                          ? "bg-rose-600 text-white border-rose-600"
+                          : "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
+                      }`}
+                    >
+                      Bentrok Saja ({selectedServerSummary.duplicateVlanCount})
+                    </button>
+                  )}
+                </div>
+
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                  {activeTab === "AVAILABLE_GRID" ? (
+                    <>
+                      Menampilkan{" "}
+                      <strong className="text-slate-800 dark:text-slate-200">
+                        {gridMatchingVlans.length.toLocaleString("id-ID")} VLAN
+                      </strong>
+                    </>
+                  ) : (
+                    <>
+                      Menampilkan{" "}
+                      <strong className="text-slate-800 dark:text-slate-200">
+                        {displayedServerSegments.length} baris
+                      </strong>{" "}
+                      (terpakai &amp; blok idle)
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* CONTENT BODY INSIDE SELECTED SERVER PANEL */}
+          {activeTab !== "AVAILABLE_GRID" ? (
+            displayedServerSegments.length === 0 ? (
+              <div className="py-14 text-center px-4 space-y-2">
+                <Search className="w-8 h-8 mx-auto text-slate-400" />
+                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                  Tidak Ada Baris VLAN yang Cocok
+                </h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  Ubah kata kunci pencarian atau filter layanan untuk melihat VLAN terpakai dan rentang VLAN yang masih Idle pada {selectedServerSummary.serverName}.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                      <th className="py-3 px-4">VLAN ID / Range Idle</th>
+                      <th className="py-3 px-4">Status VLAN</th>
+                      <th className="py-3 px-4">Pelanggan &amp; PIC / Keterangan</th>
+                      <th className="py-3 px-4">Site ID</th>
+                      <th className="py-3 px-4">Kategori Layanan</th>
+                      <th className="py-3 px-4">IP Address</th>
+                      <th className="py-3 px-4">Status Sirkuit</th>
+                      <th className="py-3 px-4 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-medium text-slate-700 dark:text-slate-300">
+                    {displayedServerSegments.map((seg) => {
+                      if (seg.type === "IDLE") {
+                        const rangeLabel =
+                          seg.startVlan === seg.endVlan
+                            ? `VLAN ${seg.startVlan}`
+                            : `VLAN ${seg.startVlan} - ${seg.endVlan}`;
+                        return (
+                          <tr
+                            key={seg.key}
+                            className="bg-emerald-50/90 dark:bg-emerald-950/45 hover:bg-emerald-100/80 dark:hover:bg-emerald-900/50 text-emerald-900 dark:text-emerald-200 border-l-4 border-l-emerald-500 transition"
+                          >
+                            <td className="py-2.5 px-4 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <span className="font-mono font-bold text-xs text-emerald-800 dark:text-emerald-200">
+                                  {rangeLabel}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-200/80 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-100">
+                                  ({seg.count.toLocaleString("id-ID")})
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-4 whitespace-nowrap">
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-emerald-100 dark:bg-emerald-900/70 text-emerald-800 dark:text-emerald-200 border-emerald-300 dark:border-emerald-700 inline-flex items-center">
+                                <span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-emerald-500" />
+                                Idle / Available
+                              </span>
+                            </td>
+                            <td
+                              colSpan={5}
+                              className="py-2.5 px-4 text-[11px] font-medium text-emerald-800/90 dark:text-emerald-300"
+                            >
+                              {seg.count.toLocaleString("id-ID")} slot VLAN kosong tersedia di{" "}
+                              {selectedServerSummary.serverName} &bull; Rekomendasi pertama:{" "}
+                              <span className="font-mono font-bold">VLAN {seg.startVlan}</span>
+                            </td>
+                            <td className="py-2.5 px-4 text-center whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleCopy(String(seg.startVlan), `idle-vlan-${seg.startVlan}`)
+                                }
+                                className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition inline-flex items-center gap-1 cursor-pointer shadow-xs"
+                                title={`Salin VLAN ${seg.startVlan}`}
+                              >
+                                {copiedKey === `idle-vlan-${seg.startVlan}` ? (
+                                  <>
+                                    <Check className="w-3 h-3" /> Disalin
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3 h-3" /> Salin {seg.startVlan}
+                                  </>
+                                )}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      const item = seg.detail;
+                      return (
+                        <tr
+                          key={seg.key}
+                          className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition"
+                        >
+                          {/* VLAN ID */}
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <div className="flex items-center space-x-1.5">
+                              <span className="font-mono font-black text-sm text-indigo-700 dark:text-indigo-400">
+                                {item.vlan}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleCopy(String(item.vlan), `tbl-${item.siteDbId}`)
+                                }
+                                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                                title="Salin VLAN ID"
+                              >
+                                {copiedKey === `tbl-${item.siteDbId}` ? (
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                ) : (
+                                  <Copy className="w-3 h-3" />
+                                )}
+                              </button>
+                              {item.isDuplicate && (
+                                <span
+                                  className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                                  title={`Digunakan oleh ${item.duplicateTotal} sirkuit aktif di server ini`}
+                                >
+                                  Bentrok {item.duplicateTotal}x
+                                </span>
+                              )}
+                              {item.isOutOfRange && (
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                  Luar Range
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Status VLAN */}
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 inline-flex items-center">
+                              <span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-amber-500" />
+                              Terpakai
+                            </span>
+                          </td>
+
+                          {/* Pelanggan & PIC */}
+                          <td className="py-3 px-4">
+                            <span className="font-bold text-slate-900 dark:text-slate-100 block">
+                              {item.namaPerusahaan || item.namaPic}
+                            </span>
+                            {item.namaPerusahaan && (
+                              <span className="text-[10px] text-slate-400 block">
+                                PIC: {item.namaPic}
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Site ID */}
+                          <td className="py-3 px-4 font-mono font-bold whitespace-nowrap">
+                            <Link
+                              href={getCircuitHref(item.kategoriLayanan, item.siteDbId)}
+                              className="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center"
+                            >
+                              {item.siteId}
+                              <ArrowUpRight className="w-3 h-3 ml-0.5" />
+                            </Link>
+                          </td>
+
+                          {/* Kategori Layanan */}
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${getServiceBadgeColor(
+                                item.serviceLabel
+                              )}`}
+                            >
+                              {item.serviceLabel}
+                            </span>
+                          </td>
+
+                          {/* IP */}
+                          <td className="py-3 px-4 font-mono text-[11px]">
+                            {item.ipPublic && (
+                              <span className="block text-slate-800 dark:text-slate-200">
+                                Pub: {item.ipPublic}
+                              </span>
+                            )}
+                            {item.ipPrivate && (
+                              <span className="block text-slate-400 text-[10px]">
+                                Priv: {item.ipPrivate}
+                              </span>
+                            )}
+                            {!item.ipPublic && !item.ipPrivate && "-"}
+                          </td>
+
+                          {/* Status Layanan */}
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                item.statusLayanan === "Active"
+                                  ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                                  : "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
+                              }`}
+                            >
+                              {item.statusLayanan}
+                            </span>
+                          </td>
+
+                          {/* Aksi */}
+                          <td className="py-3 px-4 text-center whitespace-nowrap">
+                            <Link
+                              href={getCircuitHref(item.kategoriLayanan, item.siteDbId)}
+                              className="px-2.5 py-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg transition inline-flex items-center"
+                            >
+                              Buka / Edit <ExternalLink className="w-3 h-3 ml-1" />
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )
+          ) : (
+            /* INTERACTIVE VLAN TILE GRID */
+            <div className="p-5 space-y-5">
+              {/* Pool Filter & Range Controls */}
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-bold text-slate-500">Status Tampilan:</span>
+                  {[
+                    { label: "Semua Slot", val: "ALL" as GridStatusFilter },
+                    { label: "Available Saja", val: "AVAILABLE" as GridStatusFilter },
+                    { label: "Unavailable Saja", val: "UNAVAILABLE" as GridStatusFilter },
+                  ].map((opt) => (
+                    <button
+                      key={opt.val}
+                      type="button"
+                      onClick={() => {
+                        setGridStatusFilter(opt.val);
+                        setBlockPage(0);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition cursor-pointer ${
+                        gridStatusFilter === opt.val
+                          ? opt.val === "AVAILABLE"
+                            ? "bg-emerald-600 text-white"
+                            : opt.val === "UNAVAILABLE"
+                            ? "bg-amber-600 text-white"
+                            : "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-[11px] font-bold text-slate-400">Rentang Tampil:</span>
+                  <input
+                    type="number"
+                    min={MIN_VLAN_ID}
+                    max={MAX_VLAN_ID}
+                    value={rangeStart}
+                    onChange={(e) => {
+                      setRangeStart(parseInt(e.target.value, 10) || MIN_VLAN_ID);
+                      setBlockPage(0);
+                    }}
+                    className="w-20 px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold text-xs outline-none"
+                  />
+                  <span className="text-slate-400 font-bold">s/d</span>
+                  <input
+                    type="number"
+                    min={MIN_VLAN_ID}
+                    max={MAX_VLAN_ID}
+                    value={rangeEnd}
+                    onChange={(e) => {
+                      setRangeEnd(parseInt(e.target.value, 10) || MAX_VLAN_ID);
+                      setBlockPage(0);
+                    }}
+                    className="w-20 px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold text-xs outline-none"
+                  />
+
+                  {activeGridServerSummary?.nextAvailableVlan !== null &&
+                    activeGridServerSummary?.nextAvailableVlan !== undefined && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleCopy(
+                            String(activeGridServerSummary.nextAvailableVlan),
+                            "grid-next"
+                          )
+                        }
+                        className="px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        {copiedKey === "grid-next"
+                          ? `VLAN ${activeGridServerSummary.nextAvailableVlan} Disalin`
+                          : `Salin Next VLAN (${activeGridServerSummary.nextAvailableVlan})`}
+                      </button>
+                    )}
+                </div>
+              </div>
+
+              {/* Inspected VLAN Banner */}
+              {inspectedVlan !== null && (
+                <div
+                  className={`p-3.5 rounded-xl border flex flex-wrap items-center justify-between gap-3 text-xs ${
+                    inspectedVlanOccurrences.length > 0
+                      ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"
+                      : "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800"
+                  }`}
+                >
+                  <div className="space-y-1">
+                    <div className="font-bold flex items-center gap-2 text-slate-900 dark:text-slate-100">
+                      <span className="font-mono text-sm">VLAN {inspectedVlan}</span>
+                      <span className="text-slate-400">di Server</span>
+                      <span>{activeGridServerSummary?.serverName}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          inspectedVlanOccurrences.length > 0
+                            ? "bg-amber-200/80 text-amber-900"
+                            : "bg-emerald-200/80 text-emerald-900"
+                        }`}
+                      >
+                        {inspectedVlanOccurrences.length > 0 ? "Unavailable" : "Available"}
+                      </span>
+                    </div>
+                    {inspectedVlanOccurrences.length > 0 ? (
+                      <div className="flex flex-wrap gap-2 text-[11px]">
+                        {inspectedVlanOccurrences.map((occ) => (
+                          <Link
+                            key={occ.siteDbId}
+                            href={getCircuitHref(occ.kategoriLayanan, occ.siteDbId)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 hover:border-indigo-400 font-semibold transition"
+                          >
+                            <span className="font-mono font-bold text-blue-600">{occ.siteId}</span>
+                            <span>{occ.namaPerusahaan || occ.namaPic}</span>
+                            <span className="text-[10px] text-slate-400">({occ.serviceLabel})</span>
+                            <ExternalLink className="w-3 h-3 text-slate-400" />
+                          </Link>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                        VLAN ini bebas digunakan di server {activeGridServerSummary?.serverName} dan
+                        sudah disalin ke clipboard saat Anda mengklik tile.
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setInspectedVlan(null)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Legend */}
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                <div className="flex items-center space-x-4">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-emerald-500/20 border border-emerald-500 inline-block" />
+                    Available (Klik untuk salin)
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-amber-500/25 border border-amber-500 inline-block" />
+                    Unavailable (Klik untuk lihat sirkuit)
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded bg-rose-500/30 border border-rose-500 inline-block" />
+                    Bentrok (&ge;2 sirkuit)
+                  </span>
+                </div>
+
+                {totalBlockPages > 1 && (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      type="button"
+                      disabled={safeBlockPage === 0}
+                      onClick={() => setBlockPage((p) => Math.max(0, p - 1))}
+                      className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 font-bold disabled:opacity-40 cursor-pointer"
+                    >
+                      &larr; Sebelumnya
+                    </button>
+                    <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
+                      Blok {safeBlockPage + 1} / {totalBlockPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={safeBlockPage >= totalBlockPages - 1}
+                      onClick={() => setBlockPage((p) => Math.min(totalBlockPages - 1, p + 1))}
+                      className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 font-bold disabled:opacity-40 cursor-pointer"
+                    >
+                      Berikutnya &rarr;
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Interactive Grid */}
+              {currentGridSlice.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-500">
+                  Tidak ada VLAN yang cocok dengan filter rentang atau pencarian saat ini.
+                </div>
+              ) : (
+                <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 xl:grid-cols-[repeat(16,minmax(0,1fr))] gap-1.5">
+                  {currentGridSlice.map((v) => {
+                    const occ = gridUsedByVlanMap.get(v) || [];
+                    const isUsedOnServer = gridAllUsedSet.has(v);
+                    const isDup = occ.some((o) => o.isDuplicate);
+                    const isSelectedTile = inspectedVlan === v;
+
+                    return (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => {
+                          setInspectedVlan(v);
+                          if (!isUsedOnServer) {
+                            handleCopy(String(v), `tile-${v}`);
+                          }
+                        }}
+                        title={
+                          occ.length > 0
+                            ? `VLAN ${v} UNAVAILABLE: ${occ
+                                .map((o) => `${o.siteId} (${o.namaPerusahaan || o.namaPic})`)
+                                .join(", ")}`
+                            : isUsedOnServer
+                            ? `VLAN ${v} UNAVAILABLE di ${activeGridServerSummary?.serverName}`
+                            : `VLAN ${v} AVAILABLE — klik untuk salin`
+                        }
+                        className={`px-1.5 py-2 rounded-lg border text-center font-mono text-[11px] font-bold transition cursor-pointer relative ${
+                          isSelectedTile ? "ring-2 ring-indigo-500 scale-[1.03] z-10" : ""
+                        } ${
+                          isDup
+                            ? "bg-rose-100 dark:bg-rose-950/70 border-rose-400 text-rose-800 dark:text-rose-200 hover:bg-rose-200"
+                            : isUsedOnServer
+                            ? "bg-amber-100/90 dark:bg-amber-950/60 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 hover:bg-amber-200/80"
+                            : "bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60"
+                        }`}
+                      >
+                        <span className="block leading-none">{v}</span>
+                        {occ.length > 0 && (
+                          <span className="block text-[8px] font-sans font-semibold truncate mt-1 opacity-85">
+                            {occ[0].serviceLabel === "Enterprise Dedicated"
+                              ? "ENT"
+                              : occ[0].serviceLabel === "LocalLoop"
+                              ? "LL"
+                              : occ[0].serviceLabel === "Content"
+                              ? "CNT"
+                              : "POP"}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* DETAIL VIEW FOR UNASSIGNED CIRCUITS ("Sirkuit Tanpa VLAN") */}
+      {!loading && !error && selectedServer === UNASSIGNED_VIEW_KEY && (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-rose-200/90 dark:border-rose-900/70 shadow-sm overflow-hidden animate-fadeIn">
+          <div className="p-4 sm:p-5 bg-rose-50/50 dark:bg-rose-950/20 border-b border-rose-200/70 dark:border-rose-900/50 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-black text-rose-800 dark:text-rose-200 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4" />
+                Sirkuit Belum Memiliki VLAN ({filteredUnassigned.length})
+              </h3>
+              <p className="text-[11px] text-rose-700/80 dark:text-rose-300/80 mt-0.5">
+                Daftar sirkuit aktif yang belum memiliki ID VLAN. Klik link sirkuit untuk melengkapi VLAN ID.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center bg-white dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+                {[
+                  { label: "Semua", val: "ALL" },
+                  ...ELIGIBLE_VLAN_SERVICES.map((s) => ({ label: s, val: s })),
+                ].map((opt) => (
                   <button
                     key={opt.val}
                     type="button"
-                    onClick={() => {
-                      setSelectedService(opt.val);
-                      setBlockPage(0);
-                    }}
+                    onClick={() => setSelectedService(opt.val)}
                     className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition cursor-pointer ${
                       selectedService === opt.val
-                        ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-xs"
+                        ? "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900"
                         : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
                     }`}
                   >
                     {opt.label}
                   </button>
-                )
-              )}
-            </div>
+                ))}
+              </div>
 
-            {activeTab === "UNAVAILABLE" && (summary?.totalDuplicateVlans || 0) > 0 && (
-              <button
-                type="button"
-                onClick={() => setOnlyDuplicates((prev) => !prev)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition cursor-pointer ${
-                  onlyDuplicates
-                    ? "bg-rose-600 text-white border-rose-600"
-                    : "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800"
-                }`}
-              >
-                Bentrok Saja ({summary?.totalDuplicateVlans})
-              </button>
-            )}
-          </div>
-
-          <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-            {activeTab === "UNAVAILABLE" ? (
-              <>
-                Menampilkan{" "}
-                <span className="font-bold text-slate-800 dark:text-slate-200">
-                  {filteredUsedVlans.length} sirkuit
-                </span>{" "}
-                terpakai
-              </>
-            ) : activeTab === "AVAILABLE_GRID" ? (
-              <>
-                Menampilkan{" "}
-                <span className="font-bold text-slate-800 dark:text-slate-200">
-                  {gridMatchingVlans.length.toLocaleString("id-ID")} VLAN
-                </span>{" "}
-                di server{" "}
-                <span className="font-bold text-indigo-600 dark:text-indigo-400">
-                  {activeGridServerSummary?.serverName || "-"}
-                </span>
-              </>
-            ) : (
-              <>
-                Menampilkan{" "}
-                <span className="font-bold text-slate-800 dark:text-slate-200">
-                  {filteredUnassigned.length} sirkuit
-                </span>{" "}
-                belum ber-VLAN
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* MAIN CONTENT BODY */}
-      {loading ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm py-20 text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-600 border-t-transparent"></div>
-          <p className="mt-3 text-sm text-slate-500 font-medium">
-            Memetakan alokasi VLAN dari data sirkuit teraktivasi...
-          </p>
-        </div>
-      ) : error ? (
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-rose-200 dark:border-rose-800 p-8 text-center text-rose-600">
-          <AlertTriangle className="w-8 h-8 mx-auto" />
-          <p className="font-bold mt-2">Gagal Memuat Data VLAN Management</p>
-          <p className="text-xs mt-1">{error}</p>
-        </div>
-      ) : activeTab === "UNAVAILABLE" ? (
-        /* TAB 1: TABLE OF UNAVAILABLE / ACTIVE VLANS */
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm overflow-hidden">
-          {filteredUsedVlans.length === 0 ? (
-            <div className="py-16 text-center px-4 space-y-3">
-              <CheckCircle2 className="w-12 h-12 mx-auto text-emerald-500" />
-              <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
-                Tidak Ada VLAN Unavailable pada Filter Ini
-              </h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                {selectedServer !== "ALL"
-                  ? `Server '${selectedServer}' masih 100% tersedia (Available) untuk filter yang dipilih.`
-                  : "Belum ada sirkuit teraktivasi (POP Site, LocalLoop, Content, atau Enterprise Dedicated) yang cocok dengan filter."}
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    <th className="py-3 px-4">VLAN ID</th>
-                    <th className="py-3 px-4">Server / BRAS</th>
-                    <th className="py-3 px-4">Status VLAN</th>
-                    <th className="py-3 px-4">Site ID</th>
-                    <th className="py-3 px-4">Pelanggan & PIC</th>
-                    <th className="py-3 px-4">Kategori Layanan</th>
-                    <th className="py-3 px-4">IP Address</th>
-                    <th className="py-3 px-4">Status Sirkuit</th>
-                    <th className="py-3 px-4 text-center">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-medium text-slate-700 dark:text-slate-300">
-                  {filteredUsedVlans.map((item) => (
-                    <tr
-                      key={`${item.siteDbId}-${item.vlan}`}
-                      className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition"
-                    >
-                      {/* VLAN ID */}
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-1.5">
-                          <span className="font-mono font-black text-sm text-indigo-700 dark:text-indigo-400">
-                            {item.vlan}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(String(item.vlan), `tbl-${item.siteDbId}`)}
-                            className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
-                            title="Salin VLAN ID"
-                          >
-                            {copiedKey === `tbl-${item.siteDbId}` ? (
-                              <Check className="w-3 h-3 text-emerald-600" />
-                            ) : (
-                              <Copy className="w-3 h-3" />
-                            )}
-                          </button>
-                          {item.isDuplicate && (
-                            <span
-                              className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-950/70 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
-                              title={`Digunakan oleh ${item.duplicateTotal} sirkuit aktif di server ini`}
-                            >
-                              Bentrok {item.duplicateTotal}x
-                            </span>
-                          )}
-                          {item.isOutOfRange && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                              Luar Range
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* Server */}
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedServer(item.server)}
-                          className="font-bold text-slate-900 dark:text-slate-100 hover:text-indigo-600 dark:hover:text-indigo-400 transition text-left cursor-pointer"
-                        >
-                          {item.server}
-                        </button>
-                      </td>
-
-                      {/* Status VLAN */}
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 inline-flex items-center">
-                          <span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-amber-500" />
-                          Unavailable
-                        </span>
-                      </td>
-
-                      {/* Site ID */}
-                      <td className="py-3 px-4 font-mono font-bold whitespace-nowrap">
-                        <Link
-                          href={getCircuitHref(item.kategoriLayanan, item.siteDbId)}
-                          className="text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center"
-                        >
-                          {item.siteId}
-                          <ArrowUpRight className="w-3 h-3 ml-0.5" />
-                        </Link>
-                      </td>
-
-                      {/* Pelanggan & PIC */}
-                      <td className="py-3 px-4">
-                        <span className="font-bold text-slate-900 dark:text-slate-100 block">
-                          {item.namaPerusahaan || item.namaPic}
-                        </span>
-                        {item.namaPerusahaan && (
-                          <span className="text-[10px] text-slate-400 block">
-                            PIC: {item.namaPic}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Kategori Layanan */}
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${getServiceBadgeColor(
-                            item.serviceLabel
-                          )}`}
-                        >
-                          {item.serviceLabel}
-                        </span>
-                      </td>
-
-                      {/* IP */}
-                      <td className="py-3 px-4 font-mono text-[11px]">
-                        {item.ipPublic && (
-                          <span className="block text-slate-800 dark:text-slate-200">
-                            Pub: {item.ipPublic}
-                          </span>
-                        )}
-                        {item.ipPrivate && (
-                          <span className="block text-slate-400 text-[10px]">
-                            Priv: {item.ipPrivate}
-                          </span>
-                        )}
-                        {!item.ipPublic && !item.ipPrivate && "-"}
-                      </td>
-
-                      {/* Status Layanan */}
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                            item.statusLayanan === "Active"
-                              ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                              : "bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800"
-                          }`}
-                        >
-                          {item.statusLayanan}
-                        </span>
-                      </td>
-
-                      {/* Aksi */}
-                      <td className="py-3 px-4 text-center whitespace-nowrap">
-                        <Link
-                          href={getCircuitHref(item.kategoriLayanan, item.siteDbId)}
-                          className="px-2.5 py-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-950/60 rounded-lg transition inline-flex items-center"
-                        >
-                          Buka / Edit <ExternalLink className="w-3 h-3 ml-1" />
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      ) : activeTab === "AVAILABLE_GRID" ? (
-        /* TAB 2: INTERACTIVE VLAN MAP & AVAILABLE POOL */
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm p-5 space-y-5">
-          {/* Pool Filter & Range Controls */}
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[11px] font-bold text-slate-500">Status Tampilan:</span>
-              {[
-                { label: "Semua Slot", val: "ALL" as GridStatusFilter },
-                { label: "Available Saja", val: "AVAILABLE" as GridStatusFilter },
-                { label: "Unavailable Saja", val: "UNAVAILABLE" as GridStatusFilter },
-              ].map((opt) => (
-                <button
-                  key={opt.val}
-                  type="button"
-                  onClick={() => {
-                    setGridStatusFilter(opt.val);
-                    setBlockPage(0);
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition cursor-pointer ${
-                    gridStatusFilter === opt.val
-                      ? opt.val === "AVAILABLE"
-                        ? "bg-emerald-600 text-white"
-                        : opt.val === "UNAVAILABLE"
-                        ? "bg-amber-600 text-white"
-                        : "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900"
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <span className="text-[11px] font-bold text-slate-400">Rentang Tampil:</span>
-              <input
-                type="number"
-                min={MIN_VLAN_ID}
-                max={MAX_VLAN_ID}
-                value={rangeStart}
-                onChange={(e) => {
-                  setRangeStart(parseInt(e.target.value, 10) || MIN_VLAN_ID);
-                  setBlockPage(0);
-                }}
-                className="w-20 px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold text-xs outline-none"
-              />
-              <span className="text-slate-400 font-bold">s/d</span>
-              <input
-                type="number"
-                min={MIN_VLAN_ID}
-                max={MAX_VLAN_ID}
-                value={rangeEnd}
-                onChange={(e) => {
-                  setRangeEnd(parseInt(e.target.value, 10) || MAX_VLAN_ID);
-                  setBlockPage(0);
-                }}
-                className="w-20 px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-mono font-bold text-xs outline-none"
-              />
-
-              {activeGridServerSummary?.nextAvailableVlan !== null &&
-                activeGridServerSummary?.nextAvailableVlan !== undefined && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      handleCopy(
-                        String(activeGridServerSummary.nextAvailableVlan),
-                        "grid-next"
-                      )
-                    }
-                    className="px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    {copiedKey === "grid-next"
-                      ? `VLAN ${activeGridServerSummary.nextAvailableVlan} Disalin`
-                      : `Salin Next VLAN (${activeGridServerSummary.nextAvailableVlan})`}
-                  </button>
-                )}
-            </div>
-          </div>
-
-          {/* Inspected VLAN Banner */}
-          {inspectedVlan !== null && (
-            <div
-              className={`p-3.5 rounded-xl border flex flex-wrap items-center justify-between gap-3 text-xs ${
-                inspectedVlanOccurrences.length > 0
-                  ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800"
-                  : "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800"
-              }`}
-            >
-              <div className="space-y-1">
-                <div className="font-bold flex items-center gap-2 text-slate-900 dark:text-slate-100">
-                  <span className="font-mono text-sm">VLAN {inspectedVlan}</span>
-                  <span className="text-slate-400">di Server</span>
-                  <span>{activeGridServerSummary?.serverName}</span>
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                      inspectedVlanOccurrences.length > 0
-                        ? "bg-amber-200/80 text-amber-900"
-                        : "bg-emerald-200/80 text-emerald-900"
-                    }`}
-                  >
-                    {inspectedVlanOccurrences.length > 0 ? "Unavailable" : "Available"}
-                  </span>
+              <div className="relative w-full sm:w-64">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                  <Search className="w-3.5 h-3.5" />
                 </div>
-                {inspectedVlanOccurrences.length > 0 ? (
-                  <div className="flex flex-wrap gap-2 text-[11px]">
-                    {inspectedVlanOccurrences.map((occ) => (
-                      <Link
-                        key={occ.siteDbId}
-                        href={getCircuitHref(occ.kategoriLayanan, occ.siteDbId)}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 hover:border-indigo-400 font-semibold transition"
-                      >
-                        <span className="font-mono font-bold text-blue-600">{occ.siteId}</span>
-                        <span>{occ.namaPerusahaan || occ.namaPic}</span>
-                        <span className="text-[10px] text-slate-400">({occ.serviceLabel})</span>
-                        <ExternalLink className="w-3 h-3 text-slate-400" />
-                      </Link>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
-                    VLAN ini bebas digunakan di server {activeGridServerSummary?.serverName} dan
-                    sudah disalin ke clipboard saat Anda mengklik tile.
-                  </p>
-                )}
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Cari Site ID, PIC, Server..."
+                  className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-xs bg-white dark:bg-slate-800 outline-none focus:ring-2 focus:ring-rose-500"
+                />
               </div>
 
               <button
                 type="button"
-                onClick={() => setInspectedVlan(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                onClick={() => setSelectedServer("")}
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 hover:text-slate-800 cursor-pointer"
+                title="Tutup"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
-          )}
-
-          {/* Legend */}
-          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-            <div className="flex items-center space-x-4">
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-emerald-500/20 border border-emerald-500 inline-block" />
-                Available (Klik untuk salin)
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-amber-500/25 border border-amber-500 inline-block" />
-                Unavailable (Klik untuk lihat sirkuit)
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <span className="w-3 h-3 rounded bg-rose-500/30 border border-rose-500 inline-block" />
-                Bentrok (&ge;2 sirkuit)
-              </span>
-            </div>
-
-            {totalBlockPages > 1 && (
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  disabled={safeBlockPage === 0}
-                  onClick={() => setBlockPage((p) => Math.max(0, p - 1))}
-                  className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 font-bold disabled:opacity-40 cursor-pointer"
-                >
-                  &larr; Sebelumnya
-                </button>
-                <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
-                  Blok {safeBlockPage + 1} / {totalBlockPages}
-                </span>
-                <button
-                  type="button"
-                  disabled={safeBlockPage >= totalBlockPages - 1}
-                  onClick={() => setBlockPage((p) => Math.min(totalBlockPages - 1, p + 1))}
-                  className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 font-bold disabled:opacity-40 cursor-pointer"
-                >
-                  Berikutnya &rarr;
-                </button>
-              </div>
-            )}
           </div>
 
-          {/* Interactive Grid */}
-          {currentGridSlice.length === 0 ? (
-            <div className="py-12 text-center text-xs text-slate-500">
-              Tidak ada VLAN yang cocok dengan filter rentang atau pencarian saat ini.
-            </div>
-          ) : (
-            <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 xl:grid-cols-[repeat(16,minmax(0,1fr))] gap-1.5">
-              {currentGridSlice.map((v) => {
-                const occ = gridUsedByVlanMap.get(v) || [];
-                const isUsedOnServer = gridAllUsedSet.has(v);
-                const isDup = occ.some((o) => o.isDuplicate);
-                const isSelectedTile = inspectedVlan === v;
-
-                return (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => {
-                      setInspectedVlan(v);
-                      if (!isUsedOnServer) {
-                        handleCopy(String(v), `tile-${v}`);
-                      }
-                    }}
-                    title={
-                      occ.length > 0
-                        ? `VLAN ${v} UNAVAILABLE: ${occ
-                            .map((o) => `${o.siteId} (${o.namaPerusahaan || o.namaPic})`)
-                            .join(", ")}`
-                        : isUsedOnServer
-                        ? `VLAN ${v} UNAVAILABLE di ${activeGridServerSummary?.serverName}`
-                        : `VLAN ${v} AVAILABLE — klik untuk salin`
-                    }
-                    className={`px-1.5 py-2 rounded-lg border text-center font-mono text-[11px] font-bold transition cursor-pointer relative ${
-                      isSelectedTile ? "ring-2 ring-indigo-500 scale-[1.03] z-10" : ""
-                    } ${
-                      isDup
-                        ? "bg-rose-100 dark:bg-rose-950/70 border-rose-400 text-rose-800 dark:text-rose-200 hover:bg-rose-200"
-                        : isUsedOnServer
-                        ? "bg-amber-100/90 dark:bg-amber-950/60 border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 hover:bg-amber-200/80"
-                        : "bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/60"
-                    }`}
-                  >
-                    <span className="block leading-none">{v}</span>
-                    {occ.length > 0 && (
-                      <span className="block text-[8px] font-sans font-semibold truncate mt-1 opacity-85">
-                        {occ[0].serviceLabel === "Enterprise Dedicated"
-                          ? "ENT"
-                          : occ[0].serviceLabel === "LocalLoop"
-                          ? "LL"
-                          : occ[0].serviceLabel === "Content"
-                          ? "CNT"
-                          : "POP"}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      ) : (
-        /* TAB 3: UNASSIGNED CIRCUITS (E.G. LEGACY LOCALLOOP WITHOUT VLAN YET) */
-        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-sm overflow-hidden">
           {filteredUnassigned.length === 0 ? (
-            <div className="py-16 text-center px-4 space-y-2">
+            <div className="py-12 text-center px-4 space-y-2">
               <CheckCircle2 className="w-10 h-10 mx-auto text-emerald-500" />
               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
                 Seluruh Sirkuit Terfilter Sudah Memiliki VLAN
@@ -1625,7 +2026,7 @@ export default function VlanManagementPage() {
                 <thead>
                   <tr className="bg-slate-50/80 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     <th className="py-3 px-4">Site ID</th>
-                    <th className="py-3 px-4">Pelanggan & PIC</th>
+                    <th className="py-3 px-4">Pelanggan &amp; PIC</th>
                     <th className="py-3 px-4">Kategori Layanan</th>
                     <th className="py-3 px-4">Server / Interkoneksi</th>
                     <th className="py-3 px-4">Status Sirkuit</th>
@@ -1667,7 +2068,7 @@ export default function VlanManagementPage() {
                           href={getCircuitHref(c.kategoriLayanan, c.siteDbId)}
                           className="px-3 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-bold text-[11px] hover:bg-indigo-100 inline-flex items-center"
                         >
-                          Edit & Isi VLAN <ExternalLink className="w-3 h-3 ml-1" />
+                          Edit &amp; Isi VLAN <ExternalLink className="w-3 h-3 ml-1" />
                         </Link>
                       </td>
                     </tr>

@@ -250,3 +250,166 @@ export function findNextAvailableIp(
   return null;
 }
 
+export type IpSubnetSegment =
+  | {
+      type: "IDLE";
+      key: string;
+      startIp: string;
+      endIp: string;
+      startLong: number;
+      endLong: number;
+      count: number;
+    }
+  | {
+      type: "USED";
+      key: string;
+      ipLong: number;
+      detail: UsedIpDetail;
+    };
+
+/**
+ * Build an ascending phpIPAM-style list of interleaved contiguous IDLE IP ranges
+ * and individual USED IP rows for a subnet prefix.
+ */
+export function buildIpSubnetSegments(subnet: SubnetSummary): IpSubnetSegment[] {
+  const segments: IpSubnetSegment[] = [];
+  const parsed = parseCidr(subnet.cidr);
+
+  const usableStartLong = parsed
+    ? ipToLong(parsed.firstUsable)
+    : ipToLong(subnet.firstUsable);
+  const usableEndLong = parsed
+    ? ipToLong(parsed.lastUsable)
+    : ipToLong(subnet.lastUsable);
+
+  const byIpLong = new Map<number, UsedIpDetail[]>();
+  for (const item of subnet.usedIps || []) {
+    const n = ipToLong(item.ip);
+    if (n === 0) continue;
+    const list = byIpLong.get(n);
+    if (list) {
+      list.push(item);
+    } else {
+      byIpLong.set(n, [item]);
+    }
+  }
+
+  const sortedUsedLongs = Array.from(byIpLong.keys()).sort((a, b) => a - b);
+
+  let cursor = usableStartLong;
+  let closedTrailingIdle = false;
+
+  const flushTrailingIdle = () => {
+    if (!closedTrailingIdle && usableStartLong <= usableEndLong && cursor <= usableEndLong) {
+      segments.push({
+        type: "IDLE",
+        key: `idle-${cursor}-${usableEndLong}`,
+        startIp: longToIp(cursor),
+        endIp: longToIp(usableEndLong),
+        startLong: cursor,
+        endLong: usableEndLong,
+        count: usableEndLong - cursor + 1,
+      });
+    }
+    closedTrailingIdle = true;
+  };
+
+  for (const occLong of sortedUsedLongs) {
+    const details = byIpLong.get(occLong) || [];
+
+    if (occLong < usableStartLong) {
+      details.forEach((detail, idx) => {
+        segments.push({
+          type: "USED",
+          key: `used-${occLong}-${detail.siteDbId}-${detail.source}-${idx}`,
+          ipLong: occLong,
+          detail,
+        });
+      });
+      continue;
+    }
+
+    if (occLong <= usableEndLong) {
+      if (occLong > cursor && cursor <= usableEndLong) {
+        const idleEnd = occLong - 1;
+        segments.push({
+          type: "IDLE",
+          key: `idle-${cursor}-${idleEnd}`,
+          startIp: longToIp(cursor),
+          endIp: longToIp(idleEnd),
+          startLong: cursor,
+          endLong: idleEnd,
+          count: idleEnd - cursor + 1,
+        });
+      }
+
+      details.forEach((detail, idx) => {
+        segments.push({
+          type: "USED",
+          key: `used-${occLong}-${detail.siteDbId}-${detail.source}-${idx}`,
+          ipLong: occLong,
+          detail,
+        });
+      });
+
+      cursor = Math.max(cursor, occLong + 1);
+      continue;
+    }
+
+    // Out-of-usable-bounds (e.g. broadcast IP)
+    flushTrailingIdle();
+    details.forEach((detail, idx) => {
+      segments.push({
+        type: "USED",
+        key: `used-${occLong}-${detail.siteDbId}-${detail.source}-${idx}`,
+        ipLong: occLong,
+        detail,
+      });
+    });
+  }
+
+  flushTrailingIdle();
+
+  return segments;
+}
+
+/**
+ * Match a search query against an IP segment (including exact IP fallback inside IDLE ranges).
+ */
+export function matchesIpSegmentSearch(segment: IpSubnetSegment, rawQuery: string): boolean {
+  const q = rawQuery.trim().toLowerCase();
+  if (!q) return true;
+
+  if (segment.type === "USED") {
+    const item = segment.detail;
+    return (
+      item.ip.toLowerCase().includes(q) ||
+      (item.rawCidr || "").toLowerCase().includes(q) ||
+      item.siteId.toLowerCase().includes(q) ||
+      item.namaPic.toLowerCase().includes(q) ||
+      (item.namaPerusahaan || "").toLowerCase().includes(q) ||
+      (item.server || "").toLowerCase().includes(q) ||
+      (item.infrastruktur || "").toLowerCase().includes(q) ||
+      (item.vlan ? String(item.vlan).includes(q) : false)
+    );
+  }
+
+  if (
+    segment.startIp.toLowerCase().includes(q) ||
+    segment.endIp.toLowerCase().includes(q) ||
+    `${segment.startIp} - ${segment.endIp}`.toLowerCase().includes(q) ||
+    "idle".includes(q) ||
+    "tersedia".includes(q) ||
+    "free".includes(q)
+  ) {
+    return true;
+  }
+
+  if (isValidIpv4(q)) {
+    const targetLong = ipToLong(q);
+    return targetLong >= segment.startLong && targetLong <= segment.endLong;
+  }
+
+  return false;
+}
+
