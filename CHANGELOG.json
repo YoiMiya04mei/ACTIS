@@ -4,6 +4,25 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.45",
+      "date": "2026-11-21T13:32:47+07:00",
+      "title": "Menambahkan Menu Prefix IP Private dengan Trigger Otomatis dari Kolom IP Private",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Menambahkan menu Prefix IP Private (/ipam-private) tepat di bawah menu Prefix IP Public di sidebar Layanan & Inventaris serta hak akses Level Akses"
+        },
+        {
+          "type": "feat",
+          "text": "Menggeneralisasi mesin kalkulasi IPAM (ipamService & ipamPrefixRouteHandler) agar Prefix IP Private otomatis membaca alokasi dari kolom ip_private pada POP Site, Enterprise, dan Antrean termasuk format CIDR /31 point-to-point"
+        },
+        {
+          "type": "improve",
+          "text": "Mengekstrak komponen bersama IpamWorkspace dengan dukungan tampilan tabel list click-to-inspect Idle/Terpakai bergaya phpIPAM, saran cepat CIDR dari data Luar Prefix, dan ekspor CSV terpisah"
+        }
+      ]
+    },
+    {
       "version": "1.2.44",
       "date": "2026-11-21T11:23:04+07:00",
       "title": "Tampilan Tabel List Subnet IPAM & Server VLAN dengan Rincian Terpakai dan Idle Saat Diklik",

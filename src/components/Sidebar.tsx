@@ -59,6 +59,7 @@ export function Sidebar({
     "pop_sites",
     "enterprise",
     "ipam",
+    "ipam_private",
     "vlan",
     "monitoring",
     "dcim_racks",
@@ -100,7 +101,9 @@ export function Sidebar({
     pathname === "/queue" ||
     pathname.startsWith("/pop-sites") ||
     pathname.startsWith("/enterprise") ||
-    pathname.startsWith("/ipam") ||
+    pathname === "/ipam" ||
+    pathname.startsWith("/ipam/") ||
+    pathname.startsWith("/ipam-private") ||
     pathname.startsWith("/vlan") ||
     pathname.startsWith("/monitoring") ||
     pathname.startsWith("/dcim");
@@ -330,7 +333,7 @@ export function Sidebar({
                     href="/ipam"
                     onClick={onCloseMobile}
                     className={`group flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
-                      pathname.startsWith("/ipam")
+                      pathname === "/ipam" || pathname.startsWith("/ipam/")
                         ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
                         : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
                     }`}
@@ -339,12 +342,36 @@ export function Sidebar({
                     <div className="flex items-center space-x-3">
                       <Globe
                         className={`w-5 h-5 shrink-0 ${
-                          pathname.startsWith("/ipam")
+                          pathname === "/ipam" || pathname.startsWith("/ipam/")
                             ? "text-blue-600 dark:text-blue-400"
                             : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
                         }`}
                       />
                       <span>Prefix IP Public</span>
+                    </div>
+                  </Link>
+                  )}
+
+                  {hasMenuAccess("ipam_private") && (
+                  <Link
+                    href="/ipam-private"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                      pathname === "/ipam-private" || pathname.startsWith("/ipam-private/")
+                        ? "bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200/80 dark:border-teal-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Prefix IP Private (Interkoneksi / P2P / Loopback)"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Cable
+                        className={`w-5 h-5 shrink-0 ${
+                          pathname === "/ipam-private" || pathname.startsWith("/ipam-private/")
+                            ? "text-teal-600 dark:text-teal-400"
+                            : "text-slate-400 group-hover:text-teal-600 dark:group-hover:text-teal-400"
+                        }`}
+                      />
+                      <span>Prefix IP Private</span>
                     </div>
                   </Link>
                   )}

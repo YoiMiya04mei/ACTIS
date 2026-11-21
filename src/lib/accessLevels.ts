@@ -15,6 +15,7 @@ export type MenuAccessKey =
   | "pop_sites"
   | "enterprise"
   | "ipam"
+  | "ipam_private"
   | "vlan"
   | "monitoring"
   | "dcim_racks"
@@ -134,6 +135,7 @@ export const ACTIS_ACCESS_CATEGORIES: readonly ActisMenuCategoryDefinition[] = [
       { key: "pop_sites", label: "List POP Site", href: "/pop-sites" },
       { key: "enterprise", label: "List Enterprise", href: "/enterprise" },
       { key: "ipam", label: "Prefix IP Public", href: "/ipam" },
+      { key: "ipam_private", label: "Prefix IP Private", href: "/ipam-private" },
       { key: "vlan", label: "VLAN Management", href: "/vlan" },
       { key: "monitoring", label: "ICMP Ping Monitor", href: "/monitoring" },
       { key: "dcim_racks", label: "Database Rack 3D", href: "/dcim/racks" },
@@ -287,6 +289,7 @@ export const DEFAULT_ROLE_MENU_PERMISSIONS: Record<
     "pop_sites",
     "enterprise",
     "ipam",
+    "ipam_private",
     "vlan",
     "monitoring",
     "dcim_racks",
@@ -526,7 +529,8 @@ export function getRequiredMenuForPathname(pathname: string | null | undefined):
   if (clean === "/queue" || clean.startsWith("/queue/")) return "queue";
   if (clean.startsWith("/pop-sites")) return "pop_sites";
   if (clean.startsWith("/enterprise")) return "enterprise";
-  if (clean.startsWith("/ipam")) return "ipam";
+  if (clean === "/ipam-private" || clean.startsWith("/ipam-private/")) return "ipam_private";
+  if (clean === "/ipam" || clean.startsWith("/ipam/")) return "ipam";
   if (clean.startsWith("/vlan")) return "vlan";
   if (clean.startsWith("/monitoring")) return "monitoring";
   if (clean.startsWith("/dcim/racks")) return "dcim_racks";

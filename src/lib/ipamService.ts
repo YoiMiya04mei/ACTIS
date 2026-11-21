@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import {
   DEFAULT_PUBLIC_PREFIXES,
+  DEFAULT_PRIVATE_PREFIXES,
   parseCidr,
   isIpInSubnet,
   expandIpPublic,
@@ -11,211 +12,372 @@ import {
   UsedIpDetail,
 } from "@/lib/ipamUtils";
 
-const SETTING_KEY_PREFIXES = "ipam_public_prefixes";
+export type IpamScope = "public" | "private";
+
+export interface PrefixEntry {
+  id?: string;
+  cidr: string;
+  description: string;
+  is_default?: boolean;
+  created_at?: string;
+}
+
+const IPAM_SCOPE_META: Record<
+  IpamScope,
+  {
+    settingKey: string;
+    defaultPrefixes: { cidr: string; description: string }[];
+    label: string;
+    resetDetail: string;
+    resetMessage: string;
+  }
+> = {
+  public: {
+    settingKey: "ipam_public_prefixes",
+    defaultPrefixes: DEFAULT_PUBLIC_PREFIXES,
+    label: "Prefix IP Public",
+    resetDetail: "Reset ke 5 default prefixes",
+    resetMessage: "Seluruh Prefix IP Public berhasil direset ke daftar default 5 prefix utama.",
+  },
+  private: {
+    settingKey: "ipam_private_prefixes",
+    defaultPrefixes: DEFAULT_PRIVATE_PREFIXES,
+    label: "Prefix IP Private",
+    resetDetail: "Reset Prefix IP Private ke konfigurasi awal",
+    resetMessage: "Daftar Prefix IP Private berhasil dikosongkan ke konfigurasi awal.",
+  },
+};
+
+export function getIpamScopeMeta(scope: IpamScope) {
+  return IPAM_SCOPE_META[scope];
+}
 
 /**
- * Retrieve active public IP prefixes from system_settings or default
+ * Retrieve active IP prefixes for the given scope from system_settings or defaults.
  */
-export async function getConfiguredPublicPrefixes(): Promise<
-  { cidr: string; description: string }[]
-> {
+export async function getConfiguredPrefixes(
+  scope: IpamScope = "public"
+): Promise<PrefixEntry[]> {
+  const meta = IPAM_SCOPE_META[scope];
   try {
     const row = await prisma.systemSetting.findUnique({
-      where: { key: SETTING_KEY_PREFIXES },
+      where: { key: meta.settingKey },
     });
 
     if (row && row.value) {
       const parsed = JSON.parse(row.value);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+      if (Array.isArray(parsed)) {
+        if (scope === "private" || parsed.length > 0) {
+          return parsed;
+        }
       }
     }
   } catch (err) {
-    console.error("Failed to read ipam_public_prefixes setting, using defaults:", err);
+    console.error(`Failed to read ${meta.settingKey} setting, using defaults:`, err);
   }
 
-  return DEFAULT_PUBLIC_PREFIXES;
+  return meta.defaultPrefixes.map((p) => ({ ...p }));
 }
 
 /**
- * Persist public IP prefixes list to system_settings
+ * Persist IP prefixes list for the given scope to system_settings.
  */
-export async function savePublicPrefixes(
-  prefixes: { cidr: string; description: string }[]
+export async function saveConfiguredPrefixes(
+  scope: IpamScope,
+  prefixes: PrefixEntry[]
 ): Promise<void> {
+  const meta = IPAM_SCOPE_META[scope];
   const jsonStr = JSON.stringify(prefixes);
   await prisma.systemSetting.upsert({
-    where: { key: SETTING_KEY_PREFIXES },
+    where: { key: meta.settingKey },
     update: { value: jsonStr },
-    create: { key: SETTING_KEY_PREFIXES, value: jsonStr },
+    create: { key: meta.settingKey, value: jsonStr },
   });
 }
 
 /**
- * Reset public IP prefixes to default user prefixes
+ * Reset IP prefixes for the given scope back to defaults.
  */
+export async function resetPrefixesToDefault(scope: IpamScope = "public"): Promise<void> {
+  const meta = IPAM_SCOPE_META[scope];
+  await saveConfiguredPrefixes(
+    scope,
+    meta.defaultPrefixes.map((p) => ({ ...p }))
+  );
+}
+
+// Backward-compatible wrappers for Public scope + named helpers for Private scope
+export async function getConfiguredPublicPrefixes(): Promise<PrefixEntry[]> {
+  return getConfiguredPrefixes("public");
+}
+
+export async function savePublicPrefixes(prefixes: PrefixEntry[]): Promise<void> {
+  return saveConfiguredPrefixes("public", prefixes);
+}
+
 export async function resetPublicPrefixesToDefault(): Promise<void> {
-  await savePublicPrefixes(DEFAULT_PUBLIC_PREFIXES);
+  return resetPrefixesToDefault("public");
+}
+
+export async function getConfiguredPrivatePrefixes(): Promise<PrefixEntry[]> {
+  return getConfiguredPrefixes("private");
+}
+
+export async function savePrivatePrefixes(prefixes: PrefixEntry[]): Promise<void> {
+  return saveConfiguredPrefixes("private", prefixes);
+}
+
+export async function resetPrivatePrefixesToDefault(): Promise<void> {
+  return resetPrefixesToDefault("private");
+}
+
+interface RawIpSourceRecord {
+  id: string;
+  refCode: string;
+  rawIp: string | null;
+  namaPic: string;
+  namaPerusahaan: string | null;
+  kategoriLayanan: string;
+  subLayanan: string | null;
+  vlan: number | null;
+  server: string | null;
+  infrastruktur: string | null;
+  mediaKoneksi: string | null;
+  statusLayanan: string;
+  source: "POP_SITE" | "ORDER_QUEUE";
+  updatedAt: string;
+}
+
+async function fetchIpRecordsForScope(scope: IpamScope): Promise<RawIpSourceRecord[]> {
+  const commonSelect = {
+    id: true,
+    nama_pic: true,
+    nama_perusahaan: true,
+    kategori_layanan: true,
+    sub_layanan: true,
+    vlan: true,
+    server: true,
+    infrastruktur: true,
+    media_koneksi: true,
+  } as const;
+
+  if (scope === "private") {
+    const [sites, pendingOrders] = await Promise.all([
+      prisma.popSite.findMany({
+        where: { ip_private: { not: null } },
+        select: {
+          ...commonSelect,
+          site_id: true,
+          ip_private: true,
+          status_layanan: true,
+          updated_at: true,
+        },
+      }),
+      prisma.popSiteOrder.findMany({
+        where: {
+          status: { notIn: ["Completed", "Cancelled"] },
+          ip_private: { not: null },
+        },
+        select: {
+          ...commonSelect,
+          ticket_number: true,
+          ip_private: true,
+          status: true,
+          created_at: true,
+        },
+      }),
+    ]);
+
+    return [
+      ...sites.map((s) => ({
+        id: s.id,
+        refCode: s.site_id,
+        rawIp: s.ip_private,
+        namaPic: s.nama_pic,
+        namaPerusahaan: s.nama_perusahaan,
+        kategoriLayanan: s.kategori_layanan,
+        subLayanan: s.sub_layanan,
+        vlan: s.vlan,
+        server: s.server,
+        infrastruktur: s.infrastruktur,
+        mediaKoneksi: s.media_koneksi,
+        statusLayanan: s.status_layanan,
+        source: "POP_SITE" as const,
+        updatedAt: s.updated_at.toISOString(),
+      })),
+      ...pendingOrders.map((o) => ({
+        id: o.id,
+        refCode: o.ticket_number,
+        rawIp: o.ip_private,
+        namaPic: o.nama_pic,
+        namaPerusahaan: o.nama_perusahaan,
+        kategoriLayanan: o.kategori_layanan,
+        subLayanan: o.sub_layanan,
+        vlan: o.vlan,
+        server: o.server,
+        infrastruktur: o.infrastruktur,
+        mediaKoneksi: o.media_koneksi,
+        statusLayanan: `Reservasi (${o.status})`,
+        source: "ORDER_QUEUE" as const,
+        updatedAt: o.created_at.toISOString(),
+      })),
+    ];
+  }
+
+  const [sites, pendingOrders] = await Promise.all([
+    prisma.popSite.findMany({
+      where: { ip_public: { not: null } },
+      select: {
+        ...commonSelect,
+        site_id: true,
+        ip_public: true,
+        status_layanan: true,
+        updated_at: true,
+      },
+    }),
+    prisma.popSiteOrder.findMany({
+      where: {
+        status: { notIn: ["Completed", "Cancelled"] },
+        ip_public: { not: null },
+      },
+      select: {
+        ...commonSelect,
+        ticket_number: true,
+        ip_public: true,
+        status: true,
+        created_at: true,
+      },
+    }),
+  ]);
+
+  return [
+    ...sites.map((s) => ({
+      id: s.id,
+      refCode: s.site_id,
+      rawIp: s.ip_public,
+      namaPic: s.nama_pic,
+      namaPerusahaan: s.nama_perusahaan,
+      kategoriLayanan: s.kategori_layanan,
+      subLayanan: s.sub_layanan,
+      vlan: s.vlan,
+      server: s.server,
+      infrastruktur: s.infrastruktur,
+      mediaKoneksi: s.media_koneksi,
+      statusLayanan: s.status_layanan,
+      source: "POP_SITE" as const,
+      updatedAt: s.updated_at.toISOString(),
+    })),
+    ...pendingOrders.map((o) => ({
+      id: o.id,
+      refCode: o.ticket_number,
+      rawIp: o.ip_public,
+      namaPic: o.nama_pic,
+      namaPerusahaan: o.nama_perusahaan,
+      kategoriLayanan: o.kategori_layanan,
+      subLayanan: o.sub_layanan,
+      vlan: o.vlan,
+      server: o.server,
+      infrastruktur: o.infrastruktur,
+      mediaKoneksi: o.media_koneksi,
+      statusLayanan: `Reservasi (${o.status})`,
+      source: "ORDER_QUEUE" as const,
+      updatedAt: o.created_at.toISOString(),
+    })),
+  ];
 }
 
 /**
- * Core IPAM Calculation:
- * Cross-references database IP Public data (from PopSite assets & Order queue)
- * with the configured public prefixes like in phpIPAM.
+ * Pure IPAM Calculation Engine shared by both Public (`ip_public`) and Private (`ip_private`) scopes.
  */
-export async function getIpamOverviewData(): Promise<{
+export function computeIpamOverview(
+  configuredPrefixes: PrefixEntry[],
+  records: RawIpSourceRecord[]
+): {
   summary: IpamGlobalSummary;
   subnets: SubnetSummary[];
   unmanagedIps: UsedIpDetail[];
-}> {
-  const configuredPrefixes = await getConfiguredPublicPrefixes();
-
-  // 1. Fetch active inventory PopSites with ip_public
-  const sites = await prisma.popSite.findMany({
-    where: {
-      ip_public: {
-        not: null,
-      },
-    },
-    select: {
-      id: true,
-      site_id: true,
-      nama_pic: true,
-      nama_perusahaan: true,
-      kategori_layanan: true,
-      sub_layanan: true,
-      vlan: true,
-      server: true,
-      infrastruktur: true,
-      media_koneksi: true,
-      ip_public: true,
-      status_layanan: true,
-      updated_at: true,
-    },
-  });
-
-  // 2. Fetch in-progress orders in queue with ip_public (Reserved)
-  const pendingOrders = await prisma.popSiteOrder.findMany({
-    where: {
-      status: {
-        notIn: ["Completed", "Cancelled"],
-      },
-      ip_public: {
-        not: null,
-      },
-    },
-    select: {
-      id: true,
-      ticket_number: true,
-      nama_pic: true,
-      nama_perusahaan: true,
-      kategori_layanan: true,
-      sub_layanan: true,
-      vlan: true,
-      server: true,
-      infrastruktur: true,
-      media_koneksi: true,
-      ip_public: true,
-      status: true,
-      created_at: true,
-    },
-  });
-
-  // 3. Map all used IPs
+} {
   const allUsedIps: UsedIpDetail[] = [];
   const registeredIpMap = new Map<string, UsedIpDetail>();
 
-  // Process PopSites
-  for (const site of sites) {
-    if (!site.ip_public) continue;
-    const expanded = expandIpPublic(site.ip_public);
+  // Ensure active POP_SITE records always take priority over pending ORDER_QUEUE reservations
+  const sortedRecords = [
+    ...records.filter((r) => r.source === "POP_SITE"),
+    ...records.filter((r) => r.source === "ORDER_QUEUE"),
+  ];
+
+  for (const rec of sortedRecords) {
+    const cleanRaw = typeof rec.rawIp === "string" ? rec.rawIp.trim() : "";
+    if (!cleanRaw) continue;
+
+    const expanded = expandIpPublic(cleanRaw);
     for (const singleIp of expanded.ips) {
-      if (registeredIpMap.has(singleIp)) continue; // avoid duplicate count
+      if (registeredIpMap.has(singleIp)) continue;
       const item: UsedIpDetail = {
         ip: singleIp,
-        rawCidr: site.ip_public,
+        rawCidr: cleanRaw,
         isSubnetBlock: expanded.isBlock,
         blockRange: expanded.blockRange,
-        siteId: site.site_id,
-        siteDbId: site.id,
-        namaPic: site.nama_pic,
-        namaPerusahaan: site.nama_perusahaan,
-        kategoriLayanan: site.kategori_layanan,
-        subLayanan: site.sub_layanan,
-        vlan: site.vlan,
-        server: site.server,
-        infrastruktur: site.infrastruktur,
-        mediaKoneksi: site.media_koneksi,
-        statusLayanan: site.status_layanan,
-        source: "POP_SITE",
-        updatedAt: site.updated_at.toISOString(),
+        siteId: rec.refCode,
+        siteDbId: rec.id,
+        namaPic: rec.namaPic,
+        namaPerusahaan: rec.namaPerusahaan,
+        kategoriLayanan: rec.kategoriLayanan,
+        subLayanan: rec.subLayanan,
+        vlan: rec.vlan,
+        server: rec.server,
+        infrastruktur: rec.infrastruktur,
+        mediaKoneksi: rec.mediaKoneksi,
+        statusLayanan: rec.statusLayanan,
+        source: rec.source,
+        updatedAt: rec.updatedAt,
       };
       registeredIpMap.set(singleIp, item);
       allUsedIps.push(item);
     }
   }
 
-  // Process pending orders
-  for (const order of pendingOrders) {
-    if (!order.ip_public) continue;
-    const expanded = expandIpPublic(order.ip_public);
-    for (const singleIp of expanded.ips) {
-      if (registeredIpMap.has(singleIp)) continue; // already assigned
-      const item: UsedIpDetail = {
-        ip: singleIp,
-        rawCidr: order.ip_public,
-        isSubnetBlock: expanded.isBlock,
-        blockRange: expanded.blockRange,
-        siteId: order.ticket_number,
-        siteDbId: order.id,
-        namaPic: order.nama_pic,
-        namaPerusahaan: order.nama_perusahaan,
-        kategoriLayanan: order.kategori_layanan,
-        subLayanan: order.sub_layanan,
-        vlan: order.vlan,
-        server: order.server,
-        infrastruktur: order.infrastruktur,
-        mediaKoneksi: order.media_koneksi,
-        statusLayanan: `Reservasi (${order.status})`,
-        source: "ORDER_QUEUE",
-        updatedAt: order.created_at.toISOString(),
-      };
-      registeredIpMap.set(singleIp, item);
-      allUsedIps.push(item);
-    }
-  }
-
-  // 4. Calculate stats for each configured subnet
   const subnets: SubnetSummary[] = [];
   const assignedIpsInPrefixes = new Set<string>();
 
   let totalIps = 0;
   let totalUsableHosts = 0;
   let totalUsedIps = 0;
+  let totalFreeIps = 0;
 
   for (const pref of configuredPrefixes) {
     const parsed = parseCidr(pref.cidr);
     if (!parsed) continue;
 
+    const firstUsableLong = ipToLong(parsed.firstUsable);
+    const lastUsableLong = ipToLong(parsed.lastUsable);
+
     const usedInThisSubnet: UsedIpDetail[] = [];
     const usedIpSetForSubnet = new Set<string>();
+    const usedUsableIpSet = new Set<string>();
 
     for (const usedItem of allUsedIps) {
       if (isIpInSubnet(usedItem.ip, pref.cidr)) {
         usedInThisSubnet.push(usedItem);
         usedIpSetForSubnet.add(usedItem.ip);
         assignedIpsInPrefixes.add(usedItem.ip);
+
+        const nLong = ipToLong(usedItem.ip);
+        if (nLong >= firstUsableLong && nLong <= lastUsableLong) {
+          usedUsableIpSet.add(usedItem.ip);
+        }
       }
     }
 
-    // Sort used IPs ascending
     usedInThisSubnet.sort((a, b) => ipToLong(a.ip) - ipToLong(b.ip));
 
     const usedCount = usedInThisSubnet.length;
-    const freeCount = Math.max(0, parsed.usableHosts - usedCount);
+    const freeCount = Math.max(0, parsed.usableHosts - usedUsableIpSet.size);
     const usagePct =
       parsed.usableHosts > 0
-        ? parseFloat(((usedCount / parsed.usableHosts) * 100).toFixed(2))
+        ? Math.min(100, parseFloat(((usedCount / parsed.usableHosts) * 100).toFixed(2)))
+        : usedCount > 0
+        ? 100
         : 0;
 
     const nextAvail = findNextAvailableIp(parsed, usedIpSetForSubnet);
@@ -223,10 +385,11 @@ export async function getIpamOverviewData(): Promise<{
     totalIps += parsed.totalIps;
     totalUsableHosts += parsed.usableHosts;
     totalUsedIps += usedCount;
+    totalFreeIps += freeCount;
 
     subnets.push({
-      cidr: pref.cidr,
-      description: pref.description || `Prefix ${pref.cidr}`,
+      cidr: parsed.cidr,
+      description: pref.description || `Prefix ${parsed.cidr}`,
       network: parsed.network,
       broadcast: parsed.broadcast,
       netmask: parsed.netmask,
@@ -243,16 +406,14 @@ export async function getIpamOverviewData(): Promise<{
     });
   }
 
-  // 5. Unmanaged IPs (assigned IPs that fall outside the configured prefixes)
   const unmanagedIps = allUsedIps.filter(
     (item) => !assignedIpsInPrefixes.has(item.ip)
   );
   unmanagedIps.sort((a, b) => ipToLong(a.ip) - ipToLong(b.ip));
 
-  const totalFreeIps = Math.max(0, totalUsableHosts - totalUsedIps);
   const overallUsagePct =
     totalUsableHosts > 0
-      ? parseFloat(((totalUsedIps / totalUsableHosts) * 100).toFixed(2))
+      ? Math.min(100, parseFloat(((totalUsedIps / totalUsableHosts) * 100).toFixed(2)))
       : 0;
 
   const summary: IpamGlobalSummary = {
@@ -271,3 +432,22 @@ export async function getIpamOverviewData(): Promise<{
   };
 }
 
+/**
+ * Core IPAM Calculation Entrypoint:
+ * Cross-references database IP Public or IP Private data (from PopSite assets & Order queue)
+ * with configured prefixes like in phpIPAM.
+ */
+export async function getIpamOverviewData(
+  scope: IpamScope = "public"
+): Promise<{
+  summary: IpamGlobalSummary;
+  subnets: SubnetSummary[];
+  unmanagedIps: UsedIpDetail[];
+}> {
+  const [configuredPrefixes, records] = await Promise.all([
+    getConfiguredPrefixes(scope),
+    fetchIpRecordsForScope(scope),
+  ]);
+
+  return computeIpamOverview(configuredPrefixes, records);
+}

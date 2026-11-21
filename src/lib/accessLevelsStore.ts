@@ -15,12 +15,42 @@ import {
 
 export const ACCESS_LEVELS_SETTING_KEY = "actis_role_menu_permissions_v1";
 
+const MIGRATED_NEW_MENUS: { key: MenuAccessKey; inheritFrom?: MenuAccessKey }[] = [
+  { key: "ipam_private", inheritFrom: "ipam" },
+];
+
 export interface StoredAccessLevelsPayload {
   roles: Record<string, MenuAccessKey[]>;
   customRoles: ActisRoleDefinition[];
   rolesList: ActisRoleDefinition[];
   updatedAt: string | null;
   updatedBy: string | null;
+}
+
+function applyNewMenuMigrationIfNeeded(
+  roles: Record<string, MenuAccessKey[]>,
+  recordedMigrations: unknown
+): Record<string, MenuAccessKey[]> {
+  const migratedSet = new Set<string>(
+    Array.isArray(recordedMigrations)
+      ? recordedMigrations.filter((x): x is string => typeof x === "string")
+      : []
+  );
+
+  const pending = MIGRATED_NEW_MENUS.filter((m) => !migratedSet.has(m.key));
+  if (pending.length === 0) return roles;
+
+  const updated: Record<string, MenuAccessKey[]> = {};
+  for (const [roleKey, list] of Object.entries(roles)) {
+    const nextSet = new Set<MenuAccessKey>(list);
+    for (const entry of pending) {
+      if (roleKey === "admin" || (entry.inheritFrom && nextSet.has(entry.inheritFrom))) {
+        nextSet.add(entry.key);
+      }
+    }
+    updated[roleKey] = normalizeRoleMenuPermissions(roleKey, Array.from(nextSet));
+  }
+  return updated;
 }
 
 export async function getStoredAccessLevels(): Promise<StoredAccessLevelsPayload> {
@@ -43,8 +73,10 @@ export async function getStoredAccessLevels(): Promise<StoredAccessLevelsPayload
     const parsed = JSON.parse(row.value);
     const customRoles = normalizeCustomRolesList(parsed?.customRoles);
     const rawRoles = parsed?.roles ?? parsed;
+    const normalizedRoles = normalizeAllRolesPermissions(rawRoles, customRoles);
+    const roles = applyNewMenuMigrationIfNeeded(normalizedRoles, parsed?.migratedMenus);
     return {
-      roles: normalizeAllRolesPermissions(rawRoles, customRoles),
+      roles,
       customRoles,
       rolesList: buildAllRoleDefinitions(customRoles),
       updatedAt:
@@ -77,6 +109,7 @@ async function persistAccessLevelsState(
   const dbPayload = {
     customRoles: cleanCustom,
     roles: normalizedRoles,
+    migratedMenus: MIGRATED_NEW_MENUS.map((m) => m.key),
     updatedAt: nowIso,
     updatedBy: actorName || "Administrator",
   };

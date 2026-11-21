@@ -10,6 +10,8 @@ export const DEFAULT_PUBLIC_PREFIXES: { cidr: string; description: string }[] = 
   { cidr: "103.54.171.0/24", description: "Blok IP Public 5" },
 ];
 
+export const DEFAULT_PRIVATE_PREFIXES: { cidr: string; description: string }[] = [];
+
 export interface ParsedSubnet {
   cidr: string;
   ip: string;
@@ -411,5 +413,32 @@ export function matchesIpSegmentSearch(segment: IpSubnetSegment, rawQuery: strin
   }
 
   return false;
+}
+
+export const expandIpAddress = expandIpPublic;
+
+/**
+ * Derive unique /24 CIDR candidates from unmanaged IPs for quick-add hints.
+ */
+export function suggestCandidatePrefixes(
+  unmanagedIps: UsedIpDetail[],
+  limit = 6
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const item of unmanagedIps) {
+    const base = item.ip.trim();
+    if (!isValidIpv4(base)) continue;
+    const parts = base.split(".");
+    const candidate = `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+    if (!seen.has(candidate)) {
+      seen.add(candidate);
+      out.push(candidate);
+      if (out.length >= limit) break;
+    }
+  }
+
+  return out;
 }
 
