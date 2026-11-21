@@ -161,11 +161,13 @@ export default function LoginPage() {
       const targetPath =
         (result.user?.role || rememberedUser?.role) === "request_barang"
           ? "/request-barang"
-          : result.landingPath || "/queue";
+          : result.landingPath || "/dashboard";
       setStatusNote(
         targetPath === "/request-barang"
           ? "Login berhasil! Mengalihkan ke portal Request Barang."
-          : "Login berhasil! Mengalihkan ke dashboard antrean."
+          : targetPath === "/dashboard"
+          ? "Login berhasil! Mengalihkan ke Dashboard utama."
+          : "Login berhasil! Mengalihkan ke menu utama yang diizinkan."
       );
       setSuccess(true);
       setTimeout(() => {
@@ -220,11 +222,13 @@ export default function LoginPage() {
       const targetPath =
         result.user?.role === "request_barang"
           ? "/request-barang"
-          : result.landingPath || "/queue";
+          : result.landingPath || "/dashboard";
       setStatusNote(
         targetPath === "/request-barang"
           ? "Login berhasil! Mengalihkan ke portal Request Barang."
-          : "Login berhasil! Mengalihkan ke halaman kerja Anda."
+          : targetPath === "/dashboard"
+          ? "Login berhasil! Mengalihkan ke Dashboard utama."
+          : "Login berhasil! Mengalihkan ke menu utama yang diizinkan."
       );
       setSuccess(true);
       setTimeout(() => {

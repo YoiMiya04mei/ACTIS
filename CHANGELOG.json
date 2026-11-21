@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.46",
+      "date": "2026-11-21T13:48:26+07:00",
+      "title": "Arahkan Halaman Awal Login ke Dashboard Utama dan Fallback Menu Teratas",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Mengubah prioritas landing page awal di resolveDefaultLandingHref agar akun yang memiliki izin akses Dashboard langsung diarahkan ke /dashboard saat pertama kali login atau membuka aplikasi"
+        },
+        {
+          "type": "improve",
+          "text": "Memperbarui fallback halaman untuk akun tanpa izin Dashboard agar otomatis masuk ke menu navigasi teratas yang diizinkan di Sidebar (serta menyesuaikan fallback di UserContext dan halaman Login)"
+        }
+      ]
+    },
+    {
       "version": "1.2.45",
       "date": "2026-11-21T13:32:47+07:00",
       "title": "Menambahkan Menu Prefix IP Private dengan Trigger Otomatis dari Kolom IP Private",

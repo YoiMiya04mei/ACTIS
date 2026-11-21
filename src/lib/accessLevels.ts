@@ -476,14 +476,22 @@ export function getDefaultPermissionsForRole(role: string): MenuAccessKey[] {
   return [];
 }
 
+const NON_SIDEBAR_MENU_KEYS = new Set<MenuAccessKey>(["orders", "tools_hub"]);
+
 /**
- * Returns the href of the first permitted menu item for a role's allowed menus,
- * or null if no menus are permitted.
+ * Returns the href of the topmost permitted menu item in visual Sidebar order,
+ * falling back to non-sidebar shortcut pages (/orders/new, /tools) only if no
+ * sidebar item is permitted, or null if no menus are permitted.
  */
 export function getFirstAccessibleHref(
   allowedMenus: readonly MenuAccessKey[]
 ): string | null {
   const allowedSet = new Set(allowedMenus);
+  for (const item of ALL_ACTIS_MENU_ITEMS) {
+    if (!NON_SIDEBAR_MENU_KEYS.has(item.key) && allowedSet.has(item.key)) {
+      return item.href;
+    }
+  }
   for (const item of ALL_ACTIS_MENU_ITEMS) {
     if (allowedSet.has(item.key)) {
       return item.href;
@@ -494,13 +502,12 @@ export function getFirstAccessibleHref(
 
 /**
  * Resolves the default landing route based on permitted menus.
- * Preserves /queue when allowed, otherwise /dashboard, otherwise the first allowed menu href.
+ * Lands on /dashboard first whenever allowed; otherwise lands on the topmost permitted menu.
  */
 export function resolveDefaultLandingHref(
   allowedMenus: readonly MenuAccessKey[]
 ): string | null {
   const allowedSet = new Set(allowedMenus);
-  if (allowedSet.has("queue")) return "/queue";
   if (allowedSet.has("dashboard")) return "/dashboard";
   return getFirstAccessibleHref(allowedMenus);
 }

@@ -318,7 +318,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       } catch {}
 
       handleSetUser(data.user);
-      let landingPath: string | null = "/queue";
+      let landingPath: string | null = "/dashboard";
       if (data.user?.role === "request_barang") {
         landingPath = "/request-barang";
       } else {
@@ -371,7 +371,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
       setCurrentUserState(data.user);
       setIsAuthenticated(true);
-      let landingPath: string | null = "/queue";
+      let landingPath: string | null = "/dashboard";
       if (data.user?.role === "request_barang") {
         landingPath = "/request-barang";
       } else {
