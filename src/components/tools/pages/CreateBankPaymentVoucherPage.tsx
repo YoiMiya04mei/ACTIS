@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Save,
   Copy,
@@ -18,6 +18,7 @@ import {
   Upload,
   Eraser,
   Lock,
+  Mail,
 } from 'lucide-react';
 import {
   DEFAULT_BANK_PAYMENT_VOUCHER_APPROVALS,
@@ -29,6 +30,11 @@ import type { UserAccount } from '@/types/auth';
 import type { ToastMessage } from '@/components/tools/Toast';
 import { BankPaymentVoucherPaperDocument } from '@/components/tools/BankPaymentVoucherPaperDocument';
 import {
+  SendDocumentEmailModal,
+  PostSaveEmailBanner,
+} from '@/components/tools/SendDocumentEmailModal';
+import { captureDocumentPdfAttachment } from '@/utils/documentEmailAttachment';
+import {
   generateVoucherNumber,
   calculateTotalAmount,
   generateBankPaymentVoucherWhatsAppText,
@@ -38,7 +44,10 @@ import {
 } from '@/utils/bankPaymentVoucherUtils';
 import { terbilangRupiah } from '@/utils/terbilang';
 import { bankPaymentVoucherStorage, SAMPLE_BANK_PAYMENT_VOUCHER } from '@/services/bankPaymentVoucherStorage';
-import { downloadBankPaymentVoucherExcel } from '@/services/bankPaymentVoucherExcelService';
+import {
+  downloadBankPaymentVoucherExcel,
+  generateBankPaymentVoucherExcelBase64,
+} from '@/services/bankPaymentVoucherExcelService';
 import { toDateInputString } from '@/utils/dateFormatter';
 
 interface CreateBankPaymentVoucherPageProps {
@@ -133,6 +142,8 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
   );
   const [isExportingExcel, setIsExportingExcel] = useState<boolean>(false);
   const [showSignatureModal, setShowSignatureModal] = useState<boolean>(false);
+  const [showEmailModal, setShowEmailModal] = useState<boolean>(false);
+  const [justSavedForEmail, setJustSavedForEmail] = useState<boolean>(false);
 
   // Signature Canvas Ref
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -382,6 +393,9 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
             ? `Perubahan voucher ${currentDoc.voucherNumber} telah disimpan ke arsip.`
             : `Dokumen ${currentDoc.voucherNumber} berhasil diarsipkan ke Arsip Dokumen.`
         );
+        if (!editingId) {
+          setJustSavedForEmail(true);
+        }
         if (onSaved) {
           onSaved();
         }
@@ -392,6 +406,25 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
       addToast('error', 'Gagal Menyimpan', 'Terjadi kesalahan saat memproses data voucher.');
     }
   };
+
+  const handleGenerateEmailAttachment = useCallback(
+    async (format: 'pdf' | 'xlsx') => {
+      if (format === 'xlsx') {
+        const contentBase64 = await generateBankPaymentVoucherExcelBase64(currentDoc);
+        return {
+          filename: generateBankPaymentVoucherFileName(currentDoc, 'xlsx'),
+          contentBase64,
+          contentType:
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        };
+      }
+      return captureDocumentPdfAttachment({
+        elementId: 'bpv-email-export-doc',
+        filename: generateBankPaymentVoucherFileName(currentDoc, 'pdf'),
+      });
+    },
+    [currentDoc]
+  );
 
   // Print Document
   const handlePrint = () => {
@@ -532,6 +565,16 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
           >
             <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
             <span>Contoh</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowEmailModal(true)}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-sky-300 bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-semibold transition-colors cursor-pointer"
+            title="Kirim Voucher via Email Gateway"
+          >
+            <Mail className="w-3.5 h-3.5 text-sky-600" />
+            <span className="hidden sm:inline">Kirim Email</span>
           </button>
 
           <button
@@ -1152,6 +1195,49 @@ export const CreateBankPaymentVoucherPage: React.FC<CreateBankPaymentVoucherPage
           </div>
         </div>
       )}
+
+      {showEmailModal && (
+        <div
+          aria-hidden="true"
+          className="no-print"
+          style={{
+            position: 'fixed',
+            left: '-12000px',
+            top: 0,
+            width: '794px',
+            opacity: 0,
+            pointerEvents: 'none',
+            zIndex: -1,
+          }}
+        >
+          <BankPaymentVoucherPaperDocument
+            id="bpv-email-export-doc"
+            doc={currentDoc}
+          />
+        </div>
+      )}
+
+      <PostSaveEmailBanner
+        visible={justSavedForEmail}
+        categoryLabel="Bank Payment Voucher"
+        documentNumber={currentDoc.voucherNumber}
+        onSendEmail={() => {
+          setJustSavedForEmail(false);
+          setShowEmailModal(true);
+        }}
+        onDismiss={() => setJustSavedForEmail(false)}
+      />
+
+      <SendDocumentEmailModal
+        isOpen={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        draftInput={{
+          category: 'bank-voucher',
+          bankVoucher: currentDoc,
+        }}
+        onGenerateAttachment={handleGenerateEmailAttachment}
+        addToast={addToast}
+      />
     </div>
   );
 };

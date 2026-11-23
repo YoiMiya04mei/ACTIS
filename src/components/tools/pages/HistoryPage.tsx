@@ -24,7 +24,14 @@ import {
   CreditCard,
   FileSpreadsheet,
   History,
+  Mail,
 } from 'lucide-react';
+import {
+  SendDocumentEmailModal,
+  type EmailAttachmentPayload,
+} from '@/components/tools/SendDocumentEmailModal';
+import { captureDocumentPdfAttachment } from '@/utils/documentEmailAttachment';
+import type { BuildDocumentEmailInput } from '@/utils/documentEmailTemplates';
 import type { RFODocument, RFOTemplate, ActiveTab } from '@/types/rfo';
 import type { SuratTugasDocument, SuratTugasTemplate } from '@/types/suratTugas';
 import type { BeritaAcaraDocument, BeritaAcaraTemplate } from '@/types/beritaAcara';
@@ -68,7 +75,11 @@ import {
   generateBankPaymentVoucherWhatsAppText,
   generateBankPaymentVoucherFileName,
 } from '@/utils/bankPaymentVoucherUtils';
-import { downloadBankPaymentVoucherExcel } from '@/services/bankPaymentVoucherExcelService';
+import {
+  downloadBankPaymentVoucherExcel,
+  generateBankPaymentVoucherExcelBase64,
+} from '@/services/bankPaymentVoucherExcelService';
+import { generateRFOFileName } from '@/utils/slugify';
 
 export type UnifiedDocType = 'rfo' | 'surat-tugas' | 'berita-acara' | 'permit-barang' | 'bank-voucher';
 
@@ -202,6 +213,103 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
 
   // Background PDF Export (direct download without opening overview modal)
   const [exportingItem, setExportingItem] = useState<UnifiedDocumentItem | null>(null);
+
+  // Email Gateway modal target
+  const [emailTargetItem, setEmailTargetItem] = useState<UnifiedDocumentItem | null>(null);
+
+  const emailDraftInput = useMemo<BuildDocumentEmailInput | null>(() => {
+    if (!emailTargetItem) return null;
+    if (emailTargetItem.type === 'rfo' && emailTargetItem.rawRFO) {
+      return { category: 'rfo', rfo: emailTargetItem.rawRFO, rfoTemplate: template };
+    }
+    if (emailTargetItem.type === 'surat-tugas' && emailTargetItem.rawSuratTugas) {
+      return { category: 'surat-tugas', suratTugas: emailTargetItem.rawSuratTugas };
+    }
+    if (emailTargetItem.type === 'berita-acara' && emailTargetItem.rawBeritaAcara) {
+      return { category: 'berita-acara', beritaAcara: emailTargetItem.rawBeritaAcara };
+    }
+    if (emailTargetItem.type === 'permit-barang' && emailTargetItem.rawPermitBarang) {
+      return { category: 'permit-barang', permitBarang: emailTargetItem.rawPermitBarang };
+    }
+    if (emailTargetItem.type === 'bank-voucher' && emailTargetItem.rawBankPaymentVoucher) {
+      return { category: 'bank-voucher', bankVoucher: emailTargetItem.rawBankPaymentVoucher };
+    }
+    return null;
+  }, [emailTargetItem, template]);
+
+  const handleGenerateEmailAttachment = useCallback(
+    async (format: 'pdf' | 'xlsx'): Promise<EmailAttachmentPayload | null> => {
+      if (!emailTargetItem) return null;
+      if (emailTargetItem.type === 'rfo' && emailTargetItem.rawRFO) {
+        return captureDocumentPdfAttachment({
+          elementId: 'direct-export-rfo-doc',
+          filename: generateRFOFileName(
+            emailTargetItem.rawRFO.rfoDate,
+            emailTargetItem.rawRFO.rootCause
+          ),
+        });
+      }
+      if (emailTargetItem.type === 'surat-tugas' && emailTargetItem.rawSuratTugas) {
+        return captureDocumentPdfAttachment({
+          elementId: 'direct-export-st-doc',
+          filename: generateSuratTugasFileName(
+            emailTargetItem.rawSuratTugas.letterNumber,
+            emailTargetItem.rawSuratTugas.visitLocation
+          ),
+        });
+      }
+      if (emailTargetItem.type === 'berita-acara' && emailTargetItem.rawBeritaAcara) {
+        return captureDocumentPdfAttachment({
+          multiPageSelector:
+            '#direct-export-ba-doc .berita-acara-page, #direct-export-ba-doc .berita-acara-single-page',
+          elementId: 'direct-export-ba-doc',
+          filename: generateBeritaAcaraFileName(
+            emailTargetItem.rawBeritaAcara.letterNumber,
+            emailTargetItem.rawBeritaAcara.purpose,
+            emailTargetItem.rawBeritaAcara.visitLocation
+          ),
+        });
+      }
+      if (emailTargetItem.type === 'permit-barang' && emailTargetItem.rawPermitBarang) {
+        return captureDocumentPdfAttachment({
+          multiPageSelector:
+            '#direct-export-pm-doc .permit-barang-page, #direct-export-pm-doc .permit-barang-single-page',
+          elementId: 'direct-export-pm-doc',
+          filename: generatePermitBarangFileName(
+            emailTargetItem.rawPermitBarang.subject,
+            emailTargetItem.rawPermitBarang.location,
+            emailTargetItem.rawPermitBarang.permitDate ||
+              emailTargetItem.rawPermitBarang.createdDate
+          ),
+        });
+      }
+      if (emailTargetItem.type === 'bank-voucher' && emailTargetItem.rawBankPaymentVoucher) {
+        if (format === 'xlsx') {
+          const contentBase64 = await generateBankPaymentVoucherExcelBase64(
+            emailTargetItem.rawBankPaymentVoucher
+          );
+          return {
+            filename: generateBankPaymentVoucherFileName(
+              emailTargetItem.rawBankPaymentVoucher,
+              'xlsx'
+            ),
+            contentBase64,
+            contentType:
+              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          };
+        }
+        return captureDocumentPdfAttachment({
+          elementId: 'direct-export-bpv-doc',
+          filename: generateBankPaymentVoucherFileName(
+            emailTargetItem.rawBankPaymentVoucher,
+            'pdf'
+          ),
+        });
+      }
+      return null;
+    },
+    [emailTargetItem]
+  );
 
   // Permissions based on currentUser
   const canDelete = currentUser ? authService.hasPermission(currentUser.role, 'canDeleteRFO') : false;
@@ -1278,6 +1386,14 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                     </button>
 
                     <button
+                      onClick={() => setEmailTargetItem(item)}
+                      className="p-2 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 shadow-xs transition-colors cursor-pointer"
+                      title="Kirim Dokumen via Email Gateway"
+                    >
+                      <Mail className="w-4 h-4" />
+                    </button>
+
+                    <button
                       onClick={() => handleEdit(item)}
                       className="p-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 shadow-xs transition-colors cursor-pointer"
                       title="Edit Dokumen"
@@ -1339,6 +1455,17 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                 >
                   <Printer className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Cetak</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const item = unifiedItems.find((u) => u.id === selectedRFO.id && u.type === 'rfo');
+                    if (item) setEmailTargetItem(item);
+                  }}
+                  className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-xs text-sky-700 border border-sky-200 font-semibold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  title="Kirim Dokumen via Email Gateway"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Kirim Email</span>
                 </button>
                 <button
                   onClick={() => {
@@ -1430,6 +1557,17 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                 >
                   <Printer className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Cetak</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const item = unifiedItems.find((u) => u.id === selectedSuratTugas.id && u.type === 'surat-tugas');
+                    if (item) setEmailTargetItem(item);
+                  }}
+                  className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-xs text-sky-700 border border-sky-200 font-semibold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  title="Kirim Dokumen via Email Gateway"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Kirim Email</span>
                 </button>
                 <button
                   onClick={() => {
@@ -1560,6 +1698,17 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                 >
                   <Printer className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Cetak</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const item = unifiedItems.find((u) => u.id === selectedBeritaAcara.id && u.type === 'berita-acara');
+                    if (item) setEmailTargetItem(item);
+                  }}
+                  className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-xs text-sky-700 border border-sky-200 font-semibold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  title="Kirim Dokumen via Email Gateway"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Kirim Email</span>
                 </button>
                 <button
                   onClick={() => {
@@ -1698,6 +1847,17 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                 <button
                   onClick={() => {
                     const item = unifiedItems.find((u) => u.id === selectedPermitBarang.id && u.type === 'permit-barang');
+                    if (item) setEmailTargetItem(item);
+                  }}
+                  className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-xs text-sky-700 border border-sky-200 font-semibold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  title="Kirim Dokumen via Email Gateway"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Kirim Email</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const item = unifiedItems.find((u) => u.id === selectedPermitBarang.id && u.type === 'permit-barang');
                     if (item) handleDownloadPDF(item);
                   }}
                   className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-xs text-white font-semibold flex items-center gap-1.5 shadow-xs cursor-pointer"
@@ -1790,6 +1950,17 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
                 >
                   <Printer className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Cetak</span>
+                </button>
+                <button
+                  onClick={() => {
+                    const item = unifiedItems.find((u) => u.id === selectedBankPaymentVoucher.id && u.type === 'bank-voucher');
+                    if (item) setEmailTargetItem(item);
+                  }}
+                  className="px-2.5 sm:px-3 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-xs text-sky-700 border border-sky-200 font-semibold flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  title="Kirim Dokumen via Email Gateway"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Kirim Email</span>
                 </button>
                 <button
                   onClick={async () => {
@@ -2042,73 +2213,87 @@ export const HistoryPage: React.FC<HistoryPageProps> = ({
         </div>
       )}
 
-      {/* Offscreen background rendering container for direct PDF download without opening modal */}
-      {exportingItem && (
-        <div
-          id="pdf-direct-export-hidden-container"
-          aria-hidden="true"
-          className="no-print"
-          style={{
-            position: 'fixed',
-            left: '-9999px',
-            top: 0,
-            width: '794px',
-            opacity: 0,
-            pointerEvents: 'none',
-            zIndex: -1,
-          }}
-        >
-          {exportingItem.type === 'rfo' && exportingItem.rawRFO && (
-            <div id="direct-export-rfo-doc" className="w-[794px]">
-              <RFOPaperDocument
-                rfo={exportingItem.rawRFO}
-                template={template}
-                id="direct-export-rfo-paper"
-              />
-            </div>
-          )}
+      {/* Offscreen background rendering container for direct PDF download & Email attachment */}
+      {(() => {
+        const offscreenDoc = emailTargetItem || exportingItem;
+        if (!offscreenDoc) return null;
+        return (
+          <div
+            id="pdf-direct-export-hidden-container"
+            aria-hidden="true"
+            className="no-print"
+            style={{
+              position: 'fixed',
+              left: '-9999px',
+              top: 0,
+              width: '794px',
+              opacity: 0,
+              pointerEvents: 'none',
+              zIndex: -1,
+            }}
+          >
+            {offscreenDoc.type === 'rfo' && offscreenDoc.rawRFO && (
+              <div id="direct-export-rfo-doc" className="w-[794px]">
+                <RFOPaperDocument
+                  rfo={offscreenDoc.rawRFO}
+                  template={template}
+                  id="direct-export-rfo-paper"
+                />
+              </div>
+            )}
 
-          {exportingItem.type === 'surat-tugas' && exportingItem.rawSuratTugas && (
-            <div id="direct-export-st-doc" className="w-[794px]">
-              <SuratTugasPaperDocument
-                doc={exportingItem.rawSuratTugas}
-                template={suratTugasTemplate}
-                id="direct-export-st-paper"
-              />
-            </div>
-          )}
+            {offscreenDoc.type === 'surat-tugas' && offscreenDoc.rawSuratTugas && (
+              <div id="direct-export-st-doc" className="w-[794px]">
+                <SuratTugasPaperDocument
+                  doc={offscreenDoc.rawSuratTugas}
+                  template={suratTugasTemplate}
+                  id="direct-export-st-paper"
+                />
+              </div>
+            )}
 
-          {exportingItem.type === 'berita-acara' && exportingItem.rawBeritaAcara && (
-            <div id="direct-export-ba-doc" className="w-[794px] flex flex-col gap-4">
-              <BeritaAcaraPaperDocument
-                doc={exportingItem.rawBeritaAcara}
-                template={beritaAcaraTemplate}
-                id="direct-export-ba-paper"
-                previewPageFilter="all"
-              />
-            </div>
-          )}
+            {offscreenDoc.type === 'berita-acara' && offscreenDoc.rawBeritaAcara && (
+              <div id="direct-export-ba-doc" className="w-[794px] flex flex-col gap-4">
+                <BeritaAcaraPaperDocument
+                  doc={offscreenDoc.rawBeritaAcara}
+                  template={beritaAcaraTemplate}
+                  id="direct-export-ba-paper"
+                  previewPageFilter="all"
+                />
+              </div>
+            )}
 
-          {exportingItem.type === 'permit-barang' && exportingItem.rawPermitBarang && (
-            <div id="direct-export-pm-doc" className="w-[794px] flex flex-col gap-4">
-              <PermitBarangPaperDocument
-                doc={exportingItem.rawPermitBarang}
-                template={permitBarangTemplate}
-                id="direct-export-pm-paper"
-                previewPageFilter="all"
-              />
-            </div>
-          )}
+            {offscreenDoc.type === 'permit-barang' && offscreenDoc.rawPermitBarang && (
+              <div id="direct-export-pm-doc" className="w-[794px] flex flex-col gap-4">
+                <PermitBarangPaperDocument
+                  doc={offscreenDoc.rawPermitBarang}
+                  template={permitBarangTemplate}
+                  id="direct-export-pm-paper"
+                  previewPageFilter="all"
+                />
+              </div>
+            )}
 
-          {exportingItem.type === 'bank-voucher' && exportingItem.rawBankPaymentVoucher && (
-            <div id="direct-export-bpv-doc" className="w-[794px]">
-              <BankPaymentVoucherPaperDocument
-                doc={exportingItem.rawBankPaymentVoucher}
-                id="direct-export-bpv-paper"
-              />
-            </div>
-          )}
-        </div>
+            {offscreenDoc.type === 'bank-voucher' && offscreenDoc.rawBankPaymentVoucher && (
+              <div id="direct-export-bpv-doc" className="w-[794px]">
+                <BankPaymentVoucherPaperDocument
+                  doc={offscreenDoc.rawBankPaymentVoucher}
+                  id="direct-export-bpv-paper"
+                />
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {emailDraftInput && (
+        <SendDocumentEmailModal
+          isOpen={Boolean(emailTargetItem)}
+          onClose={() => setEmailTargetItem(null)}
+          draftInput={emailDraftInput}
+          onGenerateAttachment={handleGenerateEmailAttachment}
+          addToast={addToast}
+        />
       )}
     </div>
   );

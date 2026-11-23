@@ -140,36 +140,10 @@ export class PDFService {
     }
   }
 
-  /**
-   * Exports a single page document (RFO or Surat Tugas) to A4 PDF.
-   */
-  static async exportSinglePagePDF(
-    element: HTMLElement,
-    filename: string
-  ): Promise<string> {
-    const canvas = await this.renderElementToCanvas(element);
-    const imgData = canvas.toDataURL('image/jpeg', 0.98);
-
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4',
-      compress: true,
-    });
-
-    // 210mm x 297mm full bleed
-    pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
-    pdf.save(filename);
-    return filename;
-  }
-
-  /**
-   * Exports a multi-page document (e.g. Berita Acara with photo attachments) to A4 PDF.
-   */
-  static async exportMultiPagePDF(
+  private static async buildA4PDFFromElements(
     elements: HTMLElement[] | NodeListOf<HTMLElement>,
-    filename: string
-  ): Promise<string> {
+    jpegQuality = 0.98
+  ): Promise<jsPDF> {
     const list = Array.from(elements);
     if (list.length === 0) {
       throw new Error('Tidak ada halaman dokumen yang dapat diekspor ke PDF.');
@@ -187,12 +161,51 @@ export class PDFService {
         pdf.addPage('a4', 'portrait');
       }
       const canvas = await this.renderElementToCanvas(list[i]);
-      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      const imgData = canvas.toDataURL('image/jpeg', jpegQuality);
+      // 210mm x 297mm full bleed
       pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
     }
 
+    return pdf;
+  }
+
+  /**
+   * Exports a single page document (RFO or Surat Tugas) to A4 PDF.
+   */
+  static async exportSinglePagePDF(
+    element: HTMLElement,
+    filename: string
+  ): Promise<string> {
+    const pdf = await this.buildA4PDFFromElements([element], 0.98);
     pdf.save(filename);
     return filename;
+  }
+
+  /**
+   * Exports a multi-page document (e.g. Berita Acara with photo attachments) to A4 PDF.
+   */
+  static async exportMultiPagePDF(
+    elements: HTMLElement[] | NodeListOf<HTMLElement>,
+    filename: string
+  ): Promise<string> {
+    const pdf = await this.buildA4PDFFromElements(elements, 0.98);
+    pdf.save(filename);
+    return filename;
+  }
+
+  /**
+   * Builds a compact A4 PDF and returns raw Base64 payload (without data URI prefix)
+   * for Email Gateway attachments.
+   */
+  static async buildPDFBase64(
+    elements: HTMLElement | HTMLElement[] | NodeListOf<HTMLElement>,
+    jpegQuality = 0.9
+  ): Promise<string> {
+    const list =
+      elements instanceof HTMLElement ? [elements] : Array.from(elements);
+    const pdf = await this.buildA4PDFFromElements(list, jpegQuality);
+    const dataUri = pdf.output('datauristring');
+    return dataUri.includes(',') ? dataUri.split(',')[1] : dataUri;
   }
 
   /**

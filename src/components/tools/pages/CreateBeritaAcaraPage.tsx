@@ -23,6 +23,7 @@ import {
   Eye,
   Layers,
   ChevronLeft,
+  Mail,
 } from 'lucide-react';
 import type {
   BeritaAcaraDocument,
@@ -36,9 +37,15 @@ import type { UserAccount } from '@/types/auth';
 import type { ToastMessage } from '@/components/tools/Toast';
 import { BeritaAcaraPaperDocument } from '@/components/tools/BeritaAcaraPaperDocument';
 import {
+  SendDocumentEmailModal,
+  PostSaveEmailBanner,
+} from '@/components/tools/SendDocumentEmailModal';
+import { captureDocumentPdfAttachment } from '@/utils/documentEmailAttachment';
+import {
   generateBeritaAcaraNumber,
   generateBeritaAcaraPlainText,
   generateBeritaAcaraWhatsAppText,
+  generateBeritaAcaraFileName,
 } from '@/utils/beritaAcaraUtils';
 import { beritaAcaraStorage } from '@/services/beritaAcaraStorage';
 import { toDateInputString } from '@/utils/dateFormatter';
@@ -136,6 +143,8 @@ export const CreateBeritaAcaraPage: React.FC<CreateBeritaAcaraPageProps> = ({
   );
   const [previewPageTab, setPreviewPageTab] = useState<'all' | number>('all');
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [showEmailModal, setShowEmailModal] = useState<boolean>(false);
+  const [justSavedForEmail, setJustSavedForEmail] = useState<boolean>(false);
 
   // 1. Calculate auto-generated official number based on sequenceNumber + createdDate
   // Format: BA/{seq}/{romanMonth}/{year}/JDP
@@ -447,6 +456,7 @@ export const CreateBeritaAcaraPage: React.FC<CreateBeritaAcaraPageProps> = ({
       if (!editingId) {
         // Automatically advance next sequence number for future letters
         setSequenceNumber((prev) => prev + 1);
+        setJustSavedForEmail(true);
       }
       if (onSaved) onSaved();
     } catch (err: unknown) {
@@ -454,6 +464,21 @@ export const CreateBeritaAcaraPage: React.FC<CreateBeritaAcaraPageProps> = ({
       addToast('error', 'Gagal Menyimpan', msg);
     }
   };
+
+  const handleGenerateEmailAttachment = useCallback(
+    () =>
+      captureDocumentPdfAttachment({
+        multiPageSelector:
+          '#ba-email-export-container .berita-acara-page, #ba-email-export-container .berita-acara-single-page',
+        elementId: 'ba-email-export-doc',
+        filename: generateBeritaAcaraFileName(
+          currentDoc.letterNumber,
+          currentDoc.purpose,
+          currentDoc.visitLocation
+        ),
+      }),
+    [currentDoc.letterNumber, currentDoc.purpose, currentDoc.visitLocation]
+  );
 
 
 
@@ -1177,6 +1202,14 @@ export const CreateBeritaAcaraPage: React.FC<CreateBeritaAcaraPageProps> = ({
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
+                  onClick={() => setShowEmailModal(true)}
+                  className="p-2 rounded-xl bg-sky-50 text-sky-700 border border-sky-300 text-xs font-semibold flex items-center gap-1 cursor-pointer active:scale-95"
+                  title="Kirim Berita Acara via Email Gateway"
+                >
+                  <Mail className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
                   onClick={handleCopyWhatsApp}
                   className="p-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-300 text-xs font-semibold flex items-center gap-1 cursor-pointer active:scale-95"
                   title="Salin Format WhatsApp"
@@ -1294,6 +1327,16 @@ export const CreateBeritaAcaraPage: React.FC<CreateBeritaAcaraPageProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
+              onClick={() => setShowEmailModal(true)}
+              className="px-2.5 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-300 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
+              title="Kirim Berita Acara via Email Gateway"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Kirim Email</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleCopyWhatsApp}
               className="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs cursor-pointer"
               title="Salin Teks Format WhatsApp"
@@ -1343,6 +1386,53 @@ export const CreateBeritaAcaraPage: React.FC<CreateBeritaAcaraPageProps> = ({
           </div>
         </div>
       </div>
+
+      {showEmailModal && (
+        <div
+          id="ba-email-export-container"
+          aria-hidden="true"
+          className="no-print flex flex-col gap-4"
+          style={{
+            position: 'fixed',
+            left: '-12000px',
+            top: 0,
+            width: '794px',
+            opacity: 0,
+            pointerEvents: 'none',
+            zIndex: -1,
+          }}
+        >
+          <BeritaAcaraPaperDocument
+            id="ba-email-export-doc"
+            doc={currentDoc}
+            template={beritaAcaraTemplate || template}
+            imagesPerPage={imagesPerPage}
+            previewPageFilter="all"
+          />
+        </div>
+      )}
+
+      <PostSaveEmailBanner
+        visible={justSavedForEmail}
+        categoryLabel="Berita Acara Visit"
+        documentNumber={currentDoc.letterNumber}
+        onSendEmail={() => {
+          setJustSavedForEmail(false);
+          setShowEmailModal(true);
+        }}
+        onDismiss={() => setJustSavedForEmail(false)}
+      />
+
+      <SendDocumentEmailModal
+        isOpen={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        draftInput={{
+          category: 'berita-acara',
+          beritaAcara: currentDoc,
+        }}
+        onGenerateAttachment={handleGenerateEmailAttachment}
+        addToast={addToast}
+      />
     </div>
   );
 };

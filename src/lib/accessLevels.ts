@@ -43,6 +43,7 @@ export type MenuAccessKey =
   | "admin_sync"
   | "settings_users"
   | "settings_access_levels"
+  | "settings_email_gateway"
   | "logs"
   | "admin_updates";
 
@@ -195,6 +196,12 @@ export const ACTIS_ACCESS_CATEGORIES: readonly ActisMenuCategoryDefinition[] = [
         key: "settings_access_levels",
         label: "Level Akses",
         href: "/settings/access-levels",
+        adminLocked: true,
+      },
+      {
+        key: "settings_email_gateway",
+        label: "Email Gateway (SMTP)",
+        href: "/settings/email-gateway",
         adminLocked: true,
       },
       { key: "logs", label: "Log Aplikasi", href: "/logs" },
@@ -586,6 +593,7 @@ export function getRequiredMenuForPathname(pathname: string | null | undefined):
     return "logs";
   }
   if (clean.startsWith("/settings/access-levels")) return "settings_access_levels";
+  if (clean.startsWith("/settings/email-gateway")) return "settings_email_gateway";
   if (clean.startsWith("/settings/users")) return "settings_users";
 
   return null;

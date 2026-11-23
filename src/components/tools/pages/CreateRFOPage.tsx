@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Save,
   Copy,
@@ -13,9 +13,16 @@ import {
   ZoomOut,
   FileText,
   ChevronLeft,
+  Mail,
 } from 'lucide-react';
 import type { RFODocument, RFOTemplate, RFODraft } from '@/types/rfo';
 import { RFOPaperDocument } from '@/components/tools/RFOPaperDocument';
+import {
+  SendDocumentEmailModal,
+  PostSaveEmailBanner,
+} from '@/components/tools/SendDocumentEmailModal';
+import { captureDocumentPdfAttachment } from '@/utils/documentEmailAttachment';
+import { generateRFOFileName } from '@/utils/slugify';
 import { calculateDuration } from '@/utils/duration';
 import {
   formatIndonesianDateTime,
@@ -105,6 +112,8 @@ export const CreateRFOPage: React.FC<CreateRFOPageProps> = ({
     typeof window !== 'undefined' && window.innerWidth < 768 ? 45 : 90
   );
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [showEmailModal, setShowEmailModal] = useState<boolean>(false);
+  const [justSavedForEmail, setJustSavedForEmail] = useState<boolean>(false);
 
   // Duration calculation
   const durationResult = useMemo(() => {
@@ -260,6 +269,7 @@ export const CreateRFOPage: React.FC<CreateRFOPageProps> = ({
       if (!editingId) {
         await storageService.clearDraft();
         setHasUnfinishedDraft(false);
+        setJustSavedForEmail(true);
       }
       addToast(
         'success',
@@ -276,6 +286,15 @@ export const CreateRFOPage: React.FC<CreateRFOPageProps> = ({
       addToast('error', 'Gagal Menyimpan', 'Terjadi kesalahan saat menyimpan dokumen ke storage.');
     }
   };
+
+  const handleGenerateEmailAttachment = useCallback(
+    () =>
+      captureDocumentPdfAttachment({
+        elementId: 'rfo-email-export-doc',
+        filename: generateRFOFileName(currentRFO.rfoDate, currentRFO.rootCause),
+      }),
+    [currentRFO.rfoDate, currentRFO.rootCause]
+  );
 
 
   // Copy Plain Text
@@ -683,6 +702,14 @@ export const CreateRFOPage: React.FC<CreateRFOPageProps> = ({
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
+                onClick={() => setShowEmailModal(true)}
+                className="p-2 rounded-xl bg-sky-50 text-sky-700 border border-sky-300 text-xs font-semibold flex items-center gap-1 cursor-pointer active:scale-95"
+                title="Kirim Surat via Email Gateway"
+              >
+                <Mail className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
                 onClick={handleCopyWhatsApp}
                 className="p-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-300 text-xs font-semibold flex items-center gap-1 cursor-pointer active:scale-95"
                 title="Salin Format WhatsApp"
@@ -758,6 +785,16 @@ export const CreateRFOPage: React.FC<CreateRFOPageProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
+              onClick={() => setShowEmailModal(true)}
+              className="px-2.5 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              title="Kirim Surat RFO via Email Gateway"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Kirim Email</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleCopyWhatsApp}
               className="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
               title="Salin Teks Format WhatsApp"
@@ -805,6 +842,51 @@ export const CreateRFOPage: React.FC<CreateRFOPageProps> = ({
           </div>
         </div>
       </div>
+
+      {showEmailModal && (
+        <div
+          aria-hidden="true"
+          className="no-print"
+          style={{
+            position: 'fixed',
+            left: '-12000px',
+            top: 0,
+            width: '794px',
+            opacity: 0,
+            pointerEvents: 'none',
+            zIndex: -1,
+          }}
+        >
+          <RFOPaperDocument
+            id="rfo-email-export-doc"
+            rfo={currentRFO}
+            template={template}
+          />
+        </div>
+      )}
+
+      <PostSaveEmailBanner
+        visible={justSavedForEmail}
+        categoryLabel="Dokumen RFO"
+        documentNumber={currentRFO.rfoNumber || currentRFO.ticketNo}
+        onSendEmail={() => {
+          setJustSavedForEmail(false);
+          setShowEmailModal(true);
+        }}
+        onDismiss={() => setJustSavedForEmail(false)}
+      />
+
+      <SendDocumentEmailModal
+        isOpen={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        draftInput={{
+          category: 'rfo',
+          rfo: currentRFO,
+          rfoTemplate: template,
+        }}
+        onGenerateAttachment={handleGenerateEmailAttachment}
+        addToast={addToast}
+      />
     </div>
   );
 };

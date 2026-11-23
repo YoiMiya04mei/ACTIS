@@ -24,6 +24,7 @@ import {
   CheckCircle,
   AlertCircle,
   ExternalLink,
+  Mail,
 } from 'lucide-react';
 import type {
   PermitBarangDocument,
@@ -35,6 +36,11 @@ import type { RFOTemplate } from '@/types/rfo';
 import type { UserAccount } from '@/types/auth';
 import type { ToastMessage } from '@/components/tools/Toast';
 import { PermitBarangPaperDocument } from '@/components/tools/PermitBarangPaperDocument';
+import {
+  SendDocumentEmailModal,
+  PostSaveEmailBanner,
+} from '@/components/tools/SendDocumentEmailModal';
+import { captureDocumentPdfAttachment } from '@/utils/documentEmailAttachment';
 import {
   formatPermitBarangDate,
   generatePermitBarangPlainText,
@@ -197,6 +203,8 @@ export const CreatePermitBarangPage: React.FC<CreatePermitBarangPageProps> = ({
   );
   const [previewPageTab, setPreviewPageTab] = useState<'all' | 1 | 2>('all');
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [showEmailModal, setShowEmailModal] = useState<boolean>(false);
+  const [justSavedForEmail, setJustSavedForEmail] = useState<boolean>(false);
 
   // When switching permit type between 'keluar' and 'masuk'
   const handlePermitTypeChange = (newType: PermitType) => {
@@ -462,6 +470,7 @@ export const CreatePermitBarangPage: React.FC<CreatePermitBarangPageProps> = ({
 
       if (!editingId) {
         setSequenceNumber((prev) => prev + 1);
+        setJustSavedForEmail(true);
       }
 
       if (onSaved) {
@@ -471,6 +480,21 @@ export const CreatePermitBarangPage: React.FC<CreatePermitBarangPageProps> = ({
       addToast('error', 'Gagal Menyimpan', 'Terjadi kesalahan sistem saat menyimpan dokumen.');
     }
   };
+
+  const handleGenerateEmailAttachment = useCallback(
+    () =>
+      captureDocumentPdfAttachment({
+        multiPageSelector:
+          '#pm-email-export-container .permit-barang-page, #pm-email-export-container .permit-barang-single-page',
+        elementId: 'pm-email-export-doc',
+        filename: generatePermitBarangFileName(
+          currentDoc.subject,
+          currentDoc.location,
+          currentDoc.permitDate || currentDoc.createdDate
+        ),
+      }),
+    [currentDoc.subject, currentDoc.location, currentDoc.permitDate, currentDoc.createdDate]
+  );
 
   const handleCopyWhatsApp = async () => {
     const text = generatePermitBarangWhatsAppText(currentDoc, template?.companyName);
@@ -1106,6 +1130,14 @@ export const CreatePermitBarangPage: React.FC<CreatePermitBarangPageProps> = ({
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
+                onClick={() => setShowEmailModal(true)}
+                className="p-2 rounded-xl bg-sky-50 text-sky-700 border border-sky-300 text-xs font-semibold flex items-center gap-1 cursor-pointer active:scale-95"
+                title="Kirim Surat via Email Gateway"
+              >
+                <Mail className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
                 onClick={handleCopyWhatsApp}
                 className="p-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-300 text-xs font-semibold flex items-center gap-1 cursor-pointer active:scale-95"
                 title="Salin Format WhatsApp"
@@ -1249,6 +1281,16 @@ export const CreatePermitBarangPage: React.FC<CreatePermitBarangPageProps> = ({
 
             <button
               type="button"
+              onClick={() => setShowEmailModal(true)}
+              className="px-2.5 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              title="Kirim Permit Barang via Email Gateway"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Kirim Email</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleCopyWhatsApp}
               className="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
               title="Salin Teks Format WhatsApp"
@@ -1297,6 +1339,52 @@ export const CreatePermitBarangPage: React.FC<CreatePermitBarangPageProps> = ({
           </div>
         </div>
       </div>
+
+      {showEmailModal && (
+        <div
+          id="pm-email-export-container"
+          aria-hidden="true"
+          className="no-print flex flex-col gap-4"
+          style={{
+            position: 'fixed',
+            left: '-12000px',
+            top: 0,
+            width: '794px',
+            opacity: 0,
+            pointerEvents: 'none',
+            zIndex: -1,
+          }}
+        >
+          <PermitBarangPaperDocument
+            id="pm-email-export-doc"
+            doc={currentDoc}
+            template={permitBarangTemplate || template}
+            previewPageFilter="all"
+          />
+        </div>
+      )}
+
+      <PostSaveEmailBanner
+        visible={justSavedForEmail}
+        categoryLabel="Surat Permit Barang"
+        documentNumber={currentDoc.letterNumber || currentDoc.subject}
+        onSendEmail={() => {
+          setJustSavedForEmail(false);
+          setShowEmailModal(true);
+        }}
+        onDismiss={() => setJustSavedForEmail(false)}
+      />
+
+      <SendDocumentEmailModal
+        isOpen={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        draftInput={{
+          category: 'permit-barang',
+          permitBarang: currentDoc,
+        }}
+        onGenerateAttachment={handleGenerateEmailAttachment}
+        addToast={addToast}
+      />
     </div>
   );
 };

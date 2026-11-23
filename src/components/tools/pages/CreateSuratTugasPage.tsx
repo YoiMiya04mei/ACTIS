@@ -18,6 +18,7 @@ import {
   UserCheck,
   FileText,
   ChevronLeft,
+  Mail,
 } from 'lucide-react';
 import type {
   SuratTugasDocument,
@@ -30,9 +31,15 @@ import type { UserAccount } from '@/types/auth';
 import type { ToastMessage } from '@/components/tools/Toast';
 import { SuratTugasPaperDocument } from '@/components/tools/SuratTugasPaperDocument';
 import {
+  SendDocumentEmailModal,
+  PostSaveEmailBanner,
+} from '@/components/tools/SendDocumentEmailModal';
+import { captureDocumentPdfAttachment } from '@/utils/documentEmailAttachment';
+import {
   generateSuratTugasNumber,
   generateSuratTugasPlainText,
   generateSuratTugasWhatsAppText,
+  generateSuratTugasFileName,
 } from '@/utils/suratTugasUtils';
 import { suratTugasStorage } from '@/services/suratTugasStorage';
 import { toDateInputString } from '@/utils/dateFormatter';
@@ -111,6 +118,8 @@ export const CreateSuratTugasPage: React.FC<CreateSuratTugasPageProps> = ({
     typeof window !== 'undefined' && window.innerWidth < 768 ? 45 : 90
   );
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [showEmailModal, setShowEmailModal] = useState<boolean>(false);
+  const [justSavedForEmail, setJustSavedForEmail] = useState<boolean>(false);
 
   // 1. Calculate auto-generated official number based on sequenceNumber + createdDate
   // Format: ST/{seq}/{romanMonth}/{year}/JDP
@@ -337,6 +346,7 @@ export const CreateSuratTugasPage: React.FC<CreateSuratTugasPageProps> = ({
       if (!editingId) {
         // Automatically advance next sequence number for future letters
         setSequenceNumber((prev) => prev + 1);
+        setJustSavedForEmail(true);
       }
 
       if (onSaved) {
@@ -347,6 +357,15 @@ export const CreateSuratTugasPage: React.FC<CreateSuratTugasPageProps> = ({
       addToast('error', 'Gagal Menyimpan', 'Terjadi kesalahan sistem saat menyimpan dokumen.');
     }
   };
+
+  const handleGenerateEmailAttachment = useCallback(
+    () =>
+      captureDocumentPdfAttachment({
+        elementId: 'st-email-export-doc',
+        filename: generateSuratTugasFileName(currentDoc.letterNumber, currentDoc.visitLocation),
+      }),
+    [currentDoc.letterNumber, currentDoc.visitLocation]
+  );
 
 
   const handleCopyWhatsApp = async () => {
@@ -870,6 +889,14 @@ export const CreateSuratTugasPage: React.FC<CreateSuratTugasPageProps> = ({
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
+                onClick={() => setShowEmailModal(true)}
+                className="p-2 rounded-xl bg-sky-50 text-sky-700 border border-sky-300 text-xs font-semibold flex items-center gap-1 cursor-pointer active:scale-95"
+                title="Kirim Surat via Email Gateway"
+              >
+                <Mail className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
                 onClick={handleCopyWhatsApp}
                 className="p-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-300 text-xs font-semibold flex items-center gap-1 cursor-pointer active:scale-95"
                 title="Salin Format WhatsApp"
@@ -945,6 +972,16 @@ export const CreateSuratTugasPage: React.FC<CreateSuratTugasPageProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
+              onClick={() => setShowEmailModal(true)}
+              className="px-2.5 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              title="Kirim Surat Tugas via Email Gateway"
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Kirim Email</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleCopyWhatsApp}
               className="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
               title="Salin Teks Format WhatsApp"
@@ -991,6 +1028,50 @@ export const CreateSuratTugasPage: React.FC<CreateSuratTugasPageProps> = ({
           </div>
         </div>
       </div>
+
+      {showEmailModal && (
+        <div
+          aria-hidden="true"
+          className="no-print"
+          style={{
+            position: 'fixed',
+            left: '-12000px',
+            top: 0,
+            width: '794px',
+            opacity: 0,
+            pointerEvents: 'none',
+            zIndex: -1,
+          }}
+        >
+          <SuratTugasPaperDocument
+            id="st-email-export-doc"
+            doc={currentDoc}
+            template={suratTugasTemplate || template}
+          />
+        </div>
+      )}
+
+      <PostSaveEmailBanner
+        visible={justSavedForEmail}
+        categoryLabel="Surat Tugas Visit"
+        documentNumber={currentDoc.letterNumber}
+        onSendEmail={() => {
+          setJustSavedForEmail(false);
+          setShowEmailModal(true);
+        }}
+        onDismiss={() => setJustSavedForEmail(false)}
+      />
+
+      <SendDocumentEmailModal
+        isOpen={showEmailModal}
+        onClose={() => setShowEmailModal(false)}
+        draftInput={{
+          category: 'surat-tugas',
+          suratTugas: currentDoc,
+        }}
+        onGenerateAttachment={handleGenerateEmailAttachment}
+        addToast={addToast}
+      />
     </div>
   );
 };

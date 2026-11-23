@@ -5,6 +5,10 @@ import { recordActivity, parseUserAgent } from "@/lib/activityLogService";
 
 export const dynamic = "force-dynamic";
 
+const SENSITIVE_SETTING_KEYS = new Set<string>([
+  "actis_email_gateway_v1",
+]);
+
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
   if (!auth.ok) return auth.response;
@@ -12,6 +16,9 @@ export async function GET(request: NextRequest) {
   try {
     const settings = await prisma.systemSetting.findMany();
     const settingsMap = settings.reduce((acc, curr) => {
+      if (SENSITIVE_SETTING_KEYS.has(curr.key)) {
+        return acc;
+      }
       acc[curr.key] = curr.value;
       return acc;
     }, {} as Record<string, string>);

@@ -17,6 +17,7 @@ export const ACCESS_LEVELS_SETTING_KEY = "actis_role_menu_permissions_v1";
 
 const MIGRATED_NEW_MENUS: { key: MenuAccessKey; inheritFrom?: MenuAccessKey }[] = [
   { key: "ipam_private", inheritFrom: "ipam" },
+  { key: "settings_email_gateway" },
 ];
 
 export interface StoredAccessLevelsPayload {

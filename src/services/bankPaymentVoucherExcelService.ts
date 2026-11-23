@@ -275,6 +275,19 @@ export async function generateBankPaymentVoucherExcelBlob(
   });
 }
 
+export async function generateBankPaymentVoucherExcelBase64(
+  doc: Partial<BankPaymentVoucherDocument>
+): Promise<string> {
+  const blob = await generateBankPaymentVoucherExcelBlob(doc);
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
 /**
  * Downloads the Excel (.xlsx) file directly to the user's browser.
  */

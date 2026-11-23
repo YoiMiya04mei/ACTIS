@@ -4,6 +4,29 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.47",
+      "date": "2026-11-23T17:02:07+07:00",
+      "title": "Menambahkan Fitur Email Gateway (SMTP) dengan Redaksi Otomatis Sesuai Kategori Surat",
+      "changes": [
+        {
+          "type": "feat",
+          "text": "Menambahkan konfigurasi Email Gateway SMTP terenkripsi di menu Email Gateway (/settings/email-gateway) lengkap dengan preset provider, verifikasi koneksi, kirim email test, dan kustomisasi kata-kata redaksi per kategori"
+        },
+        {
+          "type": "feat",
+          "text": "Menambahkan tombol Kirim Email serta banner Kirim Email otomatis setelah selesai membuat surat pada 5 kategori dokumen (RFO, Surat Tugas, Berita Acara, Permit Barang, dan Payment Voucher) maupun dari halaman Arsip & Pratinjau Dokumen"
+        },
+        {
+          "type": "improve",
+          "text": "Menghasilkan kata-kata redaksi dan penjelasan isi surat secara otomatis sesuai kategori dokumen serta melampirkan PDF A4 resmi atau file Excel (.xlsx) Payment Voucher"
+        },
+        {
+          "type": "security",
+          "text": "Mengenkripsi password SMTP dengan AES-256-GCM, menyaring kunci sensitif dari /api/settings, membatasi pengelolaan SMTP khusus Administrator, serta memvalidasi alamat tujuan dan mencegah email header injection"
+        }
+      ]
+    },
+    {
       "version": "1.2.46",
       "date": "2026-11-21T13:48:26+07:00",
       "title": "Arahkan Halaman Awal Login ke Dashboard Utama dan Fallback Menu Teratas",

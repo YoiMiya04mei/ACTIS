@@ -1,6 +1,6 @@
 {
   "name": "actis",
-  "version": "1.2.46",
+  "version": "1.2.47",
   "private": true,
   "scripts": {
     "predev": "node scripts/sync-pdfjs-assets.js && node scripts/sync-build-info.js",
@@ -34,6 +34,7 @@
     "jszip": "^3.10.2",
     "lucide-react": "^1.16.0",
     "next": "^15.2.1",
+    "nodemailer": "^10.6.1",
     "pdfjs-dist": "^6.5.438",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -44,6 +45,7 @@
   "devDependencies": {
     "@types/diff": "^7.0.2",
     "@types/node": "^22.13.9",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
     "@types/ssh2": "^1.15.6",

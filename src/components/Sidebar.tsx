@@ -39,6 +39,7 @@ import {
   ArrowUpRight,
   RefreshCw,
   Lock,
+  Mail,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -93,6 +94,7 @@ export function Sidebar({
     "admin_sync",
     "settings_users",
     "settings_access_levels",
+    "settings_email_gateway",
     "logs",
     "admin_updates",
   ]);
@@ -1177,6 +1179,30 @@ export function Sidebar({
                         }`}
                       />
                       <span>Level Akses</span>
+                    </div>
+                  </Link>
+                  )}
+
+                  {hasMenuAccess("settings_email_gateway") && (
+                  <Link
+                    href="/settings/email-gateway"
+                    onClick={onCloseMobile}
+                    className={`group flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${
+                      pathname.startsWith("/settings/email-gateway")
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 font-bold shadow-xs"
+                        : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-white"
+                    }`}
+                    title="Konfigurasi Email Gateway (SMTP) & Template Redaksi Pengiriman Surat"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <Mail
+                        className={`w-5 h-5 shrink-0 ${
+                          pathname.startsWith("/settings/email-gateway")
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                        }`}
+                      />
+                      <span>Email Gateway</span>
                     </div>
                   </Link>
                   )}
