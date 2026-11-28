@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.48",
+      "date": "2026-11-24T15:03:23+07:00",
+      "title": "Ubah Tampilan Klik Prefix IP Public, Prefix IP Private, dan VLAN Management Masuk ke Spesifikasi Daftar",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Mengubah interaksi klik baris pada menu Prefix IP Public (/ipam), Prefix IP Private (/ipam-private), dan VLAN Management (/vlan) agar langsung masuk ke halaman tampilan spesifikasi item terpilih beserta breadcrumb navigasi dan tombol Kembali ke Daftar seperti alur List Antrean"
+        },
+        {
+          "type": "feat",
+          "text": "Menambahkan komponen SpecificationDrilldownBar dan hook sinkronisasi query URL (?prefix= / ?server=) dengan dukungan tombol Back/Forward browser, refresh halaman tetap pada spesifikasi, Pindah Cepat antar item, dan scroll otomatis ke atas"
+        }
+      ]
+    },
+    {
       "version": "1.2.47",
       "date": "2026-11-23T17:02:07+07:00",
       "title": "Menambahkan Fitur Email Gateway (SMTP) dengan Redaksi Otomatis Sesuai Kategori Surat",

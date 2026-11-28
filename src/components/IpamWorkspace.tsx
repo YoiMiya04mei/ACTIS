@@ -39,6 +39,10 @@ import {
   suggestCandidatePrefixes,
 } from "@/lib/ipamUtils";
 import type { IpamScope } from "@/lib/ipamService";
+import {
+  SpecificationDrilldownBar,
+  useUrlQuerySelection,
+} from "@/components/SpecificationDrilldownBar";
 
 type DetailAvailabilityFilter = "ALL" | "USED" | "IDLE";
 
@@ -63,8 +67,8 @@ export function IpamWorkspace({ scope }: IpamWorkspaceProps) {
   const [subnets, setSubnets] = useState<SubnetSummary[]>([]);
   const [unmanagedIps, setUnmanagedIps] = useState<UsedIpDetail[]>([]);
 
-  // Filtering & Search (default empty: click a prefix row to reveal used & idle details)
-  const [selectedPrefixCidr, setSelectedPrefixCidr] = useState<string>("");
+  // Filtering & Search (default empty: master list; click a prefix row to enter its specification view)
+  const [selectedPrefixCidr, setSelectedPrefixCidr] = useUrlQuerySelection("prefix");
   const [prefixSearchQuery, setPrefixSearchQuery] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [availabilityFilter, setAvailabilityFilter] = useState<DetailAvailabilityFilter>("ALL");
@@ -115,14 +119,14 @@ export function IpamWorkspace({ scope }: IpamWorkspaceProps) {
   };
 
   const handleSelectPrefix = (cidr: string) => {
-    if (selectedPrefixCidr === cidr) {
-      setSelectedPrefixCidr("");
-      return;
-    }
     setSelectedPrefixCidr(cidr);
     setAvailabilityFilter("ALL");
     setSelectedStatusFilter("ALL");
     setSearchQuery("");
+  };
+
+  const handleBackToPrefixList = () => {
+    setSelectedPrefixCidr("");
   };
 
   const handleAddPrefix = async (e: React.FormEvent) => {
@@ -224,6 +228,20 @@ export function IpamWorkspace({ scope }: IpamWorkspaceProps) {
     if (!selectedPrefixCidr || selectedPrefixCidr === "UNMANAGED") return null;
     return subnets.find((s) => s.cidr === selectedPrefixCidr) || null;
   }, [subnets, selectedPrefixCidr]);
+
+  const prefixSwitchOptions = useMemo(() => {
+    const opts = subnets.map((s) => ({
+      value: s.cidr,
+      label: `${s.cidr} (${s.usedIpsCount}/${s.usableHosts} terpakai)`,
+    }));
+    if (unmanagedIps.length > 0) {
+      opts.push({
+        value: "UNMANAGED",
+        label: `IP Luar Prefix (${unmanagedIps.length})`,
+      });
+    }
+    return opts;
+  }, [subnets, unmanagedIps.length]);
 
   const rawSubnetSegments = useMemo(() => {
     if (!selectedSubnet) return [] as IpSubnetSegment[];
@@ -446,6 +464,8 @@ export function IpamWorkspace({ scope }: IpamWorkspaceProps) {
 
   return (
     <div className="space-y-6 pb-12 animate-fadeIn">
+      {!selectedPrefixCidr && (
+        <>
       {/* Top Banner & Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -628,7 +648,7 @@ export function IpamWorkspace({ scope }: IpamWorkspaceProps) {
               Daftar Subnet {pageTitle} ({subnets.length})
             </h2>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Klik baris subnet untuk menampilkan rincian berapa IP yang terpakai &amp; range IP yang masih Idle.
+              Klik baris subnet untuk langsung masuk ke halaman spesifikasi IP terpakai &amp; range IP yang masih Idle.
             </p>
           </div>
 
@@ -863,17 +883,14 @@ export function IpamWorkspace({ scope }: IpamWorkspaceProps) {
                       <td className="py-3 px-4 text-center whitespace-nowrap">
                         <div className="inline-flex items-center gap-1.5">
                           <span
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
-                              isSelected
-                                ? isPrivate
-                                  ? "bg-teal-600 text-white"
-                                  : "bg-blue-600 text-white"
-                                : isPrivate
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition inline-flex items-center gap-1 ${
+                              isPrivate
                                 ? "bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300"
                                 : "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300"
                             }`}
                           >
-                            {isSelected ? "Dibuka" : "Lihat IP"}
+                            <span>Spesifikasi</span>
+                            <ArrowUpRight className="w-3 h-3" />
                           </span>
 
                           {isAdmin && (
@@ -899,21 +916,112 @@ export function IpamWorkspace({ scope }: IpamWorkspaceProps) {
           </div>
         )}
       </div>
+        </>
+      )}
 
-      {/* CLICK-TO-INSPECT HINT */}
-      {!loading && !error && !selectedPrefixCidr && subnets.length > 0 && (
-        <div className="p-4 rounded-2xl bg-slate-50/90 dark:bg-slate-900/60 border border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-300">
-          <div className="flex items-center gap-2.5">
-            <Info
-              className={`w-4 h-4 shrink-0 ${
-                isPrivate ? "text-teal-600 dark:text-teal-400" : "text-blue-600 dark:text-blue-400"
-              }`}
-            />
-            <span>
-              Pilih dan klik salah satu baris <strong>Subnet Prefix</strong> pada tabel di atas untuk menampilkan jumlah IP yang sudah terpakai beserta blok range IP yang masih <strong>Idle</strong>.
-            </span>
-          </div>
-        </div>
+      {/* DEDICATED SPECIFICATION HEADER & STATE WHEN ENTERING A PREFIX / UNMANAGED LIST ITEM */}
+      {selectedPrefixCidr && (
+        <>
+          <SpecificationDrilldownBar
+            listLabel={pageTitle}
+            selectedLabel={
+              selectedPrefixCidr === "UNMANAGED"
+                ? "IP di Luar Prefix"
+                : selectedSubnet?.cidr || selectedPrefixCidr
+            }
+            specLabel={
+              selectedPrefixCidr === "UNMANAGED"
+                ? "Daftar IP Terpakai Luar Prefix"
+                : "Spesifikasi Subnet & Alokasi IP"
+            }
+            accentColor={
+              selectedPrefixCidr === "UNMANAGED"
+                ? "rose"
+                : isPrivate
+                ? "teal"
+                : "blue"
+            }
+            onBack={handleBackToPrefixList}
+            switchOptions={prefixSwitchOptions}
+            currentSwitchValue={selectedPrefixCidr}
+            onSwitchValue={(val) => handleSelectPrefix(val)}
+            switchPlaceholder="Pindah Subnet..."
+            actions={
+              <>
+                <button
+                  type="button"
+                  onClick={fetchIpamData}
+                  disabled={loading}
+                  className="p-2 rounded-xl text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                  title={`Refresh Data ${pageTitle}`}
+                >
+                  <RefreshCw
+                    className={`w-4 h-4 ${
+                      loading
+                        ? isPrivate
+                          ? "animate-spin text-teal-600"
+                          : "animate-spin text-blue-600"
+                        : ""
+                    }`}
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportCsv}
+                  disabled={loading || (totalAllUsedIpsCount === 0 && !selectedSubnet)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition cursor-pointer flex items-center disabled:opacity-50"
+                  title="Download Rekapitulasi CSV"
+                >
+                  <Download className="w-3.5 h-3.5 mr-1.5 text-slate-500" />
+                  Export CSV
+                </button>
+              </>
+            }
+          />
+
+          {loading && (
+            <div className="py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 text-center">
+              <div
+                className={`inline-block animate-spin rounded-full h-8 w-8 border-4 border-t-transparent ${
+                  isPrivate ? "border-teal-600" : "border-blue-600"
+                }`}
+              ></div>
+              <p className="mt-3 text-sm text-slate-500 font-medium">
+                Memuat spesifikasi subnet {selectedPrefixCidr}...
+              </p>
+            </div>
+          )}
+
+          {!loading && error && (
+            <div className="p-8 bg-white dark:bg-slate-900 rounded-2xl border border-rose-200 text-center text-rose-600">
+              <AlertTriangle className="w-8 h-8 mx-auto" />
+              <p className="font-bold mt-2">Gagal Memuat Data {pageTitle}</p>
+              <p className="text-xs mt-1">{error}</p>
+            </div>
+          )}
+
+          {!loading &&
+            !error &&
+            selectedPrefixCidr !== "UNMANAGED" &&
+            !selectedSubnet && (
+              <div className="p-8 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center space-y-3">
+                <AlertTriangle className="w-8 h-8 mx-auto text-amber-500" />
+                <h3 className="text-sm font-black text-slate-900 dark:text-slate-100">
+                  Prefix Tidak Ditemukan
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Subnet <span className="font-mono font-bold">{selectedPrefixCidr}</span> tidak terdaftar di {pageTitle}.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleBackToPrefixList}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold cursor-pointer"
+                >
+                  Kembali ke Daftar Subnet
+                </button>
+              </div>
+            )}
+        </>
       )}
 
       {/* DETAIL BREAKDOWN FOR SELECTED SUBNET */}

@@ -46,6 +46,10 @@ import {
   buildVlanPoolSegments,
   matchesVlanSegmentSearch,
 } from "@/lib/vlanUtils";
+import {
+  SpecificationDrilldownBar,
+  useUrlQuerySelection,
+} from "@/components/SpecificationDrilldownBar";
 
 type ViewTab = "UNIFIED" | "USED_ONLY" | "IDLE_ONLY" | "AVAILABLE_GRID";
 type GridStatusFilter = "ALL" | "AVAILABLE" | "UNAVAILABLE";
@@ -65,9 +69,9 @@ export default function VlanManagementPage() {
   const [usedVlans, setUsedVlans] = useState<UsedVlanDetail[]>([]);
   const [unassignedCircuits, setUnassignedCircuits] = useState<UnassignedVlanCircuit[]>([]);
 
-  // Active workspace controls (default empty: click a server row to inspect Used + Idle VLANs)
+  // Active workspace controls (default empty: master list; click a server row to enter its specification view)
   const [activeTab, setActiveTab] = useState<ViewTab>("UNIFIED");
-  const [selectedServer, setSelectedServer] = useState<string>("");
+  const [selectedServer, setSelectedServer] = useUrlQuerySelection("server");
   const [serverSearchQuery, setServerSearchQuery] = useState("");
   const [selectedService, setSelectedService] = useState<string>("ALL");
   const [onlyDuplicates, setOnlyDuplicates] = useState(false);
@@ -143,15 +147,8 @@ export default function VlanManagementPage() {
     }, 1800);
   };
 
-  // Select or collapse a server row in master table list
+  // Enter dedicated specification workspace for a server row (or UNASSIGNED)
   const handleSelectServerRow = (serverSummary: ServerVlanSummary, initialTab: ViewTab = "UNIFIED") => {
-    const isDeselecting =
-      selectedServer === serverSummary.serverName && activeTab === initialTab && initialTab === "UNIFIED";
-    if (isDeselecting) {
-      setSelectedServer("");
-      setInspectedVlan(null);
-      return;
-    }
     setSelectedServer(serverSummary.serverName);
     setGridServer(serverSummary.serverName);
     setCheckerServer(serverSummary.serverName);
@@ -163,6 +160,11 @@ export default function VlanManagementPage() {
     setOnlyDuplicates(false);
     setSearchQuery("");
     setActiveTab(initialTab);
+  };
+
+  const handleBackToServerList = () => {
+    setSelectedServer("");
+    setInspectedVlan(null);
   };
 
   const handleSwitchTab = (tab: ViewTab) => {
@@ -202,6 +204,30 @@ export default function VlanManagementPage() {
     const key = normalizeServerKey(selectedServer);
     return servers.find((s) => normalizeServerKey(s.serverName) === key) || null;
   }, [servers, selectedServer]);
+
+  // Sync grid & range parameters automatically when selectedServer resolves (including reload & Back/Forward)
+  useEffect(() => {
+    if (!selectedServerSummary) return;
+    setGridServer(selectedServerSummary.serverName);
+    setCheckerServer(selectedServerSummary.serverName);
+    setRangeStart(selectedServerSummary.startVlan);
+    setRangeEnd(selectedServerSummary.endVlan);
+    setBlockPage(0);
+  }, [selectedServerSummary]);
+
+  const serverSwitchOptions = useMemo(() => {
+    const opts = servers.map((s) => ({
+      value: s.serverName,
+      label: `${s.serverName} (${s.unavailableCount}/${s.totalCapacity} terpakai)`,
+    }));
+    if (unassignedCircuits.length > 0) {
+      opts.push({
+        value: UNASSIGNED_VIEW_KEY,
+        label: `Sirkuit Tanpa VLAN (${unassignedCircuits.length})`,
+      });
+    }
+    return opts;
+  }, [servers, unassignedCircuits.length]);
 
   // All occupied circuits for selected server (unfiltered by service/search so IDLE gaps stay accurate!)
   const selectedServerAllUsedVlans = useMemo(() => {
@@ -700,6 +726,8 @@ export default function VlanManagementPage() {
 
   return (
     <div className="space-y-6 pb-12 animate-fadeIn">
+      {!selectedServer && (
+        <>
       {/* Top Banner & Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -985,7 +1013,7 @@ export default function VlanManagementPage() {
               Daftar Pool VLAN per Server ({servers.length})
             </h2>
             <p className="text-[11px] text-slate-400 mt-0.5">
-              Klik baris server untuk menampilkan berapa VLAN yang sudah terpakai &amp; range VLAN yang masih Idle.
+              Klik baris server untuk langsung masuk ke halaman spesifikasi VLAN terpakai &amp; range VLAN yang masih Idle.
             </p>
           </div>
 
@@ -1195,14 +1223,9 @@ export default function VlanManagementPage() {
                       {/* Row Actions */}
                       <td className="py-3 px-4 text-center whitespace-nowrap">
                         <div className="inline-flex items-center gap-1">
-                          <span
-                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
-                              isSelected
-                                ? "bg-indigo-600 text-white"
-                                : "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300"
-                            }`}
-                          >
-                            {isSelected ? "Dibuka" : "Lihat VLAN"}
+                          <span className="px-2.5 py-1 rounded-lg text-[11px] font-bold transition inline-flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300">
+                            <span>Spesifikasi</span>
+                            <ArrowUpRight className="w-3 h-3" />
                           </span>
 
                           <button
@@ -1255,17 +1278,135 @@ export default function VlanManagementPage() {
           </div>
         )}
       </div>
+        </>
+      )}
 
-      {/* CLICK-TO-INSPECT HINT WHEN NO SERVER SELECTED */}
-      {!loading && !error && !selectedServer && (
-        <div className="p-4 rounded-2xl bg-slate-50/90 dark:bg-slate-900/60 border border-dashed border-slate-300 dark:border-slate-700 flex items-center justify-between gap-3 text-xs text-slate-600 dark:text-slate-300">
-          <div className="flex items-center gap-2.5">
-            <Tags className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-            <span>
-              Pilih dan klik salah satu baris <strong>Server / BRAS</strong> pada tabel di atas untuk menampilkan jumlah VLAN yang sudah terpakai beserta rentang VLAN yang masih <strong>Idle</strong>.
-            </span>
-          </div>
-        </div>
+      {/* DEDICATED SPECIFICATION HEADER & STATE WHEN ENTERING A SERVER POOL / UNASSIGNED LIST ITEM */}
+      {selectedServer && (
+        <>
+          <SpecificationDrilldownBar
+            listLabel="VLAN Management"
+            selectedLabel={
+              selectedServer === UNASSIGNED_VIEW_KEY
+                ? "Sirkuit Tanpa VLAN"
+                : selectedServerSummary?.serverName || selectedServer
+            }
+            specLabel={
+              selectedServer === UNASSIGNED_VIEW_KEY
+                ? "Daftar Sirkuit Belum Ber-VLAN"
+                : "Spesifikasi Pool VLAN Server"
+            }
+            accentColor={selectedServer === UNASSIGNED_VIEW_KEY ? "rose" : "indigo"}
+            onBack={handleBackToServerList}
+            switchOptions={serverSwitchOptions}
+            currentSwitchValue={selectedServer}
+            onSwitchValue={(val) => {
+              if (val === UNASSIGNED_VIEW_KEY) {
+                setSelectedServer(UNASSIGNED_VIEW_KEY);
+                setSearchQuery("");
+                setSelectedService("ALL");
+                return;
+              }
+              const target = servers.find((s) => s.serverName === val);
+              if (target) {
+                handleSelectServerRow(
+                  target,
+                  activeTab === "AVAILABLE_GRID" ? "AVAILABLE_GRID" : "UNIFIED"
+                );
+              }
+            }}
+            switchPlaceholder="Pindah Server Pool..."
+            actions={
+              <>
+                <button
+                  type="button"
+                  onClick={fetchVlanData}
+                  disabled={loading}
+                  className="p-2 rounded-xl text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                  title="Refresh Data VLAN"
+                >
+                  <RefreshCw
+                    className={`w-4 h-4 ${loading ? "animate-spin text-indigo-600" : ""}`}
+                  />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportCsv}
+                  disabled={loading || servers.length === 0}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition cursor-pointer flex items-center disabled:opacity-50"
+                  title="Download Rekapitulasi CSV"
+                >
+                  <Download className="w-3.5 h-3.5 mr-1.5 text-slate-500" />
+                  Export CSV
+                </button>
+                {isAdmin && selectedServerSummary && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => openRangeModal(selectedServerSummary)}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 border border-indigo-200 dark:border-indigo-800 transition cursor-pointer flex items-center"
+                    >
+                      <SlidersHorizontal className="w-3.5 h-3.5 mr-1.5" />
+                      Atur Range VLAN
+                    </button>
+                    {selectedServerSummary.hasCustomRange && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleResetServerRange(selectedServerSummary.serverName)
+                        }
+                        className="px-2.5 py-1.5 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 border border-rose-200 dark:border-rose-800 transition cursor-pointer flex items-center"
+                        title="Reset Range ke 1 - 4094"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                        Reset
+                      </button>
+                    )}
+                  </>
+                )}
+              </>
+            }
+          />
+
+          {loading && (
+            <div className="py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/90 dark:border-slate-800 text-center">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-600 border-t-transparent"></div>
+              <p className="mt-3 text-sm text-slate-500 font-medium">
+                Memuat spesifikasi pool VLAN server...
+              </p>
+            </div>
+          )}
+
+          {!loading && error && (
+            <div className="p-8 bg-white dark:bg-slate-900 rounded-2xl border border-rose-200 text-center text-rose-600">
+              <AlertTriangle className="w-8 h-8 mx-auto" />
+              <p className="font-bold mt-2">Gagal Memuat Data VLAN Management</p>
+              <p className="text-xs mt-1">{error}</p>
+            </div>
+          )}
+
+          {!loading &&
+            !error &&
+            selectedServer !== UNASSIGNED_VIEW_KEY &&
+            !selectedServerSummary && (
+              <div className="p-8 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center space-y-3">
+                <AlertTriangle className="w-8 h-8 mx-auto text-amber-500" />
+                <h3 className="text-sm font-black text-slate-900 dark:text-slate-100">
+                  Server Pool Tidak Ditemukan
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Server <span className="font-mono font-bold">{selectedServer}</span> tidak tersedia di daftar Pool VLAN.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleBackToServerList}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer"
+                >
+                  Kembali ke Daftar Pool VLAN
+                </button>
+              </div>
+            )}
+        </>
       )}
 
       {/* DETAIL VIEW FOR SELECTED SERVER (UNIFIED / USED / IDLE / GRID) */}
