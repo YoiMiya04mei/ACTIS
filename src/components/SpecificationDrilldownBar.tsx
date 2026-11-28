@@ -1,54 +1,44 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useCallback } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 
 /**
- * Syncs an active list-item selection (e.g. ?prefix=... or ?server=...) with browser URL query parameters.
- * Uses window.history + popstate instead of Next.js useSearchParams to avoid static-build Suspense issues
- * while preserving browser Back/Forward navigation, F5 reload persistence, and instant scroll-to-top.
+ * Syncs an active list-item selection (e.g. ?prefix=... or ?server=...) with Next.js App Router
+ * searchParams so clicking an item enters a dedicated specification view inside the same menu while
+ * supporting browser Back/Forward, F5 reload persistence, Sidebar <Link> reset, and auto scroll-to-top.
+ * Note: Callers must be wrapped inside a React <Suspense> boundary.
  */
 export function useUrlQuerySelection(paramKey: string) {
-  const [selectedValue, setSelectedValueState] = useState<string>("");
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const syncFromLocation = () => {
-      const params = new URLSearchParams(window.location.search);
-      setSelectedValueState(params.get(paramKey) || "");
-    };
-    syncFromLocation();
-    window.addEventListener("popstate", syncFromLocation);
-    return () => window.removeEventListener("popstate", syncFromLocation);
-  }, [paramKey]);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const selectedValue = searchParams.get(paramKey) || "";
 
   const setSelectedValue = useCallback(
     (nextValue: string, options?: { replace?: boolean; scrollTop?: boolean }) => {
       const cleanNext = nextValue || "";
-      setSelectedValueState(cleanNext);
+      const params = new URLSearchParams(searchParams.toString());
+      if (cleanNext) {
+        params.set(paramKey, cleanNext);
+      } else {
+        params.delete(paramKey);
+      }
 
-      if (typeof window !== "undefined") {
-        const url = new URL(window.location.href);
-        if (cleanNext) {
-          url.searchParams.set(paramKey, cleanNext);
-        } else {
-          url.searchParams.delete(paramKey);
-        }
-        const nextHref = `${url.pathname}${url.search}${url.hash}`;
-        const currentHref = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-        if (nextHref !== currentHref) {
-          if (options?.replace) {
-            window.history.replaceState(null, "", nextHref);
-          } else {
-            window.history.pushState(null, "", nextHref);
-          }
-        }
-        if (cleanNext && options?.scrollTop !== false) {
-          window.scrollTo({ top: 0, behavior: "smooth" });
-        }
+      const qs = params.toString();
+      const nextHref = qs ? `${pathname}?${qs}` : pathname;
+      if (options?.replace) {
+        router.replace(nextHref, { scroll: false });
+      } else {
+        router.push(nextHref, { scroll: false });
+      }
+
+      if (typeof window !== "undefined" && options?.scrollTop !== false) {
+        window.scrollTo({ top: 0, behavior: "smooth" });
       }
     },
-    [paramKey]
+    [paramKey, pathname, router, searchParams]
   );
 
   return [selectedValue, setSelectedValue] as const;

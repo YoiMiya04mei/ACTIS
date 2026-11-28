@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import Link from "next/link";
 import {
   Globe,
@@ -23,7 +23,6 @@ import {
   Database,
   Activity,
   ChevronRight,
-  ChevronDown,
   X,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
@@ -50,7 +49,7 @@ interface IpamWorkspaceProps {
   scope: IpamScope;
 }
 
-export function IpamWorkspace({ scope }: IpamWorkspaceProps) {
+function IpamWorkspaceContent({ scope }: IpamWorkspaceProps) {
   const isPrivate = scope === "private";
   const apiOverviewEndpoint = isPrivate ? "/api/ipam-private" : "/api/ipam";
   const apiPrefixesEndpoint = isPrivate
@@ -766,7 +765,6 @@ export function IpamWorkspace({ scope }: IpamWorkspaceProps) {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-medium text-slate-700 dark:text-slate-300">
                 {filteredSubnets.map((subnet) => {
-                  const isSelected = selectedPrefixCidr === subnet.cidr;
                   const barColor = getUsageBarColor(subnet.usagePct);
                   const badgeColor = getUsageBadgeColor(subnet.usagePct);
 
@@ -774,30 +772,12 @@ export function IpamWorkspace({ scope }: IpamWorkspaceProps) {
                     <tr
                       key={subnet.cidr}
                       onClick={() => handleSelectPrefix(subnet.cidr)}
-                      className={`transition cursor-pointer ${
-                        isSelected
-                          ? isPrivate
-                            ? "bg-teal-50/90 dark:bg-teal-950/45 ring-1 ring-inset ring-teal-500/40"
-                            : "bg-blue-50/90 dark:bg-blue-950/45 ring-1 ring-inset ring-blue-500/40"
-                          : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
-                      }`}
+                      className="transition cursor-pointer hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
                     >
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2.5">
-                          <span
-                            className={`p-1 rounded-lg transition ${
-                              isSelected
-                                ? isPrivate
-                                  ? "bg-teal-600 text-white"
-                                  : "bg-blue-600 text-white"
-                                : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
-                            }`}
-                          >
-                            {isSelected ? (
-                              <ChevronDown className="w-3.5 h-3.5" />
-                            ) : (
-                              <ChevronRight className="w-3.5 h-3.5" />
-                            )}
+                          <span className="p-1 rounded-lg transition bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                            <ChevronRight className="w-3.5 h-3.5" />
                           </span>
                           <div className="min-w-0">
                             <span className="font-mono font-black text-sm text-slate-900 dark:text-slate-100 block">
@@ -919,7 +899,7 @@ export function IpamWorkspace({ scope }: IpamWorkspaceProps) {
         </>
       )}
 
-      {/* DEDICATED SPECIFICATION HEADER & STATE WHEN ENTERING A PREFIX / UNMANAGED LIST ITEM */}
+      {/* DEDICATED SPECIFICATION VIEW WHEN ENTERING A PREFIX / UNMANAGED ITEM */}
       {selectedPrefixCidr && (
         <>
           <SpecificationDrilldownBar
@@ -1681,5 +1661,19 @@ export function IpamWorkspace({ scope }: IpamWorkspaceProps) {
         </div>
       )}
     </div>
+  );
+}
+
+export function IpamWorkspace({ scope }: IpamWorkspaceProps) {
+  return (
+    <Suspense
+      fallback={
+        <div className="py-16 text-center text-sm text-slate-500 font-medium">
+          Memuat data {scope === "private" ? "Prefix IP Private" : "Prefix IP Public"}...
+        </div>
+      }
+    >
+      <IpamWorkspaceContent scope={scope} />
+    </Suspense>
   );
 }

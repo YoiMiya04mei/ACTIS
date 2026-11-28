@@ -4,6 +4,21 @@
   "branch": "main",
   "releases": [
     {
+      "version": "1.2.49",
+      "date": "2026-11-28T09:35:01+07:00",
+      "title": "Penyempurnaan Drill-Down Spesifikasi Prefix IP Public, Prefix IP Private, dan VLAN Management dengan Navigasi Router",
+      "changes": [
+        {
+          "type": "improve",
+          "text": "Memindahkan panel spesifikasi IP terpakai/idle dan pool VLAN agar langsung terbuka sebagai halaman detail dengan breadcrumb dan tombol Kembali ke Daftar di masing-masing menu (/ipam, /ipam-private, dan /vlan)"
+        },
+        {
+          "type": "fix",
+          "text": "Menyinkronkan state drill-down (?prefix= & ?server=) ke Next.js useSearchParams + React Suspense agar tombol Sidebar, tombol Back/Forward browser, dan reload halaman bekerja mulus tanpa tersangkut"
+        }
+      ]
+    },
+    {
       "version": "1.2.48",
       "date": "2026-11-24T15:03:23+07:00",
       "title": "Ubah Tampilan Klik Prefix IP Public, Prefix IP Private, dan VLAN Management Masuk ke Spesifikasi Daftar",

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from "react";
 import Link from "next/link";
 import {
   Tags,
@@ -28,7 +28,6 @@ import {
   AlertCircle,
   X,
   ChevronRight,
-  ChevronDown,
 } from "lucide-react";
 import { useCurrentUser } from "@/context/UserContext";
 import { useDialog } from "@/context/DialogContext";
@@ -57,7 +56,7 @@ type GridStatusFilter = "ALL" | "AVAILABLE" | "UNAVAILABLE";
 const BLOCK_SIZE = 200;
 const UNASSIGNED_VIEW_KEY = "__UNASSIGNED__";
 
-export default function VlanManagementPage() {
+function VlanManagementContent() {
   const { currentUser } = useCurrentUser();
   const { confirm: confirmDialog, alert: alertDialog } = useDialog();
   const isAdmin = currentUser?.role === "admin";
@@ -1022,8 +1021,8 @@ export default function VlanManagementPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setSelectedServer((prev) =>
-                    prev === UNASSIGNED_VIEW_KEY ? "" : UNASSIGNED_VIEW_KEY
+                  setSelectedServer(
+                    selectedServer === UNASSIGNED_VIEW_KEY ? "" : UNASSIGNED_VIEW_KEY
                   );
                   setSearchQuery("");
                   setSelectedService("ALL");
@@ -1087,7 +1086,6 @@ export default function VlanManagementPage() {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 font-medium text-slate-700 dark:text-slate-300">
                 {filteredMasterServers.map((srv) => {
-                  const isSelected = selectedServer === srv.serverName;
                   const barColor = getUsageBarColor(srv.usagePct);
                   const badgeColor = getUsageBadgeColor(srv.usagePct);
 
@@ -1095,27 +1093,13 @@ export default function VlanManagementPage() {
                     <tr
                       key={srv.serverName}
                       onClick={() => handleSelectServerRow(srv, "UNIFIED")}
-                      className={`transition cursor-pointer ${
-                        isSelected
-                          ? "bg-indigo-50/90 dark:bg-indigo-950/45 ring-1 ring-inset ring-indigo-500/40"
-                          : "hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
-                      }`}
+                      className="transition cursor-pointer hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
                     >
                       {/* Server & Description */}
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2.5">
-                          <span
-                            className={`p-1 rounded-lg transition shrink-0 ${
-                              isSelected
-                                ? "bg-indigo-600 text-white"
-                                : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
-                            }`}
-                          >
-                            {isSelected ? (
-                              <ChevronDown className="w-3.5 h-3.5" />
-                            ) : (
-                              <ChevronRight className="w-3.5 h-3.5" />
-                            )}
+                          <span className="p-1 rounded-lg transition shrink-0 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                            <ChevronRight className="w-3.5 h-3.5" />
                           </span>
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-1.5">
@@ -1281,7 +1265,7 @@ export default function VlanManagementPage() {
         </>
       )}
 
-      {/* DEDICATED SPECIFICATION HEADER & STATE WHEN ENTERING A SERVER POOL / UNASSIGNED LIST ITEM */}
+      {/* DEDICATED SPECIFICATION VIEW WHEN ENTERING A SERVER POOL / UNASSIGNED LIST ITEM */}
       {selectedServer && (
         <>
           <SpecificationDrilldownBar
@@ -1392,17 +1376,17 @@ export default function VlanManagementPage() {
               <div className="p-8 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 text-center space-y-3">
                 <AlertTriangle className="w-8 h-8 mx-auto text-amber-500" />
                 <h3 className="text-sm font-black text-slate-900 dark:text-slate-100">
-                  Server Pool Tidak Ditemukan
+                  Server Pool VLAN Tidak Ditemukan
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Server <span className="font-mono font-bold">{selectedServer}</span> tidak tersedia di daftar Pool VLAN.
+                  Pool server <span className="font-mono font-bold">{selectedServer}</span> tidak ditemukan.
                 </p>
                 <button
                   type="button"
                   onClick={handleBackToServerList}
                   className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer"
                 >
-                  Kembali ke Daftar Pool VLAN
+                  Kembali ke Daftar Server VLAN
                 </button>
               </div>
             )}
@@ -2344,5 +2328,19 @@ export default function VlanManagementPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function VlanManagementPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="py-16 text-center text-sm text-slate-500 font-medium">
+          Memuat data VLAN Management...
+        </div>
+      }
+    >
+      <VlanManagementContent />
+    </Suspense>
   );
 }
